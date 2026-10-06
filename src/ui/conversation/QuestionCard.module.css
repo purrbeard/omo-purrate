@@ -1,0 +1,239 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 0 12px;
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-specific-input-major);
+  box-shadow: var(--dsw-elevation-panel);
+  color: var(--dsw-alias-label-primary);
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2-darkmode-thin);
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.card,
+.card * {
+  box-sizing: border-box;
+}
+
+.question + .question {
+  margin-top: 8px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.header {
+  padding: 20px 24px 0;
+}
+
+.eyebrow {
+  margin-bottom: 5px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 8px;
+  padding: 4px 12px;
+}
+
+/* Rows are scroll content, never the slack absorber, so they must not shrink. */
+.option,
+.customRow {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--dsw-radius-md);
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.option {
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.option:hover:not(:disabled),
+.optionSelected,
+.customRow:hover,
+.customRow:focus-within,
+.customRowActive {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.optionSelected,
+.customRow:focus-within,
+.customRowActive {
+  border-color: var(--dsw-alias-border-l2);
+}
+
+.option:disabled {
+  cursor: default;
+}
+
+/* (24px first-line box - 20px indicator) / 2 centers the indicator on the first text line. */
+.number,
+.checkbox {
+  display: grid;
+  flex: 0 0 20px;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+}
+
+.number {
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-bg-overlay);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.checkbox::before {
+  content: '';
+  grid-area: 1 / 1;
+  width: 14px;
+  height: 14px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-xs);
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.checkbox > svg {
+  grid-area: 1 / 1;
+}
+
+.checkboxChecked {
+  color: var(--dsw-alias-label-primary-foreground);
+}
+
+.checkboxChecked::before {
+  border-color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-label-primary);
+}
+
+.optionLine {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  min-width: 0;
+}
+
+.optionLabel {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.description {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 14px;
+  line-height: 24px;
+}
+
+/* Mirror and textarea share one grid cell; both MUST keep identical type, padding and wrapping. */
+.field {
+  display: grid;
+  min-width: 0;
+  --dsh-answer-field-padding: 0;
+}
+
+.field > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+  padding: var(--dsh-answer-field-padding);
+  font: inherit;
+  font-size: 14px;
+  line-height: 24px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.fieldMirror {
+  box-sizing: content-box;
+  max-height: 144px;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+.fieldInput {
+  resize: none;
+  overflow-y: auto;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  caret-color: var(--dsw-alias-state-business-primary);
+}
+
+.fieldInput::placeholder {
+  color: var(--dsw-alias-label-caption);
+}
+
+.fieldInline {
+  flex: 1;
+}
+
+.fieldBlock {
+  min-height: 40px;
+  margin: 0 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-module-platform);
+  --dsh-answer-field-padding: 8px 12px;
+}
+
+.fieldBlock:focus-within {
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 0 16px 0 24px;
+}
+
+.feedback {
+  flex: 1;
+  min-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .option,
+  .customRow,
+  .checkbox::before {
+    transition: none;
+  }
+}

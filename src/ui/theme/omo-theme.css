@@ -1,0 +1,132 @@
+/* OmO UI theme layer: overrides the DSH tokens (src/dsh/theme) with the OmO palette (neutral text on violet-tinted
+   backgrounds), Geist type and the radius scale recorded in the G008 design notes. Component CSS modules keep using only --dsw-* / --ds-*
+   variables; every OmO-specific color is a token declared here. Loads after design-platform.css (main.tsx). */
+
+:root {
+  --dsw-font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo',
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --dsw-font-family-brand: 'Geist', var(--dsw-font-family);
+  --ds-font-family-code: 'Geist Mono', 'SF Mono', 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', Menlo,
+    Courier, 'Apple SD Gothic Neo', 'PingFang SC', 'Microsoft YaHei';
+  --dsw-radius-xs: 4px;
+  --dsw-radius-sm: 6px;
+  --dsw-radius-md: 10px;
+  --dsw-radius-lg: 14px;
+  --dsw-radius-xl: 18px;
+  --dsw-radius-panel: 20px;
+  /* Space-separated RGB of the violet that tints the translucent macOS sidebar (AppFrame.module.css). */
+  --dsw-omo-sidebar-tint: 139 92 246;
+}
+
+body {
+  --dsw-omo-led-bg: #090e12;
+  --dsw-omo-led-shadow: #00000066;
+  --dsw-omo-led-off: #1b252b;
+  --dsw-omo-led-amber: #ffb78a;
+  --dsw-omo-led-blue: #8cafff;
+  --dsw-omo-lane-daily: #f6d8c5;
+  --dsw-omo-lane-geeky: #d1dfff;
+  --dsw-omo-profile-handle: #ffffff;
+  --dsw-alias-bg-base: #fbf9ff;
+  --dsw-specific-sidebar-fill: #f4effd;
+  --dsw-specific-input-major: #ffffff;
+  --dsw-specific-selector: #efe9fb;
+  --dsw-alias-button-elevated-fill: #ffffff;
+  --dsw-alias-button-floating-hover: #efe9fb;
+  --dsw-alias-border-l1: rgba(10, 10, 10, 0.06);
+  --dsw-alias-border-l2: rgba(10, 10, 10, 0.1);
+  --dsw-alias-border-l3: #e5e5e5;
+  --dsw-alias-border-l4: rgba(10, 10, 10, 0.15);
+  --dsw-alias-interactive-bg-hover: rgba(10, 10, 10, 0.05);
+  --dsw-alias-interactive-bg-active: rgba(10, 10, 10, 0.08);
+  --dsw-alias-interactive-bg-hover-solid: #ebe4f9;
+  --dsw-alias-label-primary: #090b0c;
+  --dsw-alias-label-secondary: #525252;
+  --dsw-alias-label-tertiary: #737373;
+  --dsw-alias-label-caption: #a1a1a1;
+  --dsw-alias-label-dimmed: #d4d4d4;
+  --dsw-alias-label-primary-foreground: #ffffff;
+  --dsw-alias-scrollbar-bg-l2: #d6cde6;
+  --dsw-alias-bg-skeleton: rgba(10, 10, 10, 0.05);
+  /* DSH surfaces that would stay gray-blue on the violet background: user bubble, markdown code, sidebar items, menus. */
+  --dsw-specific-bubble: #efe8fd;
+  --dsw-alias-bg-module-platform: #f2edfb;
+  --dsw-alias-markdown-code-block: #f7f3fe;
+  --dsw-alias-markdown-code-block-banner: #f7f3fe;
+  --dsw-specific-sidebar-nav-item-hover: #ede6fa;
+  --dsw-specific-sidebar-nav-item-active: #e6ddf8;
+  --dsw-menu-surface-fill: rgba(250, 247, 255, 0.58);
+
+  --dsw-omo-accent-orange: #f97316;
+  --dsw-omo-accent-green: #22c55e;
+  --dsw-omo-accent-green-hover: #16a34a;
+  /* Icon color on the accents (the composer send button) in both themes. */
+  --dsw-omo-accent-foreground: #ffffff;
+  --dsw-omo-keyword-gradient: linear-gradient(90deg, var(--dsw-omo-accent-orange), var(--dsw-omo-accent-green));
+  /* Initials badges: the row supplies the hue (--dsh-badge-hue, 0-359) and WorkspaceBadge.module.css composes
+     hsl() from it with these saturation, lightness and alpha values. */
+  --dsw-omo-badge-saturation: 70%;
+  --dsw-omo-badge-fill-lightness: 52%;
+  --dsw-omo-badge-fill-alpha: 0.18;
+  --dsw-omo-badge-ink-saturation: 60%;
+  --dsw-omo-badge-ink-lightness: 36%;
+  --dsw-omo-sidebar-glow: rgba(139, 92, 246, 0.07);
+}
+
+body[data-ds-dark-theme] {
+  --dsw-omo-led-bg: #080c10;
+  --dsw-omo-led-shadow: #00000088;
+  --dsw-omo-led-off: #192127;
+  --dsw-omo-led-amber: #f5ab85;
+  --dsw-omo-led-blue: #83a6ff;
+  --dsw-omo-lane-daily: #684737;
+  --dsw-omo-lane-geeky: #33466e;
+  --dsw-omo-profile-handle: #fafafa;
+  --dsw-alias-bg-base: #130c1d;
+  --dsw-specific-sidebar-fill: #1a1127;
+  --dsw-specific-input-major: #1d1528;
+  --dsw-specific-selector: #292037;
+  --dsw-alias-button-elevated-fill: #221a2e;
+  --dsw-alias-button-floating-hover: #292037;
+  --dsw-alias-border-l1: rgba(255, 255, 255, 0.06);
+  --dsw-alias-border-l2: rgba(255, 255, 255, 0.1);
+  --dsw-alias-border-l3: rgba(255, 255, 255, 0.12);
+  --dsw-alias-border-l4: rgba(255, 255, 255, 0.15);
+  --dsw-alias-interactive-bg-hover: rgba(255, 255, 255, 0.05);
+  --dsw-alias-interactive-bg-active: rgba(255, 255, 255, 0.08);
+  --dsw-alias-interactive-bg-hover-solid: #292037;
+  --dsw-alias-label-primary: #fafafa;
+  --dsw-alias-label-secondary: #a1a1a1;
+  --dsw-alias-label-tertiary: #8a8a8a;
+  --dsw-alias-label-caption: #737373;
+  --dsw-alias-label-dimmed: #404040;
+  /* Text and icons on the light fills of the dark theme: the DSH primary Button and a checked checkbox. */
+  --dsw-alias-label-primary-foreground: #0a0a0a;
+  --dsw-alias-scrollbar-bg-l2: #433851;
+  --dsw-alias-bg-skeleton: rgba(255, 255, 255, 0.06);
+  --dsw-alias-bg-layer-1: #221a2e;
+  --dsw-alias-bg-layer-2: #292037;
+  --dsw-alias-bg-layer-3: #342a41;
+  --dsw-specific-bubble: #2e223f;
+  --dsw-alias-bg-module-platform: #342a41;
+  --dsw-alias-markdown-code-block: #181221;
+  --dsw-alias-markdown-code-block-banner: #292037;
+  --dsw-specific-sidebar-nav-item-hover: #292037;
+  --dsw-specific-sidebar-nav-item-active: #403451;
+  --dsw-menu-surface-fill: rgba(64, 52, 81, 0.45);
+
+  --dsw-omo-badge-fill-lightness: 50%;
+  --dsw-omo-badge-fill-alpha: 0.22;
+  --dsw-omo-badge-ink-saturation: 80%;
+  --dsw-omo-badge-ink-lightness: 62%;
+  --dsw-omo-sidebar-glow: rgba(167, 139, 250, 0.09);
+}
+
+/* The macOS menu fill stays nearly opaque (design-platform.css); these match its selectors to tint it violet. */
+html[data-platform='darwin'] body {
+  --dsw-specific-menu: rgba(250, 247, 255, 0.94);
+}
+
+html[data-platform='darwin'] body[data-ds-dark-theme] {
+  --dsw-specific-menu: rgba(44, 34, 60, 0.94);
+}

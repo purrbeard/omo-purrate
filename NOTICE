@@ -1,0 +1,33 @@
+OmO UI
+Copyright (c) 2026 sigridjineth
+
+This product includes user-interface code, design tokens, icons, and fonts copied from
+DeepSeek Harness (https://github.com/deepseek-ai/deepseek-harness), licensed under the MIT License:
+
+MIT License
+
+Copyright (c) 2026 DeepSeek
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+The bundled Montserrat font is licensed under the SIL Open Font License 1.1; its license text is src/dsh/theme/Montserrat-OFL.txt in the source and Contents/Resources/Montserrat-OFL.txt, next to this NOTICE, in the app.
+
+The bundled Geist and Geist Mono fonts (Copyright (c) 2023 Vercel, in collaboration with basement.studio; from the geist npm package) are licensed under the SIL Open Font License 1.1; the license text is src/dsh/theme/Geist-OFL.txt in the source and Contents/Resources/Geist-OFL.txt, next to this NOTICE, in the app.
+
+The OmO UI app icon (build/icon.svg and the files rendered from it) is an original work by sigridjineth and contains no DeepSeek artwork or logos.

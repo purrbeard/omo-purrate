@@ -1,0 +1,57 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable",
+      "ESNext.Disposable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "types": [
+      "vite/client"
+    ],
+    "paths": {
+      "@deepseek-ai/dsh-client-ui-primitives": [
+        "./src/dsh/primitives/index.ts"
+      ],
+      "@deepseek-ai/dsh-client-ui-primitives/src/*": [
+        "./src/dsh/primitives/*"
+      ],
+      "@deepseek-ai/dsh-util-code-language": [
+        "./src/dsh/vendor/code-language/index.ts"
+      ],
+      "@deepseek-ai/dsh-util-code-language/src/*": [
+        "./src/dsh/vendor/code-language/*"
+      ],
+      "@deepseek-ai/dsh-util-workspace-path": [
+        "./src/dsh/vendor/workspace-path/index.ts"
+      ],
+      "@deepseek-ai/dsh-util-workspace-path/src/*": [
+        "./src/dsh/vendor/workspace-path/*"
+      ],
+      "@deepseek-ai/dsh-client-store": [
+        "./src/dsh/vendor/store/index.ts"
+      ],
+      "@deepseek-ai/dsh-client-store/src/*": [
+        "./src/dsh/vendor/store/*"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "shared"
+  ]
+}

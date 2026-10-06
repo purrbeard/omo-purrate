@@ -1,0 +1,117 @@
+.root {
+  position: absolute;
+  top: calc(var(--dsh-frame-top-clearance, 0px) + 12px);
+  left: 24px;
+  right: 24px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: fit-content;
+  max-width: 560px;
+  margin-inline: auto;
+  padding: 6px 6px 6px 14px;
+  box-sizing: border-box;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: var(--dsw-elevation-prominent);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  animation: bannerIn var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.root[role='status'] {
+  padding-right: 14px;
+}
+
+@keyframes bannerIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.dot {
+  flex: none;
+}
+
+.text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.disclosure {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.disclosure:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.chevron {
+  transition: transform 150ms var(--ds-ease-in-out);
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.restart {
+  flex: none;
+}
+
+.details {
+  max-height: 200px;
+  margin: 0 8px 4px 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-markdown-code-block);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-ligatures: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  margin: 0 8px 4px 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root {
+    animation: none;
+  }
+
+  .chevron {
+    transition: none;
+  }
+}

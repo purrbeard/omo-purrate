@@ -1,0 +1,38 @@
+appId: com.sigridjineth.omoui
+productName: OmO UI
+copyright: Copyright © 2026 sigridjineth
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+  - "!**/*.map"
+asar: true
+# The DSH MIT notice and the font license ship with every copy of the app (Contents/Resources).
+extraResources:
+  - from: NOTICE
+    to: NOTICE
+  - from: LICENSE
+    to: LICENSE
+  - from: src/dsh/theme/Montserrat-OFL.txt
+    to: Montserrat-OFL.txt
+  - from: src/dsh/theme/Geist-OFL.txt
+    to: Geist-OFL.txt
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: arm64
+    - target: zip
+      arch: arm64
+  icon: build/icon.icns
+  darkModeSupport: true
+  # No Developer ID certificate: "-" is electron-builder 26's explicit ad-hoc signing opt-in.
+  identity: "-"
+  hardenedRuntime: false
+  extendInfo:
+    LSMinimumSystemVersion: "12.0"
+dmg:
+  title: OmO UI

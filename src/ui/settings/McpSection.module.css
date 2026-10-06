@@ -1,0 +1,8 @@
+.toolbar { display: flex; justify-content: flex-end; }
+.serverHeader { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.name { margin: 0; font-size: 14px; line-height: 22px; font-weight: 500; overflow-wrap: anywhere; }
+.badge { padding: 2px 8px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.tools { font-size: 13px; line-height: 20px; }
+.tools summary { cursor: pointer; color: var(--dsw-alias-label-secondary); }
+.toolList { display: flex; flex-direction: column; gap: 12px; padding: 14px 0 0; margin: 0; list-style: none; }
+.toolList code { overflow-wrap: anywhere; }

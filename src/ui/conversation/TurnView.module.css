@@ -1,0 +1,110 @@
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Process rows sit 6px apart; a response or plan gets 12px, and an input 16px before what follows. */
+.turn > [data-flow='assistant'],
+.turn > [data-flow='plan'] {
+  margin-block: 6px;
+}
+
+.turn > [data-flow='user'] {
+  margin-bottom: 10px;
+}
+
+.turn > [data-flow='user']:not(:first-child) {
+  margin-top: 10px;
+}
+
+.stopped {
+  align-self: flex-start;
+  padding: 0 6px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.errorRow {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 2px 0;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
+}
+
+.errorDot {
+  margin-top: 5px;
+}
+
+.errorCopy {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.errorTitle {
+  margin-right: 6px;
+  color: var(--dsw-alias-state-error-primary);
+  font-weight: 600;
+}
+
+.errorRow[data-retrying] .errorTitle {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.errorMessage {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.errorDetails {
+  display: block;
+  margin-top: 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+}
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 14px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+}
+
+.planHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.compaction {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-block: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.compaction::before,
+.compaction::after {
+  content: '';
+  flex: 1;
+  height: 0.5px;
+  background: var(--dsw-alias-border-l2);
+}

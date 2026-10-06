@@ -1,0 +1,43 @@
+name: OmoRemote
+options:
+  bundleIdPrefix: com.sigridjineth.omoui
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: en
+  knownRegions: [en, ko, Base]
+packages:
+  OmoKit:
+    path: OmoKit
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    DEVELOPMENT_TEAM: 27XSGM7GF9
+targets:
+  OmoRemote:
+    type: application
+    platform: iOS
+    sources:
+      - path: OmoRemote
+    dependencies:
+      - package: OmoKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.sigridjineth.omoui.ios
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: OmO
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+schemes:
+  OmoRemote:
+    build:
+      targets:
+        OmoRemote: all
+    run:
+      config: Debug
+    archive:
+      config: Release

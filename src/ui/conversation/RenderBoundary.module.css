@@ -1,0 +1,6 @@
+.failed {
+  padding: 2px 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: 20px;
+}

@@ -1,0 +1,89 @@
+.userRow {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.userActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.userRow:hover .userActions,
+.userRow:focus-within .userActions {
+  opacity: 1;
+}
+
+.iconButton,
+.textButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm, 6px);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.iconButton:hover:not(:disabled),
+.textButton:hover:not(:disabled) {
+  background: var(--dsw-alias-fill-tertiary, rgba(0, 0, 0, 0.05));
+  color: var(--dsw-alias-label-primary);
+}
+
+.iconButton:disabled,
+.textButton:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.turnActions {
+  display: flex;
+  margin-top: 4px;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-self: stretch;
+  margin-left: auto;
+  width: min(calc(var(--dsh-chat-content-width, 748px) * 0.702), 100%);
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-separator-primary, rgba(0, 0, 0, 0.12));
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-specific-bubble);
+}
+
+.editorInput {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: var(--dsh-content-font-size, 14px);
+  line-height: calc(22px + var(--dsh-content-font-delta, 0px));
+}
+
+.editorFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.editorHint {
+  margin-right: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}

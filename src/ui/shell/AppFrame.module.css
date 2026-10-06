@@ -1,0 +1,160 @@
+/* Ported from DSH ui-layout AppFrame.module.css (no Windows caption); the right column holds the side chat panel. */
+
+.frame {
+  position: relative;
+  display: grid;
+  grid-template-rows: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-base);
+}
+
+.frame[data-animating] {
+  transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+.frame[data-dragging] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame[data-animating] {
+    transition: none;
+  }
+}
+
+.sidebarCol {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--dsw-specific-sidebar-fill);
+  border-right: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+.centerCol {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* The side chat panel is an inset card: docked in its own track with the main background around it, or floated
+   over the main column when the window is too narrow for a third track. */
+.rightCol {
+  position: relative;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 8px 8px 0;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-base);
+}
+
+.rightOverlay {
+  position: absolute;
+  z-index: 30;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: min(380px, calc(100% - 16px));
+}
+
+/* Window-drag strip: the top 52px of each column drags the window on macOS; interactive
+   elements inside subtract themselves through the global no-drag rule in app.css. The
+   strip is geometry only (pointer-events: none), so content under it still receives clicks. */
+.dragStrip {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 52px;
+  pointer-events: none;
+}
+
+:global([data-platform='darwin']) .frame {
+  background: transparent;
+}
+
+:global(html[data-platform='darwin']) {
+  --dsh-frame-top-clearance: 48px;
+  --dsh-frame-overlay-top: calc(var(--dsh-frame-top-clearance) + 20px);
+}
+
+:global(html[data-platform='darwin'][data-fullscreen]) {
+  --dsh-frame-overlay-top: 20px;
+}
+
+:global([data-platform='darwin']) .sidebarCol {
+  background:
+    linear-gradient(
+      to bottom,
+      rgb(var(--dsw-omo-sidebar-tint) / 0.1),
+      rgb(var(--dsw-omo-sidebar-tint) / 0) 35%,
+      rgb(143 137 184 / 0) 68%,
+      rgb(143 137 184 / 0.09)
+    ),
+    color-mix(in srgb, color-mix(in srgb, var(--dsw-specific-sidebar-fill) 97%, rgb(var(--dsw-omo-sidebar-tint))) 40%, transparent);
+  border-right: none;
+}
+
+:global([data-platform='darwin']) :global([data-ds-dark-theme]) .sidebarCol {
+  background:
+    linear-gradient(
+      to bottom,
+      rgb(var(--dsw-omo-sidebar-tint) / 0.08),
+      rgb(var(--dsw-omo-sidebar-tint) / 0) 35%,
+      rgb(143 137 184 / 0) 68%,
+      rgb(143 137 184 / 0.07)
+    ),
+    color-mix(in srgb, var(--dsw-specific-sidebar-fill) 50%, transparent);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :global([data-platform='darwin']) .sidebarCol,
+  :global([data-platform='darwin']) :global([data-ds-dark-theme]) .sidebarCol {
+    background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 90%, transparent);
+  }
+}
+
+:global([data-platform='darwin']) .centerCol {
+  background: var(--dsw-alias-bg-base);
+  border-left: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+:global([data-platform='darwin']) .frame[data-sidebar-collapsed] .centerCol {
+  border-left: none;
+}
+
+/* Collapsed sidebar on macOS leaves the traffic lights over the main column: main
+   headers pad their inline start by this. */
+:global([data-platform='darwin']) .frame[data-sidebar-collapsed] {
+  --dsh-frame-leading-clearance: 88px;
+}
+
+:global([data-platform='darwin'][data-fullscreen]) .frame[data-sidebar-collapsed] {
+  --dsh-frame-leading-clearance: 12px;
+}
+
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  margin-left: -4px;
+  cursor: col-resize;
+  z-index: 11;
+  touch-action: none;
+  -webkit-app-region: no-drag;
+}
+
+.frame[data-animating] .handle {
+  transition: left var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+.frame[data-dragging] .handle {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame[data-animating] .handle {
+    transition: none;
+  }
+}

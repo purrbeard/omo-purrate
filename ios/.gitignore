@@ -1,0 +1,5 @@
+OmoKit/.build/
+OmoKit/.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/

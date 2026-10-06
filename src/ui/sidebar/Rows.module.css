@@ -1,0 +1,217 @@
+/* Ported from DSH ui-workspace rows/Rows.module.css (MIT, Copyright (c) 2026 DeepSeek). */
+
+.projectRow,
+.sessionRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--dsw-radius-md);
+  color: var(--dsw-alias-label-primary);
+  user-select: none;
+}
+
+.projectRow {
+  height: 32px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.sessionRow {
+  height: 38px;
+}
+
+.projectRow:hover,
+.sessionRow:hover,
+.menuOpen,
+.renaming {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.sessionRow.selected {
+  background: var(--dsw-alias-interactive-bg-active);
+}
+
+.projectHoldsActive {
+  color: var(--dsw-alias-label-primary);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0 8px;
+  border: none;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rowMain:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -2px;
+}
+
+.projectRow .rowMain {
+  gap: 6px;
+  padding-right: 36px;
+}
+
+.sessionRow .rowMain {
+  padding-right: 32px;
+}
+
+.slot {
+  flex: none;
+  width: 14px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.arrow {
+  transition: transform 150ms var(--ds-ease-in-out);
+}
+
+.arrowClosed {
+  transform: rotate(-90deg);
+}
+
+.projectTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.count {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+}
+
+.rowBadge {
+  flex: none;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.selected .title {
+  font-weight: 600;
+}
+
+.runningSlot {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.time {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+
+/* The trailing action sits in the row's reserved right padding and fades in rather than unmounting,
+   so keyboard focus and test drivers can always reach it. */
+.rowActions {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0;
+}
+
+.projectRow:hover .rowActions,
+.sessionRow:hover .rowActions,
+.sessionRow.selected .rowActions,
+.projectRow:has(:focus-visible) .rowActions,
+.sessionRow:has(:focus-visible) .rowActions,
+.menuOpen .rowActions {
+  opacity: 1;
+}
+
+.iconButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--dsw-radius-xs);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.grip {
+  width: 18px;
+}
+
+.renaming {
+  padding-left: 8px;
+}
+
+.renameInput {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  box-sizing: border-box;
+  margin: 0 8px;
+  padding: 0 6px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-sm);
+  outline: none;
+  background: var(--dsw-alias-button-elevated-fill);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrow {
+    transition: none;
+  }
+}

@@ -1,0 +1,219 @@
+/* Adapted from DSH ui-conversation TodoPanel.module.css and ui-goal GoalBar.module.css. */
+
+.dock {
+  --dsh-composer-dock-inset: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: calc(100% - 2 * var(--dsh-composer-dock-inset));
+  max-width: calc(var(--dsh-composer-card-max-width, 760px) - 2 * var(--dsh-composer-dock-inset));
+  margin-bottom: 8px;
+}
+
+.card,
+.goal {
+  box-sizing: border-box;
+  width: 100%;
+  border: 0;
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
+  background: var(--dsw-specific-menu);
+  backdrop-filter: var(--dsw-menu-backdrop-filter);
+  box-shadow: var(--dsw-elevation-panel);
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.card {
+  overflow: hidden;
+  border-radius: var(--dsw-radius-lg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lead,
+.chevron {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.title {
+  flex: none;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 24px;
+  white-space: nowrap;
+}
+
+.progress {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.current {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag {
+  flex: none;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.current + .tag {
+  margin-left: 0;
+}
+
+.chevron {
+  margin-left: auto;
+}
+
+.tag + .chevron {
+  margin-left: 0;
+}
+
+.phases {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(200px, 28vh);
+  padding: 0 12px 10px;
+  overflow-y: auto;
+}
+
+.phase {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.phaseHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.phaseName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phaseCount {
+  flex: none;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.item[data-status='in_progress'] {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.item[data-status='completed'],
+.item[data-status='abandoned'] {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.item[data-status='abandoned'] .content {
+  text-decoration: line-through;
+}
+
+.glyph {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+
+.content {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 4px 12px;
+  border-radius: var(--dsw-radius-md);
+}
+
+.objective {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary-dimmed);
+  font-size: 13px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.elapsed {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}

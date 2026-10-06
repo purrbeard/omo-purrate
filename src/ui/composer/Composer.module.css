@@ -1,0 +1,346 @@
+/* Ported from DSH ui-conversation skeleton/InputBar.module.css (textarea variant). */
+
+.root {
+  --dsh-composer-card-max-width: 760px;
+  --dsh-composer-side-clearance: 20px;
+  --dsh-composer-line-height: 24px;
+  --dsh-composer-max-lines: 12;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 var(--dsh-composer-side-clearance) 20px;
+}
+
+/* The border is a padded gradient layer behind the card (background-clip trick), so the plain hairline and the
+   magic-keyword gradient share one geometry and the transition is a single opacity fade. */
+.card {
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: var(--dsh-composer-card-max-width);
+  padding: 10px 0 0;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-panel);
+  background: var(--dsw-specific-input-major);
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: var(--dsh-composer-line-height);
+  transition: border-color 160ms ease;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--dsw-omo-keyword-gradient);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.card:focus-within {
+  border-color: var(--dsw-alias-border-l4);
+}
+
+.cardMagic {
+  border-color: transparent;
+}
+
+.cardMagic::before {
+  opacity: 1;
+}
+
+.cardDisabled {
+  border-color: var(--dsw-alias-border-l1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card::before {
+    transition: none;
+  }
+}
+
+.cardDrop {
+  border-color: var(--dsw-omo-accent-green);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 16px;
+}
+
+.thumbnail {
+  position: relative;
+  width: 72px;
+  height: 72px;
+}
+
+.thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+}
+
+.removeImage {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-specific-input-major);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.imageNotice {
+  padding: 0 16px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.scroll {
+  position: relative;
+  margin-right: 4px;
+}
+
+.scroll::-webkit-scrollbar-track {
+  margin-top: 8px;
+}
+
+/* The mirror repeats the draft under a transparent textarea so keywords can be painted; both share the exact
+   box, font and wrapping rules, and the textarea keeps caret, selection, IME composition and scrolling. */
+.mirror,
+.input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 2px 10px 0 16px;
+  border: none;
+  font-family: var(--dsw-font-family);
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  letter-spacing: normal;
+  word-spacing: normal;
+}
+
+/* Both reserve the 5px scrollbar gutter so wrapping stays identical whether or not the draft scrolls. */
+.mirror {
+  position: absolute;
+  inset: 0;
+  padding-right: calc(10px + var(--dsh-scrollbar-width, 5px));
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  pointer-events: none;
+  user-select: none;
+}
+
+.keyword {
+  color: transparent;
+  background: var(--dsw-omo-keyword-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  font-weight: 500;
+}
+
+.input {
+  position: relative;
+  min-height: calc(2 * var(--dsh-composer-line-height) + 4px);
+  max-height: calc(var(--dsh-composer-max-lines) * var(--dsh-composer-line-height) + 4px);
+  outline: none;
+  resize: none;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--dsw-alias-label-primary);
+}
+
+.input::placeholder {
+  color: var(--dsw-alias-label-caption);
+}
+
+.input:disabled {
+  cursor: not-allowed;
+}
+
+.cardDisabled .mirror {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.input:disabled::placeholder {
+  color: var(--dsw-alias-label-dimmed);
+}
+
+.keywordHint {
+  display: flex;
+  align-items: baseline;
+  margin: 2px 16px 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.keywordHintName {
+  color: transparent;
+  background: var(--dsw-omo-keyword-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  font-weight: 600;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 10px 10px 12px;
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.tools,
+.trailing {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.trailing {
+  flex: none;
+  margin-left: auto;
+}
+
+@container (max-width: 560px) {
+  .tools,
+  .trailing {
+    gap: 8px;
+  }
+}
+
+.statusChip,
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: min(280px, 60cqw);
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.statusChip {
+  outline: none;
+  cursor: default;
+}
+
+.statusChip:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+
+.chip {
+  cursor: pointer;
+}
+
+.chip:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chipIcon {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.chipLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hint {
+  flex: none;
+  padding: 0 8px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+.primary {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  corner-shape: round;
+  background: var(--dsw-omo-accent-green);
+  color: var(--dsw-omo-accent-foreground);
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--dsw-omo-accent-green-hover);
+}
+
+.primary:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.stop {
+  background: var(--dsw-specific-selector);
+  color: var(--dsw-alias-label-primary);
+}
+
+.stop:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}

@@ -1,0 +1,418 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		00DBBADC78C86111A4F9AE0D /* USBListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81BC65E9249E02BBA57D0142 /* USBListener.swift */; };
+		0B19B6E954D8ED6E48C6147B /* OmoRemoteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0931FC2477B54F61144CEE07 /* OmoRemoteApp.swift */; };
+		0F60FB798AEB90C5A6D57E9B /* RemoteViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A335900B99925A1D71549F9D /* RemoteViews.swift */; };
+		178FB8BE0000D86817B2343D /* ItemRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6AACF0F6464ED34B8883A73 /* ItemRowView.swift */; };
+		1AA8F374FA0FE115422A3761 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 77724A4CAF853F51B8ECA770 /* Localizable.strings */; };
+		303D3064FA85DCC7DB73BDA4 /* NewSessionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0D5F72CFA23E9B6F91F15A /* NewSessionSheet.swift */; };
+		381B30094D4DE09C34F952C6 /* MarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96555353FC64CA89C82B9EDC /* MarkdownText.swift */; };
+		3AB76551C3BCF953901820ED /* ComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27B845E2FD6C601368BCF9E1 /* ComposerView.swift */; };
+		4E1C7F65A9E535A8BA3B17F4 /* ConnectionHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82A7A5D10EE7F179E26DCA08 /* ConnectionHeaderView.swift */; };
+		51F8F592B8998BA357C63A9A /* RemoteModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0701D56EAA7BD180C27E395B /* RemoteModel.swift */; };
+		96B0C0151DBC469898165BA3 /* OmoKit in Frameworks */ = {isa = PBXBuildFile; productRef = E092A4F0CC6FFFF5D175E594 /* OmoKit */; };
+		B069F1B42075850F3B8BDCD1 /* ApprovalSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7E96B022B196BED73C4240 /* ApprovalSheet.swift */; };
+		C22D884DD0EE2599ADFCE9B3 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F84B7080DA94831BEED25E45 /* ConversationView.swift */; };
+		C4E15439CE102B6526985B51 /* DockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C4C86F0A2145DF8E3D1B70B /* DockView.swift */; };
+		CCDF0DF8879DF834DFFE54E4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5BE36B3EFA78B985F4486861 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0701D56EAA7BD180C27E395B /* RemoteModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteModel.swift; sourceTree = "<group>"; };
+		0931FC2477B54F61144CEE07 /* OmoRemoteApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmoRemoteApp.swift; sourceTree = "<group>"; };
+		1B0D5F72CFA23E9B6F91F15A /* NewSessionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewSessionSheet.swift; sourceTree = "<group>"; };
+		1D468A5D0ECAA85406DF04BB /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/Localizable.strings; sourceTree = "<group>"; };
+		27B845E2FD6C601368BCF9E1 /* ComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerView.swift; sourceTree = "<group>"; };
+		2C4C86F0A2145DF8E3D1B70B /* DockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockView.swift; sourceTree = "<group>"; };
+		5BE36B3EFA78B985F4486861 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		6A34E0B5A54A11540DD0072D /* OmoRemote.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = OmoRemote.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		81BC65E9249E02BBA57D0142 /* USBListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = USBListener.swift; sourceTree = "<group>"; };
+		8206359CED8717C620EBF924 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		82A7A5D10EE7F179E26DCA08 /* ConnectionHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionHeaderView.swift; sourceTree = "<group>"; };
+		96555353FC64CA89C82B9EDC /* MarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownText.swift; sourceTree = "<group>"; };
+		9C7E96B022B196BED73C4240 /* ApprovalSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalSheet.swift; sourceTree = "<group>"; };
+		A335900B99925A1D71549F9D /* RemoteViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteViews.swift; sourceTree = "<group>"; };
+		AE44199EF97CEA2D288BAEB3 /* OmoKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OmoKit; path = OmoKit; sourceTree = SOURCE_ROOT; };
+		D6AACF0F6464ED34B8883A73 /* ItemRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemRowView.swift; sourceTree = "<group>"; };
+		F84B7080DA94831BEED25E45 /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BEFA0FE95A4D642612F82EF9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				96B0C0151DBC469898165BA3 /* OmoKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		01A8572A7B280D0D3C3BE3F8 /* OmoRemote */ = {
+			isa = PBXGroup;
+			children = (
+				9C7E96B022B196BED73C4240 /* ApprovalSheet.swift */,
+				5BE36B3EFA78B985F4486861 /* Assets.xcassets */,
+				27B845E2FD6C601368BCF9E1 /* ComposerView.swift */,
+				82A7A5D10EE7F179E26DCA08 /* ConnectionHeaderView.swift */,
+				F84B7080DA94831BEED25E45 /* ConversationView.swift */,
+				2C4C86F0A2145DF8E3D1B70B /* DockView.swift */,
+				D6AACF0F6464ED34B8883A73 /* ItemRowView.swift */,
+				96555353FC64CA89C82B9EDC /* MarkdownText.swift */,
+				1B0D5F72CFA23E9B6F91F15A /* NewSessionSheet.swift */,
+				0931FC2477B54F61144CEE07 /* OmoRemoteApp.swift */,
+				0701D56EAA7BD180C27E395B /* RemoteModel.swift */,
+				A335900B99925A1D71549F9D /* RemoteViews.swift */,
+				81BC65E9249E02BBA57D0142 /* USBListener.swift */,
+				77724A4CAF853F51B8ECA770 /* Localizable.strings */,
+			);
+			path = OmoRemote;
+			sourceTree = "<group>";
+		};
+		04B5BE285EBBEE2669FA9156 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6A34E0B5A54A11540DD0072D /* OmoRemote.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C6979DA980CF582D4C06121D = {
+			isa = PBXGroup;
+			children = (
+				01A8572A7B280D0D3C3BE3F8 /* OmoRemote */,
+				EFA6BDBEF644CCE33D24CF0B /* Packages */,
+				04B5BE285EBBEE2669FA9156 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		EFA6BDBEF644CCE33D24CF0B /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				AE44199EF97CEA2D288BAEB3 /* OmoKit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		D61F953CC159619F1101F7EC /* OmoRemote */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 72E8594E5846F1BCD47D0151 /* Build configuration list for PBXNativeTarget "OmoRemote" */;
+			buildPhases = (
+				8CF4C5E5D09953C45F1EB9E3 /* Sources */,
+				E590D2CF583F953B38648B07 /* Resources */,
+				BEFA0FE95A4D642612F82EF9 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OmoRemote;
+			packageProductDependencies = (
+				E092A4F0CC6FFFF5D175E594 /* OmoKit */,
+			);
+			productName = OmoRemote;
+			productReference = 6A34E0B5A54A11540DD0072D /* OmoRemote.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E7437713ECA4B4F1D2D54F38 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					D61F953CC159619F1101F7EC = {
+						DevelopmentTeam = 27XSGM7GF9;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = D64F1A1EA13CEF95F7351218 /* Build configuration list for PBXProject "OmoRemote" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+				ko,
+			);
+			mainGroup = C6979DA980CF582D4C06121D;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				DAF854B5DFF84A2C9F750282 /* XCLocalSwiftPackageReference "OmoKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 04B5BE285EBBEE2669FA9156 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D61F953CC159619F1101F7EC /* OmoRemote */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E590D2CF583F953B38648B07 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CCDF0DF8879DF834DFFE54E4 /* Assets.xcassets in Resources */,
+				1AA8F374FA0FE115422A3761 /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8CF4C5E5D09953C45F1EB9E3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B069F1B42075850F3B8BDCD1 /* ApprovalSheet.swift in Sources */,
+				3AB76551C3BCF953901820ED /* ComposerView.swift in Sources */,
+				4E1C7F65A9E535A8BA3B17F4 /* ConnectionHeaderView.swift in Sources */,
+				C22D884DD0EE2599ADFCE9B3 /* ConversationView.swift in Sources */,
+				C4E15439CE102B6526985B51 /* DockView.swift in Sources */,
+				178FB8BE0000D86817B2343D /* ItemRowView.swift in Sources */,
+				381B30094D4DE09C34F952C6 /* MarkdownText.swift in Sources */,
+				303D3064FA85DCC7DB73BDA4 /* NewSessionSheet.swift in Sources */,
+				0B19B6E954D8ED6E48C6147B /* OmoRemoteApp.swift in Sources */,
+				51F8F592B8998BA357C63A9A /* RemoteModel.swift in Sources */,
+				0F60FB798AEB90C5A6D57E9B /* RemoteViews.swift in Sources */,
+				00DBBADC78C86111A4F9AE0D /* USBListener.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		77724A4CAF853F51B8ECA770 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				8206359CED8717C620EBF924 /* en */,
+				1D468A5D0ECAA85406DF04BB /* ko */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		16E45FBE3B69FB4716A0E28C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = OmO;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sigridjineth.omoui.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		8D243AD4EA730E2AF82BD145 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = OmO;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sigridjineth.omoui.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		A6A49AB0E863F5117FC73995 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 27XSGM7GF9;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		D5BE544CFA6A8EE610DBD484 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 27XSGM7GF9;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		72E8594E5846F1BCD47D0151 /* Build configuration list for PBXNativeTarget "OmoRemote" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				16E45FBE3B69FB4716A0E28C /* Debug */,
+				8D243AD4EA730E2AF82BD145 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D64F1A1EA13CEF95F7351218 /* Build configuration list for PBXProject "OmoRemote" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D5BE544CFA6A8EE610DBD484 /* Debug */,
+				A6A49AB0E863F5117FC73995 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		DAF854B5DFF84A2C9F750282 /* XCLocalSwiftPackageReference "OmoKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = OmoKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E092A4F0CC6FFFF5D175E594 /* OmoKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OmoKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E7437713ECA4B4F1D2D54F38 /* Project object */;
+}

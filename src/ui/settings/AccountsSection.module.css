@@ -1,0 +1,21 @@
+.toolbar { display: flex; justify-content: flex-end; }
+.providerHeader { display: flex; align-items: center; gap: 10px; }
+.providerName { margin: 0; font-size: 14px; line-height: 22px; font-weight: 600; }
+.signIn { margin-left: auto; }
+.badge { padding: 1px 8px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px; white-space: nowrap; }
+.badge[data-status="blocked"], .badge[data-status="expired"] { color: var(--dsw-alias-state-warn-primary); }
+.badge[data-status="pinned"] { color: var(--dsw-alias-state-business-primary); }
+.badge[data-status="available"] { color: var(--dsw-alias-state-success-primary); }
+.account { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--dsw-alias-interactive-bg-hover); }
+.account[data-compact] { padding: 4px 0; }
+.accountHeader { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 28px; font-size: 13px; }
+.accountName { font-weight: 500; overflow-wrap: anywhere; }
+.accountActions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.windows { display: flex; flex-direction: column; gap: 4px; }
+.window { display: grid; grid-template-columns: 96px minmax(80px, 1fr) minmax(120px, auto); align-items: center; gap: 10px; font-size: 12px; line-height: 18px; }
+.windowLabel { color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.windowValue { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.track { position: relative; height: 6px; border-radius: 3px; overflow: hidden; background: var(--dsw-alias-interactive-bg-hover); }
+.fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--dsw-alias-state-success-primary); transition: width 240ms ease; }
+.window[data-level="mid"] .fill { background: var(--dsw-alias-state-warn-primary); }
+.window[data-level="high"] .fill { background: var(--dsw-alias-state-error-primary); }

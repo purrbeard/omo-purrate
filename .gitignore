@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-electron/
+release/
+test-results/
+playwright-report/
+.omo/
+.DS_Store
+*.log
+build/icon.iconset/
