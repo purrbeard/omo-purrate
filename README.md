@@ -68,7 +68,7 @@ npm run test:e2e
 npm run package:win
 ```
 
-The installer is `release/OmO UI Windows Setup 0.1.4-win.3.exe`; the runnable directory is `release/win-unpacked`. `npm run package:win:dir` builds only the runnable directory. The app discovers omo using `OMO_UI_OMO_BIN`, `~/.omo/install.json`, `~/.local/bin/omo.exe`, then PATH. It uses the inherited Windows environment, PowerShell for installation and account login, and the native Windows title bar. Use Ctrl+E for side chat. The file manager target opens Explorer; standard installed VS Code and Cursor executables are detected. The fork has a distinct app identity and stores its UI preferences separately from the original OmO UI; omo's agent configuration remains shared.
+The installer is `release/OmO UI Windows Setup 0.1.4-win.4.exe`; the runnable directory is `release/win-unpacked`. `npm run package:win:dir` builds only the runnable directory. The app discovers omo using `OMO_UI_OMO_BIN`, `~/.omo/install.json`, `~/.local/bin/omo.exe`, then PATH. It uses the inherited Windows environment, PowerShell for installation and account login, and the native Windows title bar. Use Ctrl+E for side chat. The file manager target opens Explorer; standard installed VS Code and Cursor executables are detected. The fork has a distinct app identity and stores its UI preferences separately from the original OmO UI; omo's agent configuration remains shared.
 
 ### App updates
 
@@ -76,7 +76,7 @@ This fork's Windows checks and release workflow runs on PRs to `windows-support`
 
 Settings > About > Windows app update checks this fork's GitHub releases, including Windows prereleases. A newer release with a Windows installer and SHA-256 digest enables Download and install. The installer is downloaded and verified before opening; the app then closes so installation can continue. Finish active turns first. Checking never installs automatically. When no release has been published, the UI reports that explicitly. This updates the desktop app, not the separate omo runtime.
 
-Release assets must include `OmO UI Windows Setup <version>.exe` with GitHub's `sha256` asset digest or a `SHA256SUMS` file naming that exact installer. Source pushes alone are not app update releases.
+Release assets must include `OmO UI Windows Setup <version>.exe` (GitHub stores it as `OmO.UI.Windows.Setup.<version>.exe`) with GitHub's `sha256` asset digest or a `SHA256SUMS` file naming that exact installer. Source pushes alone are not app update releases.
 
 iPhone USB control is macOS-only and is disabled with an explanatory status on Windows. macOS build commands remain available. Windows packages are not configured with a publisher signing certificate.
 

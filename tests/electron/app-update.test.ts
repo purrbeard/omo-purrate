@@ -52,6 +52,22 @@ async function setup(options: Partial<AppUpdaterOptions> = {}) {
 }
 
 describe("AppUpdater release checks", () => {
+  it("accepts a decoded gzip release feed whose Content-Length counts compressed bytes", async () => {
+    const body = JSON.stringify([release()]);
+    const feed = () => new Response(body, { headers: { "Content-Type": "application/json", "Content-Encoding": "gzip", "Content-Length": String(Math.floor(body.length / 4)) } });
+    const { updater } = await setup({ fetch: vi.fn(async (url) => String(url) === apiUrl ? feed() : new Response(bytes)) });
+    expect(await updater.check()).toMatchObject({ state: "available", latestVersion: version });
+  });
+
+  it("installs the GitHub-renamed dotted installer asset", async () => {
+    const tag = `v${version}`;
+    const dotted = `OmO.UI.Windows.Setup.${version}.exe`;
+    const feed = release(version, { assets: [{ name: dotted, size: bytes.length, digest: `sha256:${digest}`, browser_download_url: assetUrl(tag, dotted) }] });
+    const { updater, launch } = await setup({ fetch: vi.fn(async (url) => String(url) === apiUrl ? json([feed]) : new Response(bytes)) });
+    expect((await updater.install()).state).toBe("installing");
+    expect(launch).toHaveBeenCalledTimes(1);
+  });
+
   it("starts idle and returns independent status snapshots without an automatic check", async () => {
     const { updater, fetcher } = await setup();
     expect(updater.getStatus()).toEqual({ state: "idle", currentVersion, latestVersion: null, progress: null, message: null });
