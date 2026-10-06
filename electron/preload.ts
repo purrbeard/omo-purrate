@@ -17,13 +17,32 @@ import type {
   OpenTarget,
   OpenTargetId,
   Preferences,
+  ProxyInput,
+  ProxySettings,
   RequestEnvelope,
 } from "../shared/ipc";
 import type { ClientMethod, ClientParams, ClientResult, RequestId, RpcNotification, RpcServerRequest } from "../shared/protocol";
 import { stripRemoteMethodPrefix } from "./ipc-errors";
+import type { AndroidStatus } from "../shared/android";
+import type { OpencodexAccounts } from "../shared/opencodex";
+import type { WorkspaceFile, WorkspaceDocument } from "../shared/workspace";
+import type { DeviceOverview } from "../shared/device-overview";
 
 // The sandboxed preload can require only "electron", so the channel table is restated here; `satisfies` keeps it equal to IPC.
 const CHANNELS = {
+  getDeviceOverview: "devices:overview",
+  listWorkspaceFiles: "workspace:list-files",
+  readWorkspaceFile: "workspace:read-file",
+  getWorkspaceDiff: "workspace:diff",
+  importMcpConfig: "mcp:import-config",
+  readOpencodexAccounts: "accounts:opencodex",
+  getAndroidStatus: "android:get-status",
+  refreshAndroid: "android:refresh",
+  connectAndroid: "android:connect",
+  disconnectAndroid: "android:disconnect",
+  androidStatus: "android:status",
+  getProxySettings: "proxy:get-settings",
+  applyProxySettings: "proxy:apply-settings",
   getIphoneStatus: "iphone:get-status",
   iphoneStatus: "iphone:status",
   getStatus: "omo:get-status",
@@ -72,6 +91,19 @@ function subscribe<T>(channel: string, listener: (payload: T) => void): () => vo
 }
 
 const api = {
+  getDeviceOverview: (): Promise<DeviceOverview> => invoke(CHANNELS.getDeviceOverview),
+  listWorkspaceFiles: (cwd: string): Promise<WorkspaceFile[]> => invoke(CHANNELS.listWorkspaceFiles, cwd),
+  readWorkspaceFile: (cwd: string, relativePath: string): Promise<WorkspaceDocument> => invoke(CHANNELS.readWorkspaceFile, cwd, relativePath),
+  getWorkspaceDiff: (cwd: string, relativePath: string): Promise<string> => invoke(CHANNELS.getWorkspaceDiff, cwd, relativePath),
+  importMcpConfig: (): Promise<{ imported: string[] } | null> => invoke(CHANNELS.importMcpConfig),
+  readOpencodexAccounts: (): Promise<OpencodexAccounts> => invoke(CHANNELS.readOpencodexAccounts),
+  getAndroidStatus: (): Promise<AndroidStatus> => invoke(CHANNELS.getAndroidStatus),
+  refreshAndroid: (): Promise<AndroidStatus> => invoke(CHANNELS.refreshAndroid),
+  connectAndroid: (serial: string): Promise<AndroidStatus> => invoke(CHANNELS.connectAndroid, serial),
+  disconnectAndroid: (): Promise<AndroidStatus> => invoke(CHANNELS.disconnectAndroid),
+  onAndroidStatus: (listener: (status: AndroidStatus) => void) => subscribe(CHANNELS.androidStatus, listener),
+  getProxySettings: (): Promise<ProxySettings> => invoke(CHANNELS.getProxySettings),
+  applyProxySettings: (input: ProxyInput): Promise<ProxySettings> => invoke(CHANNELS.applyProxySettings, input),
   getIphoneStatus: (): Promise<IphoneStatus> => invoke(CHANNELS.getIphoneStatus),
   onIphoneStatus: (listener: (status: IphoneStatus) => void) => subscribe(CHANNELS.iphoneStatus, listener),
   getStatus: (): Promise<BridgeStatus> => invoke(CHANNELS.getStatus),
