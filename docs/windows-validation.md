@@ -22,6 +22,12 @@ Do not run build/package commands concurrently with Electron E2E tests. Vite rem
 
 ## Verified implementation contracts
 
+MCP/model-routing increment `0.1.4-win.3`: TypeScript checks and all 49 unit files / 669 tests passed; full Windows Electron E2E passed 64 scenarios. MCP import regression passed 49 cases, including Claude discovery, BOM/VS Code input and native authentication fields. Actual UI imported 5 existing MCP servers into the real agent directory and reconnected. Research agent, category fallback and named mapping changes were saved through the UI in an isolated user configuration; omo's native config doctor reported no diagnostics. Actual server tool connection remains session/lazy and is distinct from the saved inventory. User research model preferences were not replaced by QA examples.
+
+- About has a separate Windows app update card. Checks use this fork's GitHub releases and include Windows prereleases; an empty release list is reported as unpublished. Installers are size-bounded and SHA-256 verified before opening the Windows installer and closing the app. Active turns disable the install button. Download failures keep non-executable `.part` files for inspection and never launch them. Actual update installation needs a published newer release; none exists at this checkpoint.
+
+App update increment `0.1.4-win.2`: TypeScript checks passed, all 48 unit files / 665 tests passed, and all 64 Windows Electron scenarios passed. The update-specific 50 backend cases cover version ordering, checksums, truncated/error streams, untrusted redirects, timeouts and guarded installer launch. The real GitHub query displayed unpublished, and desktop light / narrow dark About views were inspected. E2E also checked a newer release candidate and the enabled install action. No real downloaded installer was executed because no newer release is published.
+
 - Profile model overrides persist per Daily/Geeky and Normal/Heavy lane, including Automatic and unavailable-model display. Settings exposes the same stored mapping.
 - MCP JSON import uses the native file picker, preserves existing server names and settings, writes `mcp.json` with a backup, then reconnects omo.
 - The registered local opencodex management API returned 15 sanitized account entries; credentials are not returned to the renderer.

@@ -19,6 +19,8 @@ import type { AndroidStatus } from "./android";
 import type { OpencodexAccounts } from "./opencodex";
 import type { WorkspaceFile, WorkspaceDocument } from "./workspace";
 import type { DeviceOverview } from "./device-overview";
+import type { AppUpdateStatus } from "./app-update";
+import type { ModelRoutingInput, ModelRoutingSettings } from "./model-routing";
 
 /** URL of the official omo installer script. */
 export const OMO_INSTALL_SCRIPT_URL = "https://get.omo.dev/install.sh";
@@ -220,6 +222,14 @@ export interface AccountUsage {
 }
 
 export interface OmoBridgeApi {
+  readModelRouting(): Promise<ModelRoutingSettings>;
+  saveModelRouting(input: ModelRoutingInput): Promise<ModelRoutingSettings>;
+  importExistingMcpConfigs(): Promise<{ imported: string[]; sources: number }>;
+  readConfiguredMcpServers(): Promise<Array<{ name: string; enabled: boolean; type: string }>>;
+  getAppUpdateStatus(): Promise<AppUpdateStatus>;
+  checkAppUpdate(): Promise<AppUpdateStatus>;
+  installAppUpdate(): Promise<AppUpdateStatus>;
+  onAppUpdateStatus(listener: (status: AppUpdateStatus) => void): () => void;
   getDeviceOverview(): Promise<DeviceOverview>;
   listWorkspaceFiles(cwd: string): Promise<WorkspaceFile[]>;
   readWorkspaceFile(cwd: string, relativePath: string): Promise<WorkspaceDocument>;
@@ -283,6 +293,14 @@ export interface OmoBridgeApi {
 
 /** IPC channel names. Invoke channels use ipcRenderer.invoke; event channels use webContents.send. */
 export const IPC = {
+  readModelRouting: "models:read-routing",
+  saveModelRouting: "models:save-routing",
+  importExistingMcpConfigs: "mcp:import-existing",
+  readConfiguredMcpServers: "mcp:configured",
+  getAppUpdateStatus: "app-update:get-status",
+  checkAppUpdate: "app-update:check",
+  installAppUpdate: "app-update:install",
+  appUpdateStatus: "app-update:status",
   getDeviceOverview: "devices:overview",
   listWorkspaceFiles: "workspace:list-files",
   readWorkspaceFile: "workspace:read-file",

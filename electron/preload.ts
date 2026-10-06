@@ -27,9 +27,19 @@ import type { AndroidStatus } from "../shared/android";
 import type { OpencodexAccounts } from "../shared/opencodex";
 import type { WorkspaceFile, WorkspaceDocument } from "../shared/workspace";
 import type { DeviceOverview } from "../shared/device-overview";
+import type { AppUpdateStatus } from "../shared/app-update";
+import type { ModelRoutingInput, ModelRoutingSettings } from "../shared/model-routing";
 
 // The sandboxed preload can require only "electron", so the channel table is restated here; `satisfies` keeps it equal to IPC.
 const CHANNELS = {
+  readModelRouting: "models:read-routing",
+  saveModelRouting: "models:save-routing",
+  importExistingMcpConfigs: "mcp:import-existing",
+  readConfiguredMcpServers: "mcp:configured",
+  getAppUpdateStatus: "app-update:get-status",
+  checkAppUpdate: "app-update:check",
+  installAppUpdate: "app-update:install",
+  appUpdateStatus: "app-update:status",
   getDeviceOverview: "devices:overview",
   listWorkspaceFiles: "workspace:list-files",
   readWorkspaceFile: "workspace:read-file",
@@ -91,6 +101,14 @@ function subscribe<T>(channel: string, listener: (payload: T) => void): () => vo
 }
 
 const api = {
+  readModelRouting: (): Promise<ModelRoutingSettings> => invoke(CHANNELS.readModelRouting),
+  saveModelRouting: (input: ModelRoutingInput): Promise<ModelRoutingSettings> => invoke(CHANNELS.saveModelRouting, input),
+  importExistingMcpConfigs: (): Promise<{ imported: string[]; sources: number }> => invoke(CHANNELS.importExistingMcpConfigs),
+  readConfiguredMcpServers: (): Promise<Array<{ name: string; enabled: boolean; type: string }>> => invoke(CHANNELS.readConfiguredMcpServers),
+  getAppUpdateStatus: (): Promise<AppUpdateStatus> => invoke(CHANNELS.getAppUpdateStatus),
+  checkAppUpdate: (): Promise<AppUpdateStatus> => invoke(CHANNELS.checkAppUpdate),
+  installAppUpdate: (): Promise<AppUpdateStatus> => invoke(CHANNELS.installAppUpdate),
+  onAppUpdateStatus: (listener: (status: AppUpdateStatus) => void) => subscribe(CHANNELS.appUpdateStatus, listener),
   getDeviceOverview: (): Promise<DeviceOverview> => invoke(CHANNELS.getDeviceOverview),
   listWorkspaceFiles: (cwd: string): Promise<WorkspaceFile[]> => invoke(CHANNELS.listWorkspaceFiles, cwd),
   readWorkspaceFile: (cwd: string, relativePath: string): Promise<WorkspaceDocument> => invoke(CHANNELS.readWorkspaceFile, cwd, relativePath),

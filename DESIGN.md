@@ -17,6 +17,10 @@ The supplied dark conversation reference establishes three columns: project/thre
 
 ## Verification
 
+MCP exposes separate existing-configuration discovery and manual file import buttons. Saved servers that have no loaded session status appear as configured, never as connected. Model role editors reuse labeled native selects, existing cards and explicit save-and-reconnect actions; account keys and arbitrary runtime configuration are never sent to the renderer.
+
+About includes a separate Windows app update card using SettingRow and existing Buttons. Manual check, unpublished, current, available, downloading progress, verified, installing and error states are explicit. The install action explains that the app closes for the Windows installer and is disabled during active turns. No installation occurs on a background check.
+
 Profile model overrides reuse the composer model picker and native labeled select controls. MCP import uses the existing settings toolbar button, with importing, success, cancellation and error states. opencodex accounts are a read-only provider card, never showing credential values or offering unsupported pin/remove actions. Android replaces the iPhone navigation item and uses existing card, facts, Button and input styles; device discovery is manual, connection requires choosing a ready device, and disconnect is explicit. Android's browser surface uses readable responsive text, labeled controls, keyboard focus, and safe text rendering for model output.
 
 The omo settings section includes an opencodex card using the existing SettingRow, Button and card styles. Endpoint and password inputs keep the stored key out of IPC responses. Applying explicitly states that omo reconnects. Loading, applying, success model count and failure are visible states.
