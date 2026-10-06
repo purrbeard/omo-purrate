@@ -24,10 +24,12 @@ import type { PreferencesStore } from "./prefs";
 
 import type { IphoneBridge } from "./iphone/bridge";
 import type { AndroidBridge } from "./android/bridge";
-import { importMcpConfig } from "./omo/mcp-config";
+import { discoverMcpConfigs, importMcpConfig, readConfiguredMcpServers } from "./omo/mcp-config";
 import { readOpencodexAccounts } from "./accounts/opencodex";
 import { listWorkspaceFiles, readWorkspaceFile, getWorkspaceDiff } from "./workspace-files";
 import { getDeviceOverview } from "./device-overview";
+import { AppUpdater } from "./app-update";
+import { readModelRouting, saveModelRouting } from "./omo/model-routing";
 
 export interface IpcDeps {
   android?: AndroidBridge;
@@ -78,6 +80,17 @@ export function registerIpc(deps: IpcDeps): () => void {
     const window = getWindow();
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(channel, payload);
   };
+  const updater = new AppUpdater({
+    currentVersion: app.getVersion(),
+    downloadDir: path.join(app.getPath("userData"), "updates"),
+    onStatus: (status) => send(IPC.appUpdateStatus, status),
+    launchInstaller: async (installer) => {
+      if (!app.isPackaged) throw new Error("Install app updates from the packaged Windows app.");
+      const result = await shell.openPath(installer);
+      if (result !== "") throw new Error("Could not launch the Windows installer.");
+      app.quit();
+    },
+  });
   let installing: Promise<InstallResult> | null = null;
   let applyingProxy = false;
   const proxyAgentDir = (): string => supervisor.initializeResult?.codexHome ?? process.env["OMO_CODING_AGENT_DIR"] ?? path.join(homeDir, ".omo", "agent");
@@ -93,6 +106,27 @@ export function registerIpc(deps: IpcDeps): () => void {
   };
 
   const handlers: Record<string, (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown> = {
+    [IPC.readModelRouting]: () => readModelRouting(homeDir),
+    [IPC.saveModelRouting]: async (_event, input) => {
+      const result = await saveModelRouting(homeDir, input);
+      await supervisor.restart();
+      if (supervisor.getStatus().state !== "connected") throw new Error("Model configuration saved, but omo could not reconnect.");
+      return result;
+    },
+    [IPC.readConfiguredMcpServers]: () => readConfiguredMcpServers(proxyAgentDir()),
+    [IPC.importExistingMcpConfigs]: async () => {
+      const sources = await discoverMcpConfigs(homeDir);
+      const imported: string[] = [];
+      for (const source of sources) imported.push(...(await importMcpConfig(proxyAgentDir(), source.path)).imported);
+      if (imported.length > 0) {
+        await supervisor.restart();
+        if (supervisor.getStatus().state !== "connected") throw new Error("MCP configuration saved, but omo could not reconnect. Check omo diagnostics.");
+      }
+      return { imported, sources: sources.length };
+    },
+    [IPC.getAppUpdateStatus]: () => updater.getStatus(),
+    [IPC.checkAppUpdate]: () => updater.check(),
+    [IPC.installAppUpdate]: () => updater.install(),
     [IPC.getDeviceOverview]: () => getDeviceOverview(homeDir, app.getVersion(), supervisor.getStatus().omo?.version ?? null),
     [IPC.listWorkspaceFiles]: (_event, cwd) => listWorkspaceFiles(requireString(cwd, "cwd")),
     [IPC.readWorkspaceFile]: (_event, cwd, file) => readWorkspaceFile(requireString(cwd, "cwd"), requireString(file, "relativePath")),

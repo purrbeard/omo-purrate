@@ -18,6 +18,7 @@ test("imports MCP JSON through the native file picker without replacing existing
     await running.page.getByTestId("mcp-import").click();
     await expect(running.page.getByTestId("mcp-import-status")).toContainText("1");
     await expect(running.page.locator("html")).toHaveAttribute("data-bridge-state", "connected");
+    await expect(running.page.locator('[data-testid="mcp-configured-server"][data-server-name="imported"]')).toBeVisible();
     expect(JSON.parse(readFileSync(path.join(home, "mcp.json"), "utf8"))).toMatchObject({ mcpServers: { imported: { command: "node", args: ["server.mjs"] } } });
   } finally { await running.close(); rmSync(home, { recursive: true, force: true }); }
 });

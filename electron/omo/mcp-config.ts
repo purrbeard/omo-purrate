@@ -15,7 +15,7 @@ function invalid(): never {
 function parse(text: string): Record<string, unknown> {
   let value: unknown;
   try {
-    value = JSON.parse(text);
+    value = JSON.parse(text.replace(/^\uFEFF/, ""));
   } catch {
     return invalid();
   }
@@ -77,7 +77,71 @@ function server(value: unknown): Record<string, unknown> {
     if (value["enabled"] !== undefined && value["enabled"] === value["disabled"]) return invalid();
     next["enabled"] = !value["disabled"];
   }
+  if (value["auth"] !== undefined) {
+    if (value["auth"] !== false && value["auth"] !== "bearer" && value["auth"] !== "oauth") return invalid();
+    next["auth"] = value["auth"];
+  }
+  if (value["bearerTokenEnv"] !== undefined) {
+    if (typeof value["bearerTokenEnv"] !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(value["bearerTokenEnv"])) return invalid();
+    next["bearerTokenEnv"] = value["bearerTokenEnv"];
+  }
+  if (value["oauth"] !== undefined) {
+    if (!isRecord(value["oauth"])) return invalid();
+    next["oauth"] = value["oauth"];
+  }
+  if (value["lifecycle"] !== undefined) {
+    if (value["lifecycle"] !== "lazy" && value["lifecycle"] !== "eager" && value["lifecycle"] !== "keep-alive") return invalid();
+    next["lifecycle"] = value["lifecycle"];
+  }
+  for (const key of ["idleTimeoutMin", "requestTimeoutMs", "connectTimeoutMs", "startupTimeoutMs"]) {
+    if (value[key] !== undefined) {
+      if (typeof value[key] !== "number" || !Number.isFinite(value[key]) || value[key] < 0) return invalid();
+      next[key] = value[key];
+    }
+  }
   return next;
+}
+
+function sourceServers(source: Record<string, unknown>): Record<string, unknown> {
+  const servers = source["mcpServers"] ?? source["servers"] ?? (isRecord(source["mcp"]) ? source["mcp"]["servers"] : undefined);
+  if (!isRecord(servers)) return invalid();
+  return servers;
+}
+
+/** Lists only source paths and names, never environment variables or credentials. */
+export async function discoverMcpConfigs(homeDir: string, cwd?: string): Promise<Array<{ label: string; path: string; serverNames: string[] }>> {
+  const candidates = [
+    ["Claude", path.join(homeDir, ".claude", ".mcp.json")],
+    ["Claude Code", path.join(homeDir, ".claude.json")],
+    ["Cursor", path.join(homeDir, ".cursor", "mcp.json")],
+    ["Claude Desktop", path.join(homeDir, "AppData", "Roaming", "Claude", "claude_desktop_config.json")],
+    ["Claude Desktop", path.join(homeDir, ".config", "Claude", "claude_desktop_config.json")],
+    ...(cwd ? [["Workspace", path.join(cwd, ".mcp.json")]] : []),
+  ];
+  const found: Array<{ label: string; path: string; serverNames: string[] }> = [];
+  for (const [label, file] of candidates) {
+    if (!label || !file) continue;
+    let text: string;
+    try { text = await readFile(file, "utf8"); }
+    catch (error) { if (error instanceof Error && "code" in error && error.code === "ENOENT") continue; throw error; }
+    const source = parse(text);
+    if (source["mcpServers"] === undefined && source["servers"] === undefined && source["mcp"] === undefined) continue;
+    const serverNames = Object.keys(sourceServers(source));
+    if (serverNames.length > 0) found.push({ label, path: file, serverNames });
+  }
+  return found;
+}
+
+export async function readConfiguredMcpServers(agentDir: string): Promise<Array<{ name: string; enabled: boolean; type: string }>> {
+  let text: string;
+  try { text = await readFile(path.join(agentDir, "mcp.json"), "utf8"); }
+  catch (error) { if (error instanceof Error && "code" in error && error.code === "ENOENT") return []; throw error; }
+  const config = parse(text);
+  if (config["mcpServers"] === undefined) return [];
+  return Object.entries(sourceServers(config)).map(([name, entry]) => {
+    if (!isRecord(entry)) return invalid();
+    return { name, enabled: entry["enabled"] !== false, type: entry["url"] === undefined ? "stdio" : "http" };
+  });
 }
 
 /** Imports Claude/Cursor JSON into omo 5.1.19's <agentDir>/mcp.json, not settings.json. */
@@ -85,7 +149,7 @@ export async function importMcpConfig(agentDir: string, sourcePath: string): Pro
   try {
     const file = path.join(agentDir, "mcp.json");
     const source = parse(await readFile(sourcePath, "utf8"));
-    if (!isRecord(source["mcpServers"])) return invalid();
+    const sourceEntries = sourceServers(source);
 
     let original: Buffer | undefined;
     let mode = 0o600;
@@ -100,7 +164,7 @@ export async function importMcpConfig(agentDir: string, sourcePath: string): Pro
     if (config["mcpServers"] !== undefined && !isRecord(config["mcpServers"])) return invalid();
     const servers = { ...(config["mcpServers"] as Record<string, unknown> | undefined) };
     const imported: string[] = [];
-    for (const [name, value] of Object.entries(source["mcpServers"])) {
+    for (const [name, value] of Object.entries(sourceEntries)) {
       if (Object.hasOwn(servers, name)) continue;
       if (name.trim() === "" || /[\r\n\0]/.test(name)) return invalid();
       Object.defineProperty(servers, name, { value: server(value), enumerable: true, configurable: true, writable: true });

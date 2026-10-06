@@ -13,7 +13,7 @@ import { PreferencesStore } from "./prefs";
 
 const QUIT_STOP_TIMEOUT_MS = 5_000;
 
-app.setName("OmO UI");
+app.setName("OmO UI Windows");
 const userDataOverride = process.env[ENV.userData];
 if (userDataOverride) app.setPath("userData", userDataOverride);
 
@@ -43,7 +43,7 @@ function createWindow(): BrowserWindow {
     height: 820,
     minWidth: 520,
     minHeight: 600,
-    title: "OmO UI",
+    title: "OmO UI Windows",
     show: false,
     ...(process.platform === "darwin" ? {
       titleBarStyle: "hiddenInset" as const,

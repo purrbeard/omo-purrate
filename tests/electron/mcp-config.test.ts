@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { importMcpConfig } from "../../electron/omo/mcp-config";
+import { discoverMcpConfigs, importMcpConfig, readConfiguredMcpServers } from "../../electron/omo/mcp-config";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
@@ -25,6 +25,23 @@ async function fixture(source: unknown, original?: string) {
 }
 
 describe("importMcpConfig", () => {
+  it("discovers existing Claude servers and shows configured inventory before a session connects", async () => {
+    const f = await fixture({});
+    await fs.mkdir(path.join(f.agentDir, ".claude"));
+    const sourcePath = path.join(f.agentDir, ".claude", ".mcp.json");
+    await fs.writeFile(sourcePath, '\uFEFF' + JSON.stringify({ mcpServers: { docs: { command: "node", env: { TOKEN: "private" } } } }));
+    const sources = await discoverMcpConfigs(f.agentDir);
+    expect(sources).toEqual([{ label: "Claude", path: sourcePath, serverNames: ["docs"] }]);
+    await importMcpConfig(f.agentDir, sourcePath);
+    expect(await readConfiguredMcpServers(f.agentDir)).toEqual([{ name: "docs", enabled: true, type: "stdio" }]);
+  });
+
+  it("imports VS Code servers and preserves native authentication and connection fields", async () => {
+    const entry = { type: "http", url: "https://example.com/mcp", auth: "bearer", bearerTokenEnv: "DOCS_TOKEN", oauth: { clientId: "public", scopes: ["read"] }, lifecycle: "eager", connectTimeoutMs: 7000 };
+    const f = await fixture({ mcp: { servers: { docs: entry } } });
+    await importMcpConfig(f.agentDir, f.sourcePath);
+    expect(JSON.parse(await fs.readFile(f.file, "utf8")).mcpServers.docs).toEqual(entry);
+  });
   it("imports stdio and HTTP/SSE in omo's mcp.json schema and preserves all existing fields and credentials", async () => {
     const original = '{\r\n  "settings": {"toolPrefix":"custom"}, "credential":"keep-private",\r\n  "mcpServers":{"existing":{"command":"old","env":{"TOKEN":"original-secret"},"enabled":false}}, "future":{"unchanged":true}\r\n}\r\n';
     const source = {

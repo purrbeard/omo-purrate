@@ -9,6 +9,7 @@ import { uiState, updatePreferences, useUiState } from "../ui-state";
 import { errorMessage } from "./diagnostics";
 import { SectionHeading, SettingRow } from "./SectionHeading";
 import css from "./SettingsDialog.module.css";
+import { ModelRoutingSection } from "./ModelRoutingSection";
 
 /** Rows read Daily before Geeky and Normal before Heavy; the composer's pad lays the same lanes out in 2D. */
 const ROW_ORDER: readonly ModelProfile[] = ["daily-normal", "daily-heavy", "geeky-normal", "geeky-heavy"];
@@ -101,6 +102,7 @@ export function ModelSection() {
         })}
       </div>
       {groups.length === 0 && <p className={css.muted}>{t("composer.model.empty")}</p>}
+      <ModelRoutingSection />
       {error !== null && (
         <p className={css.error} role="alert">
           {t("shell.settings.saveFailed", { message: error })}

@@ -68,7 +68,15 @@ npm run test:e2e
 npm run package:win
 ```
 
-The installer is `release/OmO UI Windows Setup 0.1.4-win.1.exe`; the runnable directory is `release/win-unpacked`. `npm run package:win:dir` builds only the runnable directory. The app discovers omo using `OMO_UI_OMO_BIN`, `~/.omo/install.json`, `~/.local/bin/omo.exe`, then PATH. It uses the inherited Windows environment, PowerShell for installation and account login, and the native Windows title bar. Use Ctrl+E for side chat. The file manager target opens Explorer; standard installed VS Code and Cursor executables are detected. The fork has a distinct app identity and stores its UI preferences separately from the original OmO UI; omo's agent configuration remains shared.
+The installer is `release/OmO UI Windows Setup 0.1.4-win.3.exe`; the runnable directory is `release/win-unpacked`. `npm run package:win:dir` builds only the runnable directory. The app discovers omo using `OMO_UI_OMO_BIN`, `~/.omo/install.json`, `~/.local/bin/omo.exe`, then PATH. It uses the inherited Windows environment, PowerShell for installation and account login, and the native Windows title bar. Use Ctrl+E for side chat. The file manager target opens Explorer; standard installed VS Code and Cursor executables are detected. The fork has a distinct app identity and stores its UI preferences separately from the original OmO UI; omo's agent configuration remains shared.
+
+### App updates
+
+This fork's Windows checks and release workflow runs on PRs to `windows-support`. Merging a version bump into that branch builds and publishes `v<version>` with the Windows installer and `SHA256SUMS`; existing releases are not overwritten. A manual Actions run on `windows-support` can publish the current version after checks. PR runs do not publish releases.
+
+Settings > About > Windows app update checks this fork's GitHub releases, including Windows prereleases. A newer release with a Windows installer and SHA-256 digest enables Download and install. The installer is downloaded and verified before opening; the app then closes so installation can continue. Finish active turns first. Checking never installs automatically. When no release has been published, the UI reports that explicitly. This updates the desktop app, not the separate omo runtime.
+
+Release assets must include `OmO UI Windows Setup <version>.exe` with GitHub's `sha256` asset digest or a `SHA256SUMS` file naming that exact installer. Source pushes alone are not app update releases.
 
 iPhone USB control is macOS-only and is disabled with an explanatory status on Windows. macOS build commands remain available. Windows packages are not configured with a publisher signing certificate.
 
@@ -78,7 +86,13 @@ The Windows interface also provides full-window searchable settings, a recent-pr
 
 The composer's Profile tab allows a custom model for each Daily/Geeky, Normal/Heavy profile. Automatic keeps the built-in model matching. Preferences retain these choices between app launches.
 
+Settings > Models also edits native omo research agents (`explore`, `librarian` and existing custom agents), task/research categories and named model mappings. Enter `provider/model[:reasoning]` references in fallback order, one per line. Save and reconnect writes native `[senpi]` overrides in the existing user `~/.omo/omo.jsonc` or `omo.json`, keeping other fields and a first `.models.bak` backup. Project and active configuration profiles can override user settings. These are native omo routes, separate from composer profile preferences.
+
+Each route also offers a provider-grouped list of available models. Choose a model to append it to an agent/category fallback chain without duplicates, or replace a mapping target. You can still edit the references and reasoning suffixes directly.
+
 Settings > MCP > Import configuration accepts Claude/Cursor JSON files containing `mcpServers`. Existing server names are kept, new servers are added to omo's `mcp.json`, and omo reconnects. Finish active turns before importing. The selected source file is not changed.
+
+Import existing MCP servers discovers standard Claude/Cursor configurations. Manual import also accepts VS Code `servers`/`mcp.servers` and BOM-prefixed JSON. Native authentication and lifecycle fields are preserved. Saved server inventory is shown even before a workspace session loads; it is not labeled connected until omo reports a connection.
 
 Settings > Accounts displays read-only opencodex OAuth, Codex and API-key account labels from the registered local proxy. The local management token stays in Electron's main process and is never sent to remote proxies.
 
