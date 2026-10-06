@@ -1,5 +1,6 @@
 export const messages = {
   en: {
+    "shell.settings.routing.choose": "Choose a model to add",
     "shell.settings.routing.title": "omo research and model routing",
     "shell.settings.routing.hint": "Configure native omo research agents, task categories and named model mappings. Project/profile configuration can override these user-level values.",
     "shell.settings.routing.agents": "Research agents",
@@ -280,6 +281,7 @@ export const messages = {
     "shell.banner.restartFailed": "Restart failed: {message}",
   },
   ko: {
+    "shell.settings.routing.choose": "목록에서 모델 선택·추가",
     "shell.settings.routing.title": "omo 리서치 및 모델 라우팅",
     "shell.settings.routing.hint": "omo 리서치 에이전트·태스크 카테고리·이름별 모델 매핑을 지정합니다. 프로젝트·프로필 설정이 이 사용자 설정보다 우선할 수 있습니다.",
     "shell.settings.routing.agents": "리서치 에이전트",

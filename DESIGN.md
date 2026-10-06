@@ -17,6 +17,8 @@ The supplied dark conversation reference establishes three columns: project/thre
 
 ## Verification
 
+Each native model route has a provider-grouped available-model select above its text editor. Selecting appends a unique fallback for agents/categories and replaces the single mapping target. Direct text editing remains available, with controlled drafts preserving multiline input.
+
 MCP exposes separate existing-configuration discovery and manual file import buttons. Saved servers that have no loaded session status appear as configured, never as connected. Model role editors reuse labeled native selects, existing cards and explicit save-and-reconnect actions; account keys and arbitrary runtime configuration are never sent to the renderer.
 
 About includes a separate Windows app update card using SettingRow and existing Buttons. Manual check, unpublished, current, available, downloading progress, verified, installing and error states are explicit. The install action explains that the app closes for the Windows installer and is disabled during active turns. No installation occurs on a background check.

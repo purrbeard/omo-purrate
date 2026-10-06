@@ -23,3 +23,9 @@
   gap: 12px;
   margin-bottom: 12px;
 }
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+}
