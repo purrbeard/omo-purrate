@@ -167,7 +167,10 @@ export class AppUpdater {
         await chunk(item.value);
       }
       const length = response.headers.get("content-length");
-      if (length !== null && total !== Number(length)) throw new Error("Incomplete app update download");
+      // fetch decodes gzip/br bodies, so Content-Length counts encoded bytes; compare only identity bodies.
+      const encoding = response.headers.get("content-encoding");
+      const identity = encoding === null || encoding.trim().toLowerCase() === "identity";
+      if (identity && length !== null && total !== Number(length)) throw new Error("Incomplete app update download");
       return total;
     } finally {
       signal.removeEventListener("abort", abort);
@@ -204,8 +207,10 @@ export class AppUpdater {
     if (!latest) return this.publish("unpublished");
     if (compareVersions(version, this.options.currentVersion) <= 0) return this.publish("current", { latestVersion: version });
     if (!Array.isArray(latest.assets)) throw new Error("Invalid GitHub release assets");
-    const name = `OmO UI Windows Setup ${version}.exe`;
-    const assets = latest.assets.filter((asset) => asset?.name === name);
+    // GitHub replaces spaces in uploaded asset names with dots.
+    const names = [`OmO UI Windows Setup ${version}.exe`, `OmO.UI.Windows.Setup.${version}.exe`];
+    const name = names[1];
+    const assets = latest.assets.filter((asset) => names.includes(asset?.name));
     const asset = assets[0];
     if (assets.length !== 1 || !asset) throw new Error(`Release has no unique Windows installer: ${name}`);
     assetUrl(asset, latest.tag_name);
