@@ -114,7 +114,7 @@ test("a magic keyword highlights, shows the hint and is sent unchanged", async (
   const composer = byTestId(page, TESTID.composer);
   const hint = byTestId(page, TESTID.keywordHint);
 
-  await input.fill("mass-ulw keeps the plain border");
+  await input.fill("ordinary words keep the plain border");
   await expect(composer).not.toHaveAttribute("data-keyword");
   await expect(hint).toHaveCount(0);
 
@@ -123,6 +123,11 @@ test("a magic keyword highlights, shows the hint and is sent unchanged", async (
   await expect(byTestId(page, TESTID.keywordHighlight)).toHaveText("/ulw-loop");
   await expect(hint).toHaveText("/ulw-loop: OmO keeps working until the task is done.");
   await shot(page, "G015-ulw-loop");
+
+  await input.fill("ordinary words replace the keyword");
+  await expect(composer).not.toHaveAttribute("data-keyword");
+  await expect(hint).toHaveCount(0);
+  await expect(byTestId(page, TESTID.keywordHighlight)).toHaveCount(0);
 
   await input.fill("ulw fix the login bug");
   await expect(composer).toHaveAttribute("data-keyword", "ulw");

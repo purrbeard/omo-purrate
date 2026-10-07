@@ -17,6 +17,9 @@ async function makeRepo(): Promise<{ repo: string; remote: string }> {
   const remote = tempDir("composer-bar-remote");
   await execFile("git", ["init", "--bare", "-b", "main", remote]);
   await execFile("git", ["init", "-b", "main", repo]);
+  // The app runs git itself, without the per-command identity supplied by this spec's helper.
+  await git(repo, "config", "user.email", "e2e@omo.ui");
+  await git(repo, "config", "user.name", "OmO E2E");
   await git(repo, "commit", "--allow-empty", "-m", "init");
   await git(repo, "checkout", "-b", BRANCH);
   await git(repo, "remote", "add", "origin", remote);

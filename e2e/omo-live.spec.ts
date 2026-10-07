@@ -22,7 +22,7 @@ const start = async (): Promise<void> => {
 
 const node = (page: Page, id: string) => page.locator(`[data-testid="${TESTID.dagNode}"][data-node-id="${id}"]`);
 // A DAG node and its backing task now share one row instead of rendering duplicate task cards.
-const task = (page: Page, id: string) => page.locator(`[data-task-id="task-${id}"]`);
+const task = (page: Page, id: string) => byTestId(page, TESTID.omoActivity).locator(`[data-task-id="task-${id}"]`);
 
 const advance = async (page: Page): Promise<void> => {
   await page.evaluate(async (id) => {

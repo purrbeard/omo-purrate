@@ -3,6 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
 import { byTestId, launchApp, send, tempDir, threadRow, type LaunchedApp } from "./helpers.ts";
 
+// DOM snapshots synchronously walk the entire transcript after the click, blocking the renderer whose latency we measure.
+test.use({ trace: { mode: "retain-on-failure", snapshots: false } });
+
 const LONG_ID = "long-session";
 const ACTIVE_ROW = `[data-testid="${TESTID.threadRow}"][aria-current="page"]`;
 
