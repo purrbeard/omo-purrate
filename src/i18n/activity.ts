@@ -1,6 +1,10 @@
 export const messages = {
   en: {
     "activity.workflow": "Workflow",
+    "activity.widen": "Wide",
+    "activity.maximize": "Maximize",
+    "activity.log.title": "Activity",
+    "activity.log.empty": "State changes observed while this panel is open appear here.",
     "activity.close": "Close workflow",
     "activity.view": "Workflow view",
     "activity.list": "List",
@@ -83,6 +87,10 @@ export const messages = {
   },
   ko: {
     "activity.workflow": "워크플로",
+    "activity.widen": "넓게",
+    "activity.maximize": "최대화",
+    "activity.log.title": "활동 기록",
+    "activity.log.empty": "패널이 열린 동안 관찰한 작업 상태 변경을 표시합니다.",
     "activity.close": "워크플로 닫기",
     "activity.view": "워크플로 보기 방식",
     "activity.list": "목록",

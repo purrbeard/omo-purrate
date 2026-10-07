@@ -5,9 +5,13 @@ export const SIDEBAR_MIN_WIDTH = 220;
 export const SIDEBAR_MAX_WIDTH = 420;
 export const SIDEBAR_DEFAULT_WIDTH = 280;
 
+export const WORKFLOW_PANEL_WIDTHS = { normal: 580, wide: 720, maximized: 840 } as const;
+export type WorkflowPanelSize = keyof typeof WORKFLOW_PANEL_WIDTHS;
+
 export interface UiState {
   workspacePanelOpen: boolean;
   workflowPanelOpen: boolean;
+  workflowPanelSize: WorkflowPanelSize;
   settingsOpen: boolean;
   /** First-run wizard visibility; opens on launch until the onboardingCompleted preference is true. */
   onboardingOpen: boolean;
@@ -20,6 +24,7 @@ export interface UiState {
 let state: UiState = {
   workspacePanelOpen: false,
   workflowPanelOpen: false,
+  workflowPanelSize: "normal",
   settingsOpen: false,
   onboardingOpen: false,
   sidebarVisible: true,
@@ -47,6 +52,7 @@ export function clampSidebarWidth(width: number): number {
 export const uiState = {
   setWorkspacePanelOpen: (workspacePanelOpen: boolean): void => update({ workspacePanelOpen, ...(workspacePanelOpen ? { workflowPanelOpen: false } : {}) }),
   setWorkflowPanelOpen: (workflowPanelOpen: boolean): void => update({ workflowPanelOpen, ...(workflowPanelOpen ? { workspacePanelOpen: false } : {}) }),
+  setWorkflowPanelSize: (workflowPanelSize: WorkflowPanelSize): void => update({ workflowPanelSize }),
   get: (): UiState => state,
   subscribe,
   setSettingsOpen: (settingsOpen: boolean): void => update({ settingsOpen }),

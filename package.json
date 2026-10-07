@@ -1,7 +1,7 @@
 {
   "name": "omo-ui-windows",
   "productName": "OmO UI Windows",
-  "version": "0.1.4-win.7",
+  "version": "0.1.4-win.8",
   "private": true,
   "description": "Windows desktop fork of OmO UI for the omo coding agent",
   "license": "MIT",

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useT } from "../../i18n";
 import { useAppSelector } from "../app-context";
-import { uiState } from "../ui-state";
+import { uiState, useUiState } from "../ui-state";
 import { ActivityPanel } from "./ActivityPanel";
+import { WorkflowActivity } from "./WorkflowActivity";
 import { threadTitle } from "./format";
 import css from "./WorkflowPanel.module.css";
 
@@ -11,6 +12,7 @@ export function WorkflowPanel({ placement }: { placement: "docked" | "overlay" }
   const threadId = useAppSelector(state => state.activeThreadId);
   const thread = useAppSelector(state => state.activeThreadId === null ? null : state.threads[state.activeThreadId] ?? null);
   const title = threadTitle(thread, t("conversation.header.newSession"));
+  const { workflowPanelSize } = useUiState();
   const [view, setView] = useState<"list" | "graph">("graph");
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -19,7 +21,7 @@ export function WorkflowPanel({ placement }: { placement: "docked" | "overlay" }
     if (placement === "overlay") closeRef.current?.focus();
     return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true }); };
   }, [placement]);
-  return <aside id="workflow-panel" ref={panelRef} className={css.panel} data-testid="workflow-panel" data-placement={placement}
+  return <aside id="workflow-panel" ref={panelRef} className={css.panel} data-testid="workflow-panel" data-placement={placement} data-size={workflowPanelSize}
     role={placement === "overlay" ? "dialog" : "complementary"} aria-label={t("activity.workflow")}
     onKeyDown={event => {
       if (event.key === "Escape") { event.stopPropagation(); uiState.setWorkflowPanelOpen(false); }
@@ -39,9 +41,17 @@ export function WorkflowPanel({ placement }: { placement: "docked" | "overlay" }
     <nav className={css.views} aria-label={t("activity.view")}>
       <button type="button" aria-pressed={view === "list"} onClick={() => setView("list")} data-testid="workflow-list">{t("activity.list")}</button>
       <button type="button" aria-pressed={view === "graph"} onClick={() => setView("graph")} data-testid="workflow-graph-view">{t("activity.graph")}</button>
+      <span className={css.spacer} />
+      <button type="button" aria-pressed={workflowPanelSize === "wide"} data-testid="workflow-widen"
+        onClick={() => uiState.setWorkflowPanelSize(workflowPanelSize === "wide" ? "normal" : "wide")}>{t("activity.widen")}</button>
+      <button type="button" aria-pressed={workflowPanelSize === "maximized"} data-testid="workflow-maximize"
+        onClick={() => uiState.setWorkflowPanelSize(workflowPanelSize === "maximized" ? "normal" : "maximized")}>{t("activity.maximize")}</button>
     </nav>
     <div className={css.body}>
-      {threadId === null ? <p className={css.empty}>{t("activity.selectThread")}</p> : <ActivityPanel key={threadId} threadId={threadId} id="workflow-activity" view={view} docked />}
+      {threadId === null ? <p className={css.empty}>{t("activity.selectThread")}</p> : <>
+        <ActivityPanel key={threadId} threadId={threadId} id="workflow-activity" view={view} docked />
+        <WorkflowActivity key={`log:${threadId}`} threadId={threadId} />
+      </>}
     </div>
   </aside>;
 }

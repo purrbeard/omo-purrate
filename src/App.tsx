@@ -16,7 +16,7 @@ import { SettingsDialog } from "./ui/settings/SettingsDialog";
 import { AppFrame } from "./ui/shell/AppFrame";
 import { Sidebar } from "./ui/sidebar/Sidebar";
 import { applyThemePreference } from "./ui/theme";
-import { uiState, useUiState } from "./ui/ui-state";
+import { uiState, useUiState, WORKFLOW_PANEL_WIDTHS } from "./ui/ui-state";
 import { WorkspacePanel } from "./ui/workspace/WorkspacePanel";
 import { WorkflowPanel } from "./ui/conversation/WorkflowPanel";
 import { ProjectPickerHost } from "./ui/projects/ProjectPickerHost";
@@ -40,7 +40,7 @@ function Shell() {
   const bridgeState = useAppSelector((state) => state.bridge?.state ?? null);
   const sidePanelOpen = useAppSelector((state) => state.btw.open);
   useSidePanelShortcut();
-  const { sidebarVisible, sidebarWidth, workspacePanelOpen, workflowPanelOpen, onboardingOpen } = useUiState();
+  const { sidebarVisible, sidebarWidth, workspacePanelOpen, workflowPanelOpen, workflowPanelSize, onboardingOpen } = useUiState();
   const newSession = useNewSessionFlow();
 
   useEffect(() => {
@@ -84,7 +84,7 @@ function Shell() {
         sidebarWidth={sidebarWidth}
         onSidebarWidthChange={uiState.setSidebarWidth}
         rightPanel={workspacePanelOpen ? renderWorkspacePanel : workflowPanelOpen ? renderWorkflowPanel : sidePanelOpen ? renderSidePanel : null}
-        rightPanelWidth={workspacePanelOpen ? 440 : workflowPanelOpen ? 580 : SIDE_PANEL_WIDTH}
+        rightPanelWidth={workspacePanelOpen ? 440 : workflowPanelOpen ? WORKFLOW_PANEL_WIDTHS[workflowPanelSize] : SIDE_PANEL_WIDTH}
       />
       <SettingsDialog />
       <ProjectPickerHost />

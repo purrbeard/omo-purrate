@@ -12,7 +12,7 @@ import { resolveWorkspacePath } from "@deepseek-ai/dsh-util-workspace-path";
 import type { ThreadItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { Conversation, ConversationTurn, PendingRequest } from "../../state";
-import { selectActiveConversation, selectIsTurnActive, selectPendingRequestsForThread } from "../../state";
+import { selectActiveConversation, selectIsTurnActive, selectPendingRequestsForThread, selectTasks } from "../../state";
 import { useActions, useAppSelector } from "../app-context";
 import { SideToggle } from "../btw/SideToggle";
 import { TESTID } from "../testids";
@@ -120,6 +120,7 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
   const t = useT();
   const hasPath = useAppSelector((state) => (state.threads[threadId]?.path ?? null) !== null);
   const conversation = useAppSelector(selectActiveConversation);
+  const tasks = useAppSelector((state) => selectTasks(state, threadId));
   const pending = useAppSelector((state) => selectPendingRequestsForThread(state, threadId));
   const scroll = useStickToBottom();
   const turns = conversation?.turns ?? NO_TURNS;
@@ -169,7 +170,8 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
           <MarkdownDelegateProvider openExternalLink={openExternalLink} openFile={openFile}>
             {turns.map((turn, index) => (
               <TurnView key={turn.id} turn={turn} cwd={cwd} branch={branch} last={index === turns.length - 1}
-                notices={noticesByTurn.get(index)} memoryWrites={annotations?.memoryWrites} />
+                notices={noticesByTurn.get(index)} memoryWrites={annotations?.memoryWrites} tasks={tasks} turns={turns}
+                tasksLive={conversation?.live.freshness === "live"} />
             ))}
           </MarkdownDelegateProvider>
           {conversation?.pendingUserMessages.map((message) => (

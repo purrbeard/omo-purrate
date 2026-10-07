@@ -140,9 +140,10 @@ export function AppFrame({
   }, []);
 
   const cols = computeColumns(viewport, sidebarVisible ? sidebarWidth : 0, rightPanel === null ? 0 : rightPanelWidth);
-  if (rightPanelWidth >= 580 && cols.rightbar > 0 && viewport - cols.sidebar - rightPanelWidth < 520) {
-    cols.center += cols.rightbar;
-    cols.rightbar = 0;
+  if (rightPanelWidth >= 580 && cols.rightbar > 0 && cols.center < 520) {
+    const available = viewport - cols.sidebar - 520;
+    cols.rightbar = available >= 300 ? Math.min(cols.rightbar, available) : 0;
+    cols.center = viewport - cols.sidebar - cols.rightbar;
   }
   const docked = rightPanel !== null && cols.rightbar > 0;
   const colsRef = useRef(cols);

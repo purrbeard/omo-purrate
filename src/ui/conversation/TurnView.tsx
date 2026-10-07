@@ -1,16 +1,18 @@
 import { Fragment, memo, useMemo, useState, type ReactNode } from "react";
-import type { MemoryWriteNotice, SessionNotice } from "../../../shared/ipc";
+import type { HistoricalTask, MemoryWriteNotice, SessionNotice } from "../../../shared/ipc";
 import {
   IconContextInjectionOutlineRegular,
   IconPlanOutlineRegular,
   MarkdownText,
   StateDot,
 } from "@deepseek-ai/dsh-client-ui-primitives";
-import type { TurnError, UserMessageItem } from "../../../shared/protocol";
+import type { LiveTask, TurnError, UserMessageItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { ConversationItem, ConversationTurn } from "../../state";
 import { TESTID } from "../testids";
 import { AssistantMessage } from "./AssistantMessage";
+import { AnswerFooter } from "./AnswerFooter";
+import { SubagentRow } from "./SubagentRow";
 import { MemoryWriteCard, NoticeRow } from "./SessionNotices";
 import { EditMessageButton, EditMessageForm, RegenerateButton, userRowClass, type BranchAt } from "./BranchControls";
 import { elapsedMs, formatDuration } from "./format";
@@ -20,11 +22,13 @@ import { RenderBoundary } from "./RenderBoundary";
 import { ToolCard } from "./ToolCard";
 import { toolRowModel } from "./tool-model";
 import { UserBubble, userMessageParts } from "./UserBubble";
-import { workLogEntries } from "./work-log";
+import { answerCompletedAt, completedAnswer, turnSubagents, workLogEntries } from "./work-log";
 import css from "./TurnView.module.css";
 
 const NO_NOTICES: readonly SessionNotice[] = [];
 const NO_WRITES: Readonly<Record<string, MemoryWriteNotice>> = {};
+const NO_TASKS: readonly (LiveTask | HistoricalTask)[] = [];
+const NO_TURNS: readonly ConversationTurn[] = [];
 
 function assertNever(value: never): never {
   throw new Error(`Unhandled conversation item: ${JSON.stringify(value)}`);
@@ -204,6 +208,9 @@ export const TurnView = memo(function TurnView({
   last = false,
   notices = NO_NOTICES,
   memoryWrites = NO_WRITES,
+  tasks = NO_TASKS,
+  turns = NO_TURNS,
+  tasksLive = false,
 }: {
   turn: ConversationTurn;
   cwd: string | null;
@@ -212,6 +219,10 @@ export const TurnView = memo(function TurnView({
   /** omo's special messages recorded in this turn, placed after `afterItems` items. */
   notices?: readonly SessionNotice[];
   memoryWrites?: Readonly<Record<string, MemoryWriteNotice>>;
+  /** Native same-parent roster only; timestamps must be compared against every turn. */
+  tasks?: readonly (LiveTask | HistoricalTask)[];
+  turns?: readonly ConversationTurn[];
+  tasksLive?: boolean;
 }) {
   const t = useT();
   const failed = turn.error !== null || turn.status === "failed";
@@ -219,6 +230,8 @@ export const TurnView = memo(function TurnView({
   const turnBranch = useMemo<TurnBranch | null>(() => (branch === null ? null : { ...branch, turnId: turn.id }), [branch, turn.id]);
   const work = useMemo(() => workLogEntries(turn.items).filter(entry => memoryWrites[entry.item.id] === undefined), [turn.items, memoryWrites]);
   const workIds = useMemo(() => new Set(work.map((entry) => entry.item.id)), [work]);
+  const subagents = useMemo(() => turnSubagents(turn, turns, tasks), [turn, turns, tasks]);
+  const answer = completedAnswer(turn);
   return (
     <div className={css.turn} data-testid={TESTID.turn} data-turn-id={turn.id} data-status={turn.status}>
       {turn.items.map((entry, index) => {
@@ -229,10 +242,19 @@ export const TurnView = memo(function TurnView({
             {write !== undefined && <MemoryWriteCard write={write} />}
             {entry === work[0] && <WorkLog entries={work} turn={turn} cwd={cwd} memoryWrites={memoryWrites} />}
             {!workIds.has(entry.item.id) && memoryWrites[entry.item.id] === undefined && <ItemView entry={entry} cwd={cwd} branch={turnBranch} />}
+            {entry === answer && entry.item.type === "agentMessage" && (
+              <AnswerFooter text={entry.item.text} completedAt={answerCompletedAt(turn, entry)} />
+            )}
           </Fragment>
         );
       })}
       {notices.filter((notice) => notice.afterItems >= turn.items.length).map((notice) => <NoticeRow key={notice.id} notice={notice} />)}
+      {subagents.length > 0 && (
+        <section className={css.subagents} data-testid="turn-subagents" aria-label={t("conversation.subagents.title")}>
+          <span className={css.subagentHeading}>{t("conversation.subagents.title")}</span>
+          <ul className={css.subagentList}>{subagents.map((task) => <SubagentRow key={task.task_id} task={task} live={tasksLive} />)}</ul>
+        </section>
+      )}
       {failed && <TurnErrorRow error={turn.error} retrying={turn.status === "inProgress"} />}
       {turn.status === "interrupted" && <span className={css.stopped}>{t("conversation.turn.stopped")}</span>}
       {turnBranch !== null && last && turn.status !== "inProgress" && prompt?.type === "userMessage" && (

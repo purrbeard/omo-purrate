@@ -24,6 +24,16 @@ test("workflow graph and background work stay in the same conversation after mai
     await background.click();
     const panel = page.getByTestId("workflow-panel");
     await expect(panel).toHaveAttribute("data-placement", "docked");
+    await page.getByTestId("workflow-widen").click();
+    await expect(panel).toHaveAttribute("data-size", "wide");
+    await expect(panel).toHaveAttribute("data-placement", "docked");
+    await page.getByTestId("workflow-maximize").click();
+    await expect(panel).toHaveAttribute("data-size", "maximized");
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1920, 900));
+    await shot(page, "workflow-selected-maximized");
+    await page.getByTestId("workflow-maximize").click();
+    await expect(panel).toHaveAttribute("data-size", "normal");
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900));
     await page.getByTestId("workflow-graph-view").click();
     await expect(page.getByTestId("workflow-graph-node")).toHaveCount(7);
     await page.getByTestId("workflow-graph-node").filter({ hasText: "Build compact panel" }).click();
@@ -67,12 +77,17 @@ test("workflow graph and background work stay in the same conversation after mai
     await send(page, "Keep going");
     await expect(byTestId(page, TESTID.assistantMessage).last()).toBeVisible();
     await expect(background).toBeVisible();
+    await background.click();
+    await page.getByTestId("workflow-activity-log").locator("summary").click();
+    await expect(page.getByTestId("workflow-activity-entry")).toHaveCount(0);
     const finished = expect(background).toHaveCount(0);
     await page.evaluate(async threadId => {
       await window.omo.request("extension_request", { threadId, name: "fake.advance", data: {} });
       await window.omo.request("extension_request", { threadId, name: "fake.advance", data: {} });
     }, id);
     await finished;
+    await expect(page.getByTestId("workflow-activity-entry").filter({ hasText: "Build compact panel" })).toHaveAttribute("data-state", "completed");
+    await shot(page, "workflow-selected-activity");
     expect(launched.readFakeLog().filter(entry => entry["method"] === "thread/start")).toHaveLength(1);
     const turns = launched.readFakeLog().filter(entry => entry["method"] === "turn/start");
     expect(turns).toHaveLength(2);

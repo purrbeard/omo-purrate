@@ -165,6 +165,12 @@
   flex: none;
   display: inline-flex;
   align-items: center;
+  gap: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  white-space: nowrap;
 }
 
 .time {

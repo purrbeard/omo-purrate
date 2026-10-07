@@ -57,6 +57,7 @@ test("checkout bar shows branch and counts; reasoning writes turn/start effort; 
     await reasoning.click();
     await page.locator(`[data-testid="${TESTID.reasoningOption}"][data-effort="high"]`).click();
     await expect(reasoning).toHaveAttribute("data-effort", "high");
+    await expect(reasoning).toHaveText("High");
     await send(page, "SCENARIO:echo reasoning effort");
     await expect(byTestId(page, TESTID.turn).last()).toHaveAttribute("data-status", "completed");
     expect(launched.readFakeLog()).toContainEqual(

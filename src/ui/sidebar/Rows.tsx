@@ -16,7 +16,8 @@ import {
 import type { MenuEntry } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { ThreadSummary, WorkspaceGroup } from "../../state";
 import { useLocale, useT } from "../../i18n";
-import { threadTitle } from "../conversation/format";
+import { formatWholeSeconds, threadTitle } from "../conversation/format";
+import { useElapsedMs } from "../elapsed";
 import { GripGlyph } from "../glyphs";
 import { TESTID } from "../testids";
 import { useUiState } from "../ui-state";
@@ -132,6 +133,22 @@ interface ThreadRowProps {
   onSettle?(threadId: string, settled: boolean): void;
 }
 
+function RunningStatus({ threadId }: { threadId: string }) {
+  const t = useT();
+  const startedAtMs = useAppSelector(state => {
+    const conversation = state.conversations[threadId];
+    const turn = conversation?.turns.find(turn => turn.id === conversation.activeTurnId && turn.status === "inProgress");
+    return turn?.startedAtMs ?? null;
+  });
+  const elapsedMs = useElapsedMs(startedAtMs);
+  return (
+    <span className={css.runningSlot} data-testid="thread-running-status">
+      <StateDot state="ongoing" />
+      <span>{elapsedMs === null ? t("shell.sidebar.working") : t("shell.sidebar.runningElapsed", { elapsed: formatWholeSeconds(elapsedMs, t) })}</span>
+    </span>
+  );
+}
+
 export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDelete, onReveal, settled = false, onSettle }: ThreadRowProps) {
   const t = useT();
   const actions = useActions();
@@ -216,13 +233,9 @@ export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDe
       <button type="button" className={css.rowMain} onClick={() => onOpen(thread.id)}>
         <WorkspaceBadge cwd={thread.cwd} className={css.rowBadge} />
         <span className={css.title}>{title}</span>
-        {running && (
-          <span className={css.runningSlot}>
-            <StateDot state="ongoing" />
-            <span className={css.visuallyHidden}>{t("shell.sidebar.running")}</span>
-          </span>
+        {running ? <RunningStatus threadId={thread.id} /> : (
+          <span className={css.time}>{formatThreadTime(thread.updatedAt, nowMs, t, preferences?.timeFormat ?? "system", locale)}</span>
         )}
-        <span className={css.time}>{formatThreadTime(thread.updatedAt, nowMs, t, preferences?.timeFormat ?? "system", locale)}</span>
       </button>
       <span className={css.rowActions}>
         <Menu

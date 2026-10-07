@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { ThreadEvent } from "../../state/thread-events";
 import { decideNotification, eventFromNotification, eventFromServerRequest } from "../../state/thread-events";
+import { isSideThread } from "../../state";
 import { threadTitle } from "../conversation/format";
 import { useActions } from "../app-context";
 import { useAppStore } from "../../state/store";
@@ -22,6 +23,8 @@ export function ThreadNotifications() {
       // Read at event time: the preference can change in Settings while this listener stays subscribed.
       const preferences = uiState.get().preferences;
       const state = store.getState();
+      const thread = state.threads[event.threadId];
+      if (thread === undefined || isSideThread(state, thread)) return;
       const decision = decideNotification(event, {
         threadNotifications: preferences?.threadNotifications ?? "background",
         inAppNotifications: preferences?.inAppNotifications ?? true,
@@ -29,8 +32,6 @@ export function ThreadNotifications() {
         activeThreadId: state.activeThreadId,
       });
       if (!decision.system && !decision.toast) return;
-      const thread = state.threads[event.threadId];
-      if (thread === undefined) return;
       const title = threadTitle(thread, t("shell.newSession"));
       const body =
         event.kind === "failed" && event.errorMessage !== null

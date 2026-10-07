@@ -23,6 +23,48 @@
   min-width: 0;
 }
 
+.subagents {
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.subagentHeading,
+.subagentMeta {
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.subagentList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  margin: 6px 0 0;
+  list-style: none;
+}
+
+.subagentRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.subagentRow > :first-child {
+  flex-shrink: 0;
+}
+
+.subagentTitle {
+  flex: 1 1 160px;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
 .workDetails {
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
