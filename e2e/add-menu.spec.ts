@@ -1,3 +1,4 @@
+import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { byTestId, launchApp, newSession, send, setTheme, shot, WT } from "./helpers";
 import { TESTID } from "../src/ui/testids";
@@ -106,12 +107,12 @@ test("folder references persist per conversation and installed skills can be sel
     const firstId = await page.locator('[data-testid="thread-row"][aria-current="page"]').getAttribute("data-thread-id");
     await page.getByTestId("composer-add").click();
     await page.getByRole("menuitem", { name: "Attach folder", exact: true }).click();
-    await expect(page.getByTestId("context-chip")).toHaveText("omo-ui");
+    await expect(page.getByTestId("context-chip")).toHaveText(path.basename(WT));
     await newSession(page);
     await expect(page.getByTestId("context-chip")).toHaveCount(0);
     if (firstId === null) throw new Error("Missing first thread");
     await page.locator(`[data-testid="thread-row"][data-thread-id="${firstId}"]`).click();
-    await expect(page.getByTestId("context-chip")).toHaveText("omo-ui");
+    await expect(page.getByTestId("context-chip")).toHaveText(path.basename(WT));
     await page.getByTestId("composer-add").click();
     await page.getByRole("menuitem", { name: /^ulw-loop/ }).click();
     await expect(byTestId(page, TESTID.composerInput)).toHaveValue("/ulw-loop ");
