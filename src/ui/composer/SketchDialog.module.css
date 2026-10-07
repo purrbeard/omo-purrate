@@ -1,0 +1,88 @@
+.dialog {
+  width: min(1008px, 100%);
+  max-height: 100%;
+}
+
+.content {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sketch {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.toolbar,
+.tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.toolbar {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.colorLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.color {
+  box-sizing: border-box;
+  width: 36px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-button-elevated-fill);
+  cursor: pointer;
+}
+
+.paper {
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+}
+
+.canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.canvas[data-eraser] {
+  cursor: cell;
+}
+
+.canvas:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: -3px;
+}
+
+.hint {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+@media (max-width: 640px) {
+  .toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

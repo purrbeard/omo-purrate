@@ -1,0 +1,8 @@
+.trigger { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.trigger:hover { background: var(--dsw-alias-interactive-bg-active); color: var(--dsw-alias-label-primary); }
+.trigger:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color); outline-offset: 2px; }
+.trigger:disabled { opacity: .5; cursor: default; }
+.menu { width: min(540px, calc(100vw - 32px)); max-width: min(540px, calc(100vw - 32px)); border-radius: var(--dsw-radius-panel); }
+.menu small { margin-left: 8px; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.skillIcon { width: 16px; height: 16px; text-align: center; border-radius: 4px; background: var(--dsw-alias-interactive-bg-hover); font-weight: 600; }
+@media (max-width: 720px) { .menu small { display: block; margin-left: 0; line-height: 18px; white-space: normal; } }

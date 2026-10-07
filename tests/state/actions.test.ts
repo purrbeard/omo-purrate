@@ -119,6 +119,10 @@ class FakeBridge implements OmoBridgeApi {
   private readonly handlers: Handlers = {
     "mcpServerStatus/list": (params) => this.mcp(params) as ClientResult<"mcpServerStatus/list">,
     "thread/goal/get": () => this.goal(),
+    "thread/goal/set": ({ threadId, objective, status }) => ({ goal: {
+      threadId, objective: objective ?? "", status: status ?? "active", tokenBudget: null,
+      tokensUsed: 0, timeUsedSeconds: 0, createdAt: 1, updatedAt: 1,
+    } }),
     "model/list": () => ({ data: [model], nextCursor: null }),
     // Results cross a process boundary; the overrides let tests return malformed payloads.
     "thread/list": () => this.threadList() as ClientResult<"thread/list">,
@@ -215,6 +219,8 @@ class FakeBridge implements OmoBridgeApi {
     return null;
   }
   async pickImages(): Promise<string[]> { return []; }
+  async pickAttachments(): Promise<string[]> { return []; }
+  async readClipboardText(): Promise<string> { return ""; }
   imageFilePath(): string { return ""; }
   async saveImage(): Promise<string> { return "/tmp/saved.png"; }
   async getDiagnostics(): Promise<never> {

@@ -8,6 +8,10 @@ This Windows port preserves the upstream design system documented in `src/ui/REA
 
 ## Windows shell
 
+## Composer add menu
+
+The supplied Codex screenshot defines the interaction and grouping: a round plus trigger, an elevated menu above the composer, an Add heading, file/folder context, explicit terminal text attachment, goal, plan, sketch, then installed skills. Reuse existing Menu keyboard navigation, theme surfaces and focus tokens rather than copying Codex branding. The menu owns scrolling and fits desktop and 640px widths. Context chips remain removable and scoped to each conversation draft. Files and folders are references, not uploaded or eagerly read. Terminal content is explicitly pasted by the user, never scraped from another running process. Sketches become ordinary PNG attachments. Show actual installed skill names and descriptions; do not advertise uninstalled Exa/GitHub/Documents/PDF plugins. Goal and plan controls must connect to supported native behavior, not cosmetic toggles. The installed user app is never used for verification.
+
 ## Workflow reference additions
 
 ### Selected macOS 0.1.5 additions

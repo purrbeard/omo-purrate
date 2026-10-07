@@ -7,6 +7,7 @@ import a11y from "./a11y.module.css";
 import css from "./UserBubble.module.css";
 import { projectSkillUserText } from "./skill-text";
 import { splitAttachments } from "../composer/attachments";
+import { splitContext } from "../composer/context-draft";
 
 export interface UserImage {
   key: string;
@@ -71,6 +72,7 @@ export const UserBubble = memo(function UserBubble({
 }) {
   const t = useT();
   const { skills, rest, context } = projectSkillUserText(text);
+  const attached = splitContext(rest);
   const [showInstructions, setShowInstructions] = useState(false);
   const [showContext, setShowContext] = useState(false);
   const instructionsId = useId();
@@ -116,7 +118,13 @@ export const UserBubble = memo(function UserBubble({
                 ))}
               </div>
             )}
-            {rest}
+            {attached.text}
+            {attached.context.length > 0 && <div className={css.instructions}>
+              {attached.context.map((entry, index) => <details key={index} className={css.contextDetail}>
+                <summary>{entry.kind === "terminal" ? "WindowsTerminal" : entry.value.replaceAll("\\", "/").split("/").at(-1) || entry.value}</summary>
+                <pre>{entry.value}</pre>
+              </details>)}
+            </div>}
             {context.length > 0 && (
               <div className={css.instructions}>
                 <button

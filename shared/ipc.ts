@@ -428,6 +428,8 @@ export interface OmoBridgeApi {
   /** Native folder picker; resolves null on cancel. The OMO_UI_QA_PICK_DIR variable short-circuits the dialog. */
   pickDirectory(defaultPath?: string | null): Promise<string | null>;
   pickImages(): Promise<string[]>;
+  /** Native picker for any files (multiple) or one folder; resolves an empty array on cancel. */
+  pickAttachments(kind: "files" | "folder"): Promise<string[]>;
   imageFilePath(file: File): string;
   /** Writes a PNG/JPEG/GIF/WebP data URL under userData/attachments and resolves its absolute path. */
   saveImage(dataUrl: string): Promise<string>;
@@ -440,6 +442,8 @@ export interface OmoBridgeApi {
   onNotifyClick(listener: (threadId: string) => void): () => void;
   onMenuCommand(listener: (command: MenuCommand) => void): () => void;
   copyText(text: string): Promise<void>;
+  /** Reads clipboard text only when explicitly invoked by the renderer. */
+  readClipboardText(): Promise<string>;
   openExternal(url: string): Promise<void>;
   revealPath(path: string): Promise<void>;
   /** Installed Open targets in preference order (editors, Terminal, then Finder). */
@@ -502,6 +506,7 @@ export const IPC = {
   openAccountLogin: "accounts:login",
   pickDirectory: "dialog:pick-directory",
   pickImages: "dialog:pick-images",
+  pickAttachments: "dialog:pick-attachments",
   saveImage: "attachments:save-image",
   diagnostics: "app:diagnostics",
   getPreferences: "prefs:get",
@@ -510,6 +515,7 @@ export const IPC = {
   notifyClick: "app:notify-click",
   menuCommand: "menu:command",
   copyText: "app:copy-text",
+  readClipboardText: "app:read-clipboard-text",
   openExternal: "app:open-external",
   revealPath: "app:reveal-path",
   listOpenTargets: "app:list-open-targets",
@@ -533,6 +539,8 @@ export const ENV = {
   qaPickDir: "OMO_UI_QA_PICK_DIR",
   /** JSON array of image paths returned without a native dialog. */
   qaPickImages: "OMO_UI_QA_PICK_IMAGES",
+  /** JSON array of absolute attachment paths returned without a native dialog; must match the requested kind. */
+  qaPickAttachments: "OMO_UI_QA_PICK_ATTACHMENTS",
   /** Overrides Electron's userData directory (tests and QA). */
   userData: "OMO_UI_USER_DATA",
   /** Appends one JSON line per macOS thread notification to this file (tests and QA); the notification still shows. */

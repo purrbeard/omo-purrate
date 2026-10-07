@@ -330,6 +330,7 @@ export interface ClientRequestMap {
     result: { data: McpServerStatus[]; nextCursor: string | null };
   };
   "thread/goal/get": { params: { threadId: string }; result: { goal: WireGoal | null } };
+  "thread/goal/set": { params: { threadId: string; objective?: string | null; status?: "active" | "paused" | "complete"; tokenBudget?: number | null }; result: { goal: WireGoal } };
   extension_request: { params: { threadId: string; name: string; data?: unknown }; result: unknown };
   "thread/loaded/list": { params: Record<string, never>; result: { data: string[]; nextCursor: string | null } };
   initialize: {
@@ -386,6 +387,7 @@ export const CLIENT_METHODS = [
   "account/providerAccounts/remove",
   "mcpServerStatus/list",
   "thread/goal/get",
+  "thread/goal/set",
   "extension_request",
   "thread/loaded/list",
   "initialize",

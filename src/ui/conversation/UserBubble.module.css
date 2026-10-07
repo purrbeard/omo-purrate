@@ -5,6 +5,10 @@
   min-width: 0;
 }
 
+.contextDetail { max-width: 100%; padding: 4px 8px; border-radius: 6px; background: var(--dsw-alias-interactive-bg-hover); font-size: 12px; }
+.contextDetail summary { cursor: pointer; overflow-wrap: anywhere; }
+.contextDetail pre { margin: 8px 0 0; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+
 /* The DSH 525px bubble cap held as a share of the column (525 / 748). */
 .stack {
   display: flex;

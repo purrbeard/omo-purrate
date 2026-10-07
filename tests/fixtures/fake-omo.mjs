@@ -1091,6 +1091,21 @@ function handleRequest(id, method, params) {
     case "thread/goal/get":
       respond(id, { goal: getThread(requireString(params, "threadId")).goal ?? null });
       return;
+    case "thread/goal/set": {
+      const threadId = requireString(params, "threadId");
+      const record = getThread(threadId);
+      const previous = record.goal;
+      const now = Math.floor(Date.now() / 1000);
+      const goal = {
+        threadId, objective: params.objective ?? previous?.objective ?? "",
+        status: params.status ?? previous?.status ?? "active", tokenBudget: params.tokenBudget ?? null,
+        tokensUsed: 0, timeUsedSeconds: 0, createdAt: previous?.createdAt ?? now, updatedAt: now,
+      };
+      record.goal = goal;
+      respond(id, { goal });
+      notify("thread/goal/updated", { threadId, turnId: record.activeTurn?.id ?? null, goal });
+      return;
+    }
     case "extension_request": {
       const record = getThread(requireString(params, "threadId"));
       if (params.name !== "fake.advance") throw new RpcFailure(NOT_FOUND, "Extension not found");

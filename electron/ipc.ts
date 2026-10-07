@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { app, clipboard, dialog, ipcMain, shell } from "electron";
@@ -304,6 +304,26 @@ export function registerIpc(deps: IpcDeps): () => void {
       const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
       return picked.canceled ? [] : picked.filePaths;
     },
+    [IPC.pickAttachments]: async (_event, kind): Promise<string[]> => {
+      if (kind !== "files" && kind !== "folder") throw new TypeError("kind must be files or folder");
+      const qa = process.env[ENV.qaPickAttachments];
+      if (qa !== undefined) {
+        const paths: unknown = JSON.parse(qa);
+        if (!Array.isArray(paths) || !paths.every((entry) => typeof entry === "string" && path.isAbsolute(entry))) throw new Error("QA attachment paths must be an array of absolute paths");
+        if (kind === "folder" && paths.length > 1) throw new Error("QA folder attachments must contain at most one path");
+        for (const target of paths as string[]) {
+          const info = await stat(target);
+          if (kind === "files" ? !info.isFile() : !info.isDirectory()) throw new Error(`QA attachment paths must be ${kind === "files" ? "files" : "a folder"}`);
+        }
+        return paths as string[];
+      }
+      const options: OpenDialogOptions = {
+        properties: kind === "files" ? ["openFile", "multiSelections"] : ["openDirectory"],
+      };
+      const window = getWindow();
+      const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+      return picked.canceled ? [] : picked.filePaths;
+    },
     [IPC.saveImage]: async (_event, dataUrl): Promise<string> => {
       const match = /^data:image\/(png|jpeg|gif|webp);base64,([A-Za-z0-9+/]+=*)$/.exec(requireString(dataUrl, "dataUrl"));
       if (match === null) throw new Error("dataUrl must be a base64 PNG, JPEG, GIF or WebP data URL");
@@ -335,6 +355,7 @@ export function registerIpc(deps: IpcDeps): () => void {
     [IPC.copyText]: (_event, text) => {
       clipboard.writeText(requireString(text, "text"));
     },
+    [IPC.readClipboardText]: () => clipboard.readText(),
     [IPC.openExternal]: async (_event, url) => {
       const parsed = new URL(requireString(url, "url"));
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error(`refusing to open ${parsed.protocol} URL`);

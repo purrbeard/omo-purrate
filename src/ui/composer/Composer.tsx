@@ -5,7 +5,7 @@ import { IconFolderOpenOutlineRegular, IconPaperclipOutlineRegular, IconCloseOut
 import { ArrowUpGlyph } from "../glyphs";
 import { parseBtwCommand, selectActiveCwd, selectIsTurnActive, selectSkillCatalog } from "../../state";
 import type { SkillCatalog } from "../../state";
-import { useT } from "../../i18n";
+import { useLocale, useT } from "../../i18n";
 import { useActions, useAppSelector } from "../app-context";
 import { useAskSide } from "../btw/use-ask-side";
 import { ConversationDock } from "../conversation/ConversationDock";
@@ -24,6 +24,10 @@ import { detectMagicKeyword, segmentDraft } from "./magic-keyword";
 import { acceptSkill, detectSkillTrigger, pruneSelected, rankSkills, serializeSkillDraft } from "./skill-draft";
 import type { SkillDraft } from "./skill-draft";
 import { capImages, IMAGE_LIMIT, isImageFile, readImage, type ImageInput } from "./attachments";
+import { AddMenu, type AddAction } from "./AddMenu";
+import { ContextDialog } from "./ContextDialog";
+import { SketchDialog } from "./SketchDialog";
+import { addContext, contextMessage, CONTEXT_LIMIT, type DraftContext } from "./context-draft";
 import { userMessageParts } from "../conversation/UserBubble";
 import css from "./Composer.module.css";
 
@@ -59,6 +63,7 @@ function StopIcon() {
  */
 export function Composer() {
   const t = useT();
+  const ko = useLocale() === "ko";
   const actions = useActions();
   const askSide = useAskSide();
   const activeThreadId = useAppSelector((state) => state.activeThreadId);
@@ -70,11 +75,19 @@ export function Composer() {
 
   const activeCwd = useAppSelector(selectActiveCwd);
   const cwdLoaded = useAppSelector((state) => activeCwd !== null && state.loadedSkillCwds[activeCwd] === true);
-  const catalog = useAppSelector((state) => (activeCwd === null ? null : selectSkillCatalog(state, activeCwd)));
+  const catalogCwd = activeCwd ?? workspace;
+  const catalog = useAppSelector((state) => (catalogCwd === null ? null : selectSkillCatalog(state, catalogCwd)));
 
   const [draft, setDraft] = useState<SkillDraft>(EMPTY_DRAFT);
   const text = draft.text;
   const [images, setImages] = useState<ImageInput[]>([]);
+  const [context, setContext] = useState<DraftContext[]>([]);
+  const [planMode, setPlanMode] = useState(false);
+  const [goalDraft, setGoalDraft] = useState("");
+  const [addDialog, setAddDialog] = useState<"terminal" | "goal" | "sketch" | null>(null);
+  const contextDrafts = useRef(new Map<string, { context: DraftContext[]; plan: boolean; goal: string }>());
+  const contextRef = useRef({ context, plan: planMode, goal: goalDraft });
+  contextRef.current = { context, plan: planMode, goal: goalDraft };
   const [imageNotice, setImageNotice] = useState("");
   const [dropping, setDropping] = useState(false);
   const imageDrafts = useRef(new Map<string, ImageInput[]>());
@@ -103,6 +116,29 @@ export function Composer() {
       addImages(accepted.map((path) => ({ type: "localImage", path })));
     } catch (error) { setImageNotice(t("composer.images.error", { message: String(error) })); }
   };
+  const addReferences = (added: readonly DraftContext[]): void => {
+    setContext(current => {
+      const distinct = [...current, ...added].filter((entry, index, all) => all.findIndex(candidate => candidate.kind === entry.kind && candidate.value === entry.value) === index);
+      if (distinct.length > CONTEXT_LIMIT) setImageNotice(ko ? "자료는 메시지당 최대 10개까지 첨부할 수 있습니다." : "Attach up to 10 context items per message.");
+      return addContext(current, added);
+    });
+  };
+  const pickReferences = async (kind: "files" | "folder"): Promise<void> => {
+    try {
+      const paths = await window.omo.pickAttachments(kind);
+      const imagePaths = kind === "files" ? paths.filter(path => isImageFile(path)) : [];
+      addImages(imagePaths.map(path => ({ type: "localImage", path })));
+      addReferences(paths.filter(path => !imagePaths.includes(path)).map(value => ({ kind: kind === "folder" ? "folder" : "file", value })));
+    } catch (error) { setImageNotice(String(error)); }
+  };
+  const addAction = (action: AddAction): void => {
+    dismissMenu();
+    switch (action) {
+      case "files": case "folder": void pickReferences(action); break;
+      case "terminal": case "goal": case "sketch": setAddDialog(action); break;
+      case "plan": setPlanMode(current => !current); break;
+    }
+  };
   const [caret, setCaret] = useState(0);
   const [composing, setComposing] = useState(false);
   const [dismissedStart, setDismissedStart] = useState<number | null>(null);
@@ -123,6 +159,12 @@ export function Composer() {
 
   useLayoutEffect(() => {
     if (draftThread.current === activeThreadId) return;
+    contextDrafts.current.set(draftThread.current ?? NO_THREAD_DRAFT, contextRef.current);
+    const nextContext = contextDrafts.current.get(activeThreadId ?? NO_THREAD_DRAFT);
+    setContext(nextContext?.context ?? []);
+    setPlanMode(nextContext?.plan ?? false);
+    setGoalDraft(nextContext?.goal ?? "");
+    setAddDialog(null);
     imageDrafts.current.set(draftThread.current ?? NO_THREAD_DRAFT, imagesRef.current);
     setImages(imageDrafts.current.get(activeThreadId ?? NO_THREAD_DRAFT) ?? []);
     setImageNotice("");
@@ -231,7 +273,7 @@ export function Composer() {
   }, [fit]);
 
   const blank = text.trim() === "";
-  const canSend = connected && (!blank || images.length > 0) && !busy;
+  const canSend = connected && (!blank || images.length > 0 || context.length > 0 || goalDraft !== "") && !busy;
   const keyword = detectMagicKeyword(text);
   const segments = useMemo(() => segmentDraft(text), [text]);
   const syncMirrorScroll = (): void => {
@@ -261,30 +303,60 @@ export function Composer() {
     const message = text.trim();
     if (!canSend) return;
     const command = parseBtwCommand(message);
-    if (command !== null && images.length === 0) {
+    if (command !== null && images.length === 0 && context.length === 0 && goalDraft === "" && !planMode) {
       routeSideCommand(command.question);
       return;
     }
     const selected = draft.selected;
-    const transport = serializeSkillDraft({ text: message, selected });
+    const contextual = contextMessage(message || goalDraft, context);
+    const serialized = serializeSkillDraft({ text: contextual, selected });
+    const transport = planMode && !selected.includes("ulw-plan") ? `/skill:ulw-plan ${serialized}` : serialized;
     setBusy(true);
+    let targetThreadId = activeThreadId;
+    let accepted = false;
     try {
       if (activeThreadId === null) {
         const cwd = workspace ?? (await pickWorkspace());
         if (cwd === null) return;
         const threadId = await actions.newThread(cwd);
         if (threadId === null) return;
+        targetThreadId = threadId;
         drafts.current.delete(NO_THREAD_DRAFT);
+      }
+      if (goalDraft !== "" && targetThreadId !== null) {
+        // Paused persists the goal without launching an idle thread ahead of its contextual message.
+        await window.omo.request("thread/goal/set", { threadId: targetThreadId, objective: goalDraft, status: "paused" });
       }
       setDraft(EMPTY_DRAFT);
       setImages([]);
+      setContext([]);
+      setGoalDraft("");
+      contextDrafts.current.delete(NO_THREAD_DRAFT);
       imageDrafts.current.delete(NO_THREAD_DRAFT);
       setDismissedStart(null);
       const sent = await actions.sendMessage(transport, images);
+      accepted = sent;
       if (!sent) {
+        setPlanMode(planMode);
+        setContext(current => addContext(context, current));
+        setGoalDraft(current => current || goalDraft);
         setImages((current) => capImages(images, current));
         setDraft((current) => (current.text === "" ? { text: message, selected: pruneSelected(message, selected) } : current));
         setCaret(message.length);
+      } else {
+        setPlanMode(false);
+        if (goalDraft !== "" && targetThreadId !== null) {
+          await window.omo.request("thread/goal/set", { threadId: targetThreadId, status: "active" });
+        }
+      }
+    } catch (error) {
+      setImageNotice(String(error));
+      if (!accepted) {
+        setPlanMode(planMode);
+        setContext(current => addContext(context, current));
+        setGoalDraft(current => current || goalDraft);
+        setImages(current => capImages(images, current));
+        setDraft(current => current.text === "" ? { text: message, selected } : current);
       }
     } finally {
       setBusy(false);
@@ -374,6 +446,15 @@ export function Composer() {
           </div>)}
         </div>}
         {imageNotice !== "" && <div className={css.imageNotice} data-testid={TESTID.attachmentNotice} role="status">{imageNotice}</div>}
+        {(context.length > 0 || planMode || goalDraft !== "") && <div className={css.contextChips}>
+          {context.map((entry, index) => <button type="button" key={`${entry.kind}:${entry.value}`} data-testid="context-chip" className={css.contextChip}
+            title={entry.value} aria-label={`${ko ? "첨부 제거" : "Remove attachment"}: ${entry.kind === "terminal" ? "WindowsTerminal" : basename(entry.value)}`}
+            onClick={() => setContext(current => current.filter((_, position) => position !== index))}>
+            <span>{entry.kind === "terminal" ? "WindowsTerminal" : basename(entry.value)}</span><IconCloseOutlineRegular size={12} />
+          </button>)}
+          {planMode && <button type="button" className={css.contextChip} data-testid="plan-mode-chip" aria-label={ko ? "계획 모드 제거" : "Remove plan mode"} onClick={() => setPlanMode(false)}>{ko ? "계획 모드" : "Plan mode"}<IconCloseOutlineRegular size={12} /></button>}
+          {goalDraft !== "" && <button type="button" className={css.contextChip} data-testid="goal-draft-chip" title={goalDraft} aria-label={ko ? "목표 제거" : "Remove goal"} onClick={() => setGoalDraft("")}><span>{ko ? "목표" : "Goal"}: {goalDraft}</span><IconCloseOutlineRegular size={12} /></button>}
+        </div>}
         <div className={css.scroll}>
           <div ref={mirrorRef} className={css.mirror} aria-hidden>
             {segments.map((segment, index) =>
@@ -430,6 +511,19 @@ export function Composer() {
         )}
         <div className={css.row}>
           <div className={css.tools}>
+            <AddMenu disabled={!connected || busy} skills={catalogSkills ?? []} loading={catalog?.status === "loading"}
+              plan={planMode} onOpen={() => {
+                dismissMenu();
+                const targetCwd = activeCwd ?? workspace;
+                if (targetCwd !== null) void actions.ensureSkills(targetCwd);
+              }} onAction={addAction} onSkill={skill => {
+                const base = draft.text === "" ? "/" : `${draft.text} /`;
+                const result = acceptSkill({ text: base, selected: draft.selected }, { start: base.length - 1, end: base.length, query: "" }, skill.name);
+                if (!result.ok) { setImageNotice(t("composer.skills.limit", { max: 5 })); return; }
+                pendingCaret.current = result.caret;
+                setDraft(result.draft);
+                setCaret(result.caret);
+              }} />
             <button type="button" className={css.chip} data-testid={TESTID.attachmentPick} aria-label={t("composer.images.attach")} disabled={!connected || busy || images.length >= IMAGE_LIMIT} onClick={() => void pickImages()}><IconPaperclipOutlineRegular size={16} /></button>
             {connected && <PermissionPicker disabled={!connected} />}
             {activeThreadId === null && (
@@ -486,6 +580,13 @@ export function Composer() {
         </div>
       </div>
       <CheckoutBar />
+      {addDialog === "sketch" && <SketchDialog onClose={() => setAddDialog(null)} onAttach={image => { addImages([image]); setAddDialog(null); }} />}
+      {(addDialog === "terminal" || addDialog === "goal") && <ContextDialog kind={addDialog} onClose={() => setAddDialog(null)} onAccept={value => {
+        if (addDialog === "terminal") addReferences([{ kind: "terminal", value }]);
+        else setGoalDraft(value);
+        setAddDialog(null);
+        inputRef.current?.focus({ preventScroll: true });
+      }} />}
     </div>
   );
 }
