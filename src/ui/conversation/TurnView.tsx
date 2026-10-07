@@ -262,4 +262,14 @@ export const TurnView = memo(function TurnView({
       )}
     </div>
   );
+}, (previous, next) => {
+  // Roster ownership depends on turn windows, not the other turns' streamed items.
+  // A new turns array on every delta must not redraw all settled work logs.
+  const before = previous.turns ?? NO_TURNS;
+  const after = next.turns ?? NO_TURNS;
+  return previous.turn === next.turn && previous.cwd === next.cwd && previous.branch === next.branch &&
+    previous.last === next.last && previous.notices === next.notices && previous.memoryWrites === next.memoryWrites &&
+    previous.tasks === next.tasks && previous.tasksLive === next.tasksLive && before.length === after.length &&
+    before.every((turn, index) => turn.id === after[index]?.id && turn.startedAtMs === after[index]?.startedAtMs &&
+      turn.completedAtMs === after[index]?.completedAtMs && turn.status === after[index]?.status);
 });
