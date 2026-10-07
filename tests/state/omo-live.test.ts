@@ -70,6 +70,7 @@ describe("thread live state", () => {
     state = reduce(state, { type: "thread/opened", thread: makeThread("T"), resumed: true });
     expect(selectDagRuns(state, "T")).toEqual([run]);
     expect(selectTasks(state, "T")).toEqual([task]);
+    expect(state.threadLinks).toMatchObject([{ parentId: "T", taskId: task.task_id, status: task.status }]);
     expect(selectDagRuns(state, "T")).toBe(selectDagRuns(state, "T"));
     expect(selectTasks(state, "T")).toBe(selectTasks(state, "T"));
     expect(selectDagRuns(state, "absent")).toBe(selectDagRuns(state, "absent"));

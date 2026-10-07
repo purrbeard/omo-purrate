@@ -59,6 +59,7 @@ export class OmoSupervisor {
   private updatePromise: Promise<OmoBinary> | null = null;
   private restartTimer: NodeJS.Timeout | null = null;
   private readonly statusListeners = new Set<(status: BridgeStatus) => void>();
+  private transferringSession = false;
   private readonly notificationListeners = new Set<(notification: RpcNotification) => void>();
   private readonly serverRequestListeners = new Set<(request: RpcServerRequest) => void>();
 
@@ -117,6 +118,27 @@ export class OmoSupervisor {
     const client = this.connectedClient();
     if (!client) throw new RpcRequestError(BRIDGE_ERROR_CODES.notConnected, "omo is not connected");
     client.respond(id, result);
+  }
+
+  /** A native RPC owner may only open the session after this app-server has fully stopped. */
+  async withSessionOwner<T>(run: (binary: OmoBinary, env: Record<string, string>) => Promise<T>): Promise<T> {
+    const binary = this.status.omo;
+    if (!binary || this.status.state !== "connected") throw new Error("omo is not connected");
+    const env = scrubChildEnv(await this.getLoginEnv());
+    this.transferringSession = true;
+    await this.stop();
+    try {
+      return await run(binary, env);
+    } finally {
+      this.stopped = false;
+      this.setStatus({ state: "restarting", message: null, restartAttempt: 0 });
+      try {
+        await this.connect(this.generation);
+      } finally {
+        this.transferringSession = false;
+        if (this.status.state !== "connected") this.setStatus({});
+      }
+    }
   }
 
   /** The cached login-shell environment, resolving it on first use. */
@@ -287,6 +309,7 @@ export class OmoSupervisor {
 
   private setStatus(patch: Partial<BridgeStatus>): void {
     this.status = { ...this.status, ...patch };
+    if (this.transferringSession) return;
     for (const listener of [...this.statusListeners]) listener(this.status);
   }
 }

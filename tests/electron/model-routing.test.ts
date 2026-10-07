@@ -2,9 +2,23 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import JSON5 from "json5";
 import { readModelRouting, saveModelRouting } from "../../electron/omo/model-routing";
 
 describe("native model routing", () => {
+  it("preserves JSONC comments outside model chains while retaining the native routing block", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "omo-routes-comments-"));
+    await mkdir(path.join(home, ".omo"));
+    const file = path.join(home, ".omo", "omo.jsonc");
+    await writeFile(file, '{\n // keep profile guidance\n "model_profile": "daily-normal",\n "[senpi]": {\n // keep tool configuration\n "tools": {"enabled": true},\n "agents": {"librarian": {"models": ["old"]}}\n }\n}\n');
+    const current = await readModelRouting(home);
+    await saveModelRouting(home, { ...current, agents: current.agents.map((row) => row.name === "librarian" ? { ...row, models: ["new", "fallback:high"] } : row) });
+    const saved = await readFile(file, "utf8");
+    expect(saved).toContain("// keep profile guidance");
+    expect(saved).toContain("// keep tool configuration");
+    expect(saved).not.toContain('"[native]"');
+    expect((await readModelRouting(home)).agents.find((row) => row.name === "librarian")?.models).toEqual(["new", "fallback:high"]);
+  });
   it("reads JSONC native overrides and preserves root fields, other harnesses and reasoning objects", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "omo-ui-routing-"));
     await mkdir(path.join(home, ".omo"));
@@ -14,7 +28,7 @@ describe("native model routing", () => {
     const settings = await readModelRouting(home);
     expect(settings.agents[0]?.models).toEqual(["opencodex/openai/gpt-6.1-sol:high"]);
     await saveModelRouting(home, { categories: [{ name: "quick", models: ["openai/gpt-6.1-sol:high", "openai/other:low"] }], agents: [{ name: "librarian", models: ["openai/other:high"] }], mappings: [{ name: "research", models: ["openai/other:high"] }] });
-    const result = JSON.parse(await readFile(file, "utf8"));
+    const result = JSON5.parse(await readFile(file, "utf8"));
     expect(result["model_profile"]).toBe("daily-normal");
     expect(result["[codex]"]).toEqual({ task: { concurrency: 2 } });
     expect(result["[senpi]"].categories.quick).toEqual({ description: "keep", models: [{ model: "openai/gpt-6.1-sol", reasoning: "high" }, "openai/other:low"] });

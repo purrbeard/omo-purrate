@@ -13,15 +13,15 @@ import {
   MenuSurface,
   observeStickyMenuGroups,
 } from "@deepseek-ai/dsh-client-ui-primitives";
-import type { Model, ReasoningEffort } from "../../../shared/protocol";
+import type { Model } from "../../../shared/protocol";
 import type { ModelProfile } from "../../../shared/ipc";
 import { useT } from "../../i18n";
-import type { MessageKey } from "../../i18n";
 import { useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
 import { uiState, updatePreferences, useUiState } from "../ui-state";
 import { resolveComposerModel, selectActiveSessionModel } from "../../state";
 import { filterGroups, groupModels, resolveEffort } from "./model-groups";
+import { EFFORT_KEY } from "./effort-labels";
 import css from "./ModelPicker.module.css";
 
 import { ProfilePicker } from "./ProfilePicker";
@@ -30,16 +30,6 @@ const MENU_GAP = 8;
 const VIEWPORT_MARGIN = 12;
 
 const MEASURE_STYLE: CSSProperties = { visibility: "hidden", left: 0, top: 0 };
-
-const EFFORT_KEY: Record<ReasoningEffort, MessageKey> = {
-  none: "composer.effort.none",
-  minimal: "composer.effort.minimal",
-  low: "composer.effort.low",
-  medium: "composer.effort.medium",
-  high: "composer.effort.high",
-  xhigh: "composer.effort.xhigh",
-  max: "composer.effort.max",
-};
 
 const selectModels = (state: { models: Model[] }): Model[] => state.models;
 
@@ -77,11 +67,13 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
   const configuredModelId = editingProfile === null ? undefined : preferences?.profileModels?.[editingProfile];
   const configuredModelUnavailable = configuredModelId !== undefined && !models.some((model) => !model.hidden && model.id === configuredModelId);
   const currentEffort = current === null && effort === null ? (session?.reasoningEffort ?? null) : resolveEffort(current, effort);
-  const efforts = editingProfile === null ? current?.supportedReasoningEfforts ?? [] : [];
   const activeIndex = visibleModels.length === 0 ? -1 : Math.min(highlighted, visibleModels.length - 1);
 
   const effortLabel = currentEffort === null ? null : t(EFFORT_KEY[currentEffort]);
   const modelLabel = profile ? `${t(profile.startsWith("daily") ? "composer.profile.daily" : "composer.profile.geeky")}${profile.endsWith("heavy") ? ` · ${t("composer.profile.heavy")}` : ""}` : current?.displayName ?? session?.model ?? t("composer.model.none");
+  const tooltip = effortLabel === null
+    ? t("composer.model.tooltipNoEffort", { model: modelLabel })
+    : t("composer.model.tooltip", { model: modelLabel, effort: effortLabel });
   const triggerAria =
     current === null
       ? t("composer.model.select")
@@ -109,6 +101,20 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
     else if (showSearch) searchRef.current?.focus();
     else optionRefs.current[activeIndex]?.focus();
   }, [open, menuPos, showSearch, activeIndex, tab]);
+
+  useEffect(() => {
+    if (disabled) return;
+    const onShortcut = (event: globalThis.KeyboardEvent): void => {
+      const modifier = window.omo.platform === "darwin" ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      if (!modifier || !event.shiftKey || event.altKey || event.isComposing) return;
+      if (event.key.toLowerCase() !== "m") return;
+      event.preventDefault();
+      if (open) close(true);
+      else show();
+    };
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  });
 
   useEffect(() => {
     const viewport = groupsRef.current;
@@ -143,7 +149,7 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
     };
-  }, [open, visibleGroups, query, efforts.length, tab]);
+  }, [open, visibleGroups, query, tab]);
 
   const show = (): void => {
     const currentIndex = current === null ? -1 : visibleModels.findIndex((model) => model.id === current.id);
@@ -188,12 +194,6 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
     close(true);
   };
 
-  const chooseEffort = (next: ReasoningEffort): void => {
-    if (current === null) return;
-    void actions.selectModel(current.id, next);
-    close(true);
-  };
-
   const moveHighlight = (offset: number): void => {
     if (visibleModels.length === 0) return;
     const next = (activeIndex + offset + visibleModels.length) % visibleModels.length;
@@ -224,7 +224,7 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
     }
     if (event.key === "Enter") {
       const target = event.target;
-      if (target instanceof HTMLElement && (target.dataset["effort"] !== undefined || target.dataset["profileAutomatic"] !== undefined)) return;
+      if (target instanceof HTMLElement && target.dataset["profileAutomatic"] !== undefined) return;
       event.preventDefault();
       const model = visibleModels[activeIndex];
       if (model !== undefined) chooseModel(model);
@@ -255,14 +255,13 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? `${id}-menu` : undefined}
-        title={effortLabel === null ? modelLabel : `${modelLabel} · ${effortLabel}`}
+        title={tooltip}
         disabled={disabled}
         onClick={() => (open ? close(true) : show())}
       >
         {profile ? <IconSparkleRegular className={css.triggerIcon} size={14} /> : <IconDataOutlineRegular className={css.triggerIcon} size={14} />}
         {profile && <span className={css.profileIndicator} data-geeky={profile.startsWith("geeky")} aria-hidden="true" />}
         <span className={css.triggerLabel}>{modelLabel}</span>
-        {profile === null && effortLabel !== null && <span className={css.triggerEffort}>{effortLabel}</span>}
         <IconChevronDownOutlineRegular className={clsx(css.chevron, open && css.chevronOpen)} size={12} />
       </button>
 
@@ -384,29 +383,6 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
             {visibleGroups.length === 0 && (
               <div className={css.empty} role="status">
                 {t(models.length === 0 ? "composer.model.empty" : "composer.model.searchEmpty")}
-              </div>
-            )}
-            {efforts.length > 0 && (
-              <div className={css.effortSection}>
-                <div className={css.effortHeading} id={`${id}-effort`}>
-                  {t("composer.model.effort")}
-                </div>
-                <div className={css.effortRow} role="radiogroup" aria-labelledby={`${id}-effort`}>
-                  {efforts.map((entry) => (
-                    <button
-                      key={entry.reasoningEffort}
-                      type="button"
-                      role="radio"
-                      aria-checked={entry.reasoningEffort === currentEffort}
-                      data-effort={entry.reasoningEffort}
-                      className={css.effortChip}
-                      title={entry.description === "" ? undefined : entry.description}
-                      onClick={() => chooseEffort(entry.reasoningEffort)}
-                    >
-                      {t(EFFORT_KEY[entry.reasoningEffort])}
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
             </>}

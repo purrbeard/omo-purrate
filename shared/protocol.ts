@@ -331,6 +331,7 @@ export interface ClientRequestMap {
   };
   "thread/goal/get": { params: { threadId: string }; result: { goal: WireGoal | null } };
   extension_request: { params: { threadId: string; name: string; data?: unknown }; result: unknown };
+  "thread/loaded/list": { params: Record<string, never>; result: { data: string[]; nextCursor: string | null } };
   initialize: {
     params: {
       clientInfo: { name: string; title: string; version: string };
@@ -386,6 +387,7 @@ export const CLIENT_METHODS = [
   "mcpServerStatus/list",
   "thread/goal/get",
   "extension_request",
+  "thread/loaded/list",
   "initialize",
   "model/list",
   "skills/list",

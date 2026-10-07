@@ -29,6 +29,35 @@ export function uuidv7(nowMs: number = Date.now()): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+/** Resolve a native user entry on the selected branch without rewriting its session. */
+export function retryEntryId(source: string, point: BranchPoint): string {
+  const entries = new Map<string, JsonObject>();
+  let leafId: string | null = null;
+  for (const line of source.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const entry: unknown = JSON.parse(line);
+    if (isRecord(entry) && typeof entry["id"] === "string" && entry["type"] !== "session") {
+      entries.set(entry["id"], entry);
+      leafId = entry["id"];
+    }
+  }
+  const branch: JsonObject[] = [];
+  for (let id = leafId; id !== null;) {
+    const entry = entries.get(id);
+    if (!entry) break;
+    branch.push(entry);
+    id = typeof entry["parentId"] === "string" ? entry["parentId"] : null;
+  }
+  let occurrence = 0;
+  for (const entry of branch.reverse()) {
+    const message = entry["message"];
+    if (entry["type"] === "message" && isRecord(message) && message["role"] === "user" && userMessageText(message["content"]) === point.text) {
+      if (occurrence++ === point.occurrence) return entry["id"] as string;
+    }
+  }
+  throw new Error("the user message is not in this session's active branch");
+}
+
 /**
  * Builds a new session whose history is the source session's active branch up to, but excluding, the user message at
  * `point`. Mirrors omo's own branched sessions: label entries are dropped, parentId is re-chained over the kept entries,

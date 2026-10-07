@@ -19,7 +19,11 @@ export function applyLiveExtension(state: AppState, threadId: string, name: stri
     }));
   }
   if ((parsed.name === "omo.dag.updated" || parsed.name === "omo.task.updated") && parsed.data.parent_session_id !== threadId) return state;
-  return updateConversation(state, threadId, (conversation) => {
+  const linked = parsed.name === "omo.task.updated" ? { ...state, threadLinks: [
+    ...state.threadLinks.filter(link => link.parentId !== threadId || link.taskId === undefined),
+    ...parsed.data.tasks.map(task => ({ parentId: threadId, ...(task.child_session_id ? { childId: task.child_session_id } : {}), taskId: task.task_id, title: task.task_summary ?? task.name ?? task.description ?? task.task_id, status: task.status })),
+  ] } : state;
+  return updateConversation(linked, threadId, (conversation) => {
     const live = conversation.live;
     switch (parsed.name) {
       case "omo.dag.updated": {

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { lstat, readdir, readFile, realpath } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
-import type { TaskWork } from "../../shared/ipc";
+import type { TaskWork, ThreadLink } from "../../shared/ipc";
 import { object, parseTasksUpdated } from "../../src/state/live-wire";
 import { parseSessionJsonl } from "./session-jsonl";
 
@@ -15,12 +16,19 @@ function missing(error: unknown): boolean {
   return error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR");
 }
 
-/** Resolves OmO 5.1.4's legacy-first workspace store; never follows task-file symlinks outside it. */
+async function hasLegacyRecords(directory: string): Promise<boolean> {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.includes(".") || await hasLegacyRecords(path.join(directory, entry.name))) return true;
+  }
+  return false;
+}
+
+/** Matches native store adoption: empty scaffolds do not mask the agent store; records and .in-project do. */
 export async function taskStore(agentDir: string, cwd: string): Promise<string> {
   const project = await realpath(cwd);
   const legacy = path.join(project, ".omo", "senpi-task");
   try {
-    if ((await stat(legacy)).isDirectory()) return legacy;
+    if (!(await lstat(legacy)).isDirectory() || await hasLegacyRecords(legacy)) return legacy;
   } catch (error) {
     if (!missing(error)) throw error;
   }
@@ -64,10 +72,7 @@ async function sessionFile(directory: string, sessionId: string): Promise<string
   return null;
 }
 
-/** Native task snapshots omit todos: read the child's active JSONL branch, without resuming or launching it. */
-export async function loadTaskWork(agentDir: string, cwd: string, parentSessionId: string): Promise<TaskWork[]> {
-  if (!path.isAbsolute(cwd) || !ID.test(parentSessionId)) throw new Error("Invalid child work workspace or session id");
-  const store = await taskStore(agentDir, cwd);
+async function taskRecords(store: string): Promise<Record<string, unknown>[]> {
   let entries;
   try {
     entries = await readdir(path.join(store, "tasks"), { withFileTypes: true });
@@ -75,7 +80,7 @@ export async function loadTaskWork(agentDir: string, cwd: string, parentSessionI
     if (missing(error)) return [];
     throw error;
   }
-  const records = new Map<string, { raw: Record<string, unknown>; work: TaskWork }>();
+  const records: Record<string, unknown>[] = [];
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
     let raw: unknown;
@@ -85,7 +90,37 @@ export async function loadTaskWork(agentDir: string, cwd: string, parentSessionI
       if (missing(error) || error instanceof SyntaxError) continue; // A live writer can replace or incompletely write a record.
       throw error;
     }
-    if (!object(raw) || typeof raw["parent_session_id"] !== "string") continue;
+    if (object(raw)) records.push(raw);
+  }
+  return records;
+}
+
+/** Workspace ownership only: does not read child sessions or their todos. */
+export async function readTaskLinks(options: { cwd: string; agentDir?: string }): Promise<ThreadLink[]> {
+  if (!path.isAbsolute(options.cwd)) throw new Error("Invalid child work workspace");
+  const store = await taskStore(options.agentDir ?? path.join(homedir(), ".omo", "agent"), options.cwd);
+  const links: ThreadLink[] = [];
+  for (const raw of await taskRecords(store)) {
+    const parentId = raw["parent_session_id"];
+    const taskId = raw["task_id"];
+    const childId = raw["child_session_id"];
+    if (typeof parentId !== "string" || !ID.test(parentId) || typeof taskId !== "string" || !ID.test(taskId) ||
+      (childId !== undefined && (typeof childId !== "string" || !ID.test(childId)))) continue;
+    const title = [raw["task_summary"], raw["name"]].find((value) => typeof value === "string" && value.trim().length > 0);
+    links.push({ parentId, taskId, ...(typeof childId === "string" ? { childId } : {}),
+      title: typeof title === "string" ? title.trim() : taskId,
+      ...(typeof raw["status"] === "string" ? { status: raw["status"] } : {}) });
+  }
+  return links;
+}
+
+/** Native task snapshots omit todos: read the child's active JSONL branch, without resuming or launching it. */
+export async function loadTaskWork(agentDir: string, cwd: string, parentSessionId: string): Promise<TaskWork[]> {
+  if (!path.isAbsolute(cwd) || !ID.test(parentSessionId)) throw new Error("Invalid child work workspace or session id");
+  const store = await taskStore(agentDir, cwd);
+  const records = new Map<string, { raw: Record<string, unknown>; work: TaskWork }>();
+  for (const raw of await taskRecords(store)) {
+    if (typeof raw["parent_session_id"] !== "string") continue;
     const projected = Object.fromEntries(TASK_FIELDS.filter((key) => raw[key] !== undefined).map((key) => [key, raw[key]]));
     const task = parseTasksUpdated({ parent_session_id: raw["parent_session_id"], tasks: [projected] })?.tasks[0];
     if (task === undefined || !ID.test(task.task_id) || (task.child_session_id !== undefined && !ID.test(task.child_session_id))) continue;

@@ -3,6 +3,7 @@ import { copyFile, mkdir, open, readFile, rename, stat } from "node:fs/promises"
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import JSON5 from "json5";
+import { applyEdits, modify } from "jsonc-parser";
 import type { ModelRoute, ModelRoutingInput, ModelRoutingSettings } from "../../shared/model-routing";
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -98,9 +99,15 @@ export async function saveModelRouting(home: string, input: unknown): Promise<Mo
     try { await copyFile(config.file, `${config.file}.models.bak`, constants.COPYFILE_EXCL); }
     catch (error) { if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error; if (!(await stat(`${config.file}.models.bak`)).isFile()) throw error; }
   }
+  let output = config.text ?? "{}\n";
+  for (const key of ["categories", "agents", "models"] as const) {
+    output = applyEdits(output, modify(output, ["[senpi]", key], native[key], {
+      formattingOptions: { insertSpaces: true, tabSize: 2, eol: "\n" },
+    }));
+  }
   const stagedPath = `${config.file}.${randomUUID()}.tmp`;
   const staged = await open(stagedPath, "wx", 0o600);
-  try { await staged.writeFile(JSON.stringify({ ...config.value, "[senpi]": native }, null, 2) + "\n"); await staged.sync(); }
+  try { await staged.writeFile(output.endsWith("\n") ? output : `${output}\n`); await staged.sync(); }
   finally { await staged.close(); }
   await rename(stagedPath, config.file);
   return { configPath: config.file, ...settings };

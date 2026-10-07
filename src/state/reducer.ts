@@ -18,6 +18,7 @@ import { parseNotification, parseServerRequest } from "./wire";
 
 export function createInitialState(): AppState {
   return {
+    threadLinks: [],
     mcp: { servers: [], loading: false, error: null, loadedAt: null },
     bridge: null,
     models: [],
@@ -107,6 +108,8 @@ function applyThreadsListed(state: AppState, event: Extract<AppEvent, { type: "t
 
 export function reduce(state: AppState, event: AppEvent): AppState {
   switch (event.type) {
+    case "threads/links":
+      return { ...state, threadLinks: event.links };
     case "taskWork/loaded":
       return updateExistingConversation(state, event.threadId, (conversation) =>
         conversation.live.generation !== event.generation ? conversation :
@@ -165,9 +168,22 @@ export function reduce(state: AppState, event: AppEvent): AppState {
         historyState: "loading",
         historyError: null,
       }));
+    case "history/annotated":
+      return updateExistingConversation(state, event.threadId, (conversation) => ({
+        ...conversation,
+        annotations: { notices: event.notices, memoryWrites: event.memoryWrites },
+      }));
+    case "history/replaced":
+      return updateExistingConversation(state, event.threadId, () => ({
+        ...mergeHistory(emptyConversation(event.threadId), event.turns),
+        annotations: { notices: event.notices ?? [], memoryWrites: event.memoryWrites ?? {} },
+        live: { ...emptyConversation(event.threadId).live, historicalTasks: event.tasks ?? [], todo: event.todo == null ? null : { ...event.todo, source: "history" } },
+      }));
     case "history/loaded":
       return updateExistingConversation(state, event.threadId, (conversation) => ({
         ...mergeHistory(conversation, event.turns),
+        annotations: event.notices === undefined && event.memoryWrites === undefined ? conversation.annotations
+          : { notices: event.notices ?? [], memoryWrites: event.memoryWrites ?? {} },
         live: { ...conversation.live,
           historicalTasks: event.tasks ?? conversation.live.historicalTasks,
           todo: conversation.live.todo?.source === "live" || event.todo === undefined ? conversation.live.todo :

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { SessionNotice } from "../../../shared/ipc";
 import clsx from "clsx";
 import {
   Button,
@@ -15,9 +16,11 @@ import { selectActiveConversation, selectIsTurnActive, selectPendingRequestsForT
 import { useActions, useAppSelector } from "../app-context";
 import { SideToggle } from "../btw/SideToggle";
 import { TESTID } from "../testids";
-import { ActivityPanel, ActivityToggle } from "./ActivityPanel";
+import { uiState, useUiState } from "../ui-state";
+import { ActivityToggle } from "./ActivityPanel";
 import { ApprovalCard } from "./ApprovalCard";
 import { ConversationHeader } from "./ConversationHeader";
+import { SessionBranches } from "./BranchControls";
 import { EmptyHero } from "./EmptyHero";
 import { QuestionCard } from "./QuestionCard";
 import { RenderBoundary } from "./RenderBoundary";
@@ -120,6 +123,12 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
   const pending = useAppSelector((state) => selectPendingRequestsForThread(state, threadId));
   const scroll = useStickToBottom();
   const turns = conversation?.turns ?? NO_TURNS;
+  const annotations = conversation?.annotations;
+  const noticesByTurn = useMemo(() => {
+    const byTurn = new Map<number, SessionNotice[]>();
+    for (const notice of annotations?.notices ?? []) byTurn.set(notice.turnIndex, [...(byTurn.get(notice.turnIndex) ?? []), notice]);
+    return byTurn;
+  }, [annotations?.notices]);
   const activeTurnId = conversation?.activeTurnId ?? null;
   const activeTurn = useMemo(
     () => (activeTurnId === null ? null : (turns.find((turn) => turn.id === activeTurnId) ?? null)),
@@ -159,7 +168,8 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
           {historyState === "error" && <HistoryError threadId={threadId} message={conversation?.historyError ?? null} />}
           <MarkdownDelegateProvider openExternalLink={openExternalLink} openFile={openFile}>
             {turns.map((turn, index) => (
-              <TurnView key={turn.id} turn={turn} cwd={cwd} branch={branch} last={index === turns.length - 1} />
+              <TurnView key={turn.id} turn={turn} cwd={cwd} branch={branch} last={index === turns.length - 1}
+                notices={noticesByTurn.get(index)} memoryWrites={annotations?.memoryWrites} />
             ))}
           </MarkdownDelegateProvider>
           {conversation?.pendingUserMessages.map((message) => (
@@ -190,31 +200,22 @@ export function ConversationPane() {
     state.activeThreadId === null ? null : (state.threads[state.activeThreadId] ?? null),
   );
   const turnActive = useAppSelector(selectIsTurnActive);
-  const activityId = useId();
-  const [activityOpen, setActivityOpen] = useState<ReadonlySet<string>>(() => new Set());
-  const showActivity = threadId !== null && activityOpen.has(threadId);
+  const showActivity = useUiState().workflowPanelOpen;
   const toggleActivity = useCallback(() => {
     if (threadId === null) return;
-    setActivityOpen((current) => {
-      const next = new Set(current);
-      if (!next.delete(threadId)) next.add(threadId);
-      return next;
-    });
-  }, [threadId]);
+    uiState.setWorkflowPanelOpen(!showActivity);
+  }, [threadId, showActivity]);
   const activity = useMemo(
     () =>
       threadId === null ? null : (
-        <>
-          <ActivityToggle threadId={threadId} open={showActivity} controlsId={activityId} onToggle={toggleActivity} />
-          <SideToggle />
-        </>
+        <ActivityToggle threadId={threadId} open={showActivity} controlsId="workflow-panel" onToggle={toggleActivity} />
       ),
-    [threadId, showActivity, activityId, toggleActivity],
+    [threadId, showActivity, toggleActivity],
   );
   return (
     <section className={css.root} data-testid={TESTID.conversation}>
-      <ConversationHeader active={threadId !== null} thread={thread} running={turnActive} activity={activity} />
-      {threadId !== null && showActivity && <ActivityPanel threadId={threadId} id={activityId} />}
+      <ConversationHeader active={threadId !== null} thread={thread} running={turnActive} activity={activity} panels={threadId === null ? null : <SideToggle />} />
+      {threadId !== null && <SessionBranches key={threadId} threadId={threadId} />}
       {threadId === null ? (
         <EmptyHero />
       ) : (

@@ -189,8 +189,15 @@ export function applyNotification(state: AppState, notification: ServerNotificat
         threadId,
       });
     }
-    case "serverRequest/resolved":
+    case "serverRequest/resolved": {
+      const request = state.pendingRequests.find((pending) => pending.id === notification.params.requestId);
+      // Non-blocking questions are cancelled by omo on agent_end, even without an answer.
+      // Keep their form and submit a follow-up message instead of answering an expired RPC.
+      if (request?.kind === "userInput" && request.params.waitForAnswer === false) {
+        return { ...state, pendingRequests: state.pendingRequests.map((pending) => pending === request ? { ...request, resolved: true } : pending) };
+      }
       return dropRequest(state, notification.params.requestId);
+    }
     case "extension_event":
       return applyLiveExtension(state, notification.params.threadId, notification.params.name, notification.params.data);
   }

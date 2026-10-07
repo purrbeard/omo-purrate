@@ -9,6 +9,11 @@ export function selectSkillCatalog(state: AppState, cwd: string): SkillCatalog {
   return state.skillCatalogs[cwd] ?? EMPTY_SKILL_CATALOG;
 }
 
+/** Workspace directory of the active main thread; null when no thread is open. */
+export function selectActiveCwd(state: AppState): string | null {
+  return state.activeThreadId === null ? null : (state.threads[state.activeThreadId]?.cwd ?? null);
+}
+
 export interface WorkspaceGroup {
   cwd: string;
   label: string;
@@ -43,11 +48,11 @@ export function selectDagRuns(state: AppState, threadId: string): DagRun[] {
 export function selectTasks(state: AppState, threadId: string): (LiveTask | HistoricalTask)[] {
   const live = selectThreadLiveState(state, threadId);
   if (live === null) return EMPTY_TASKS;
-  if (live.freshness === "unattached") return live.historicalTasks;
   const cached = taskSelections.get(live);
   if (cached !== undefined) return cached;
   const roster = live.taskOrder.flatMap((id) => live.tasks[id] === undefined ? [] : [live.tasks[id]]);
-  const result = [...roster, ...live.historicalTasks.filter((task) => live.tasks[task.task_id] === undefined)];
+  const records = new Map([...live.historicalTasks, ...live.taskWork.filter(work => work.parentSessionId === threadId).map(work => work.task)].map(task => [task.task_id, task]));
+  const result = [...roster, ...[...records.values()].filter(task => live.tasks[task.task_id] === undefined)];
   taskSelections.set(live, result);
   return result;
 }
@@ -62,11 +67,12 @@ export function selectDagActivity(state: AppState, threadId: string, runId: stri
 }
 
 function workspaceLabel(cwd: string): string {
-  const segments = cwd.split("/").filter((segment) => segment.length > 0);
+  const segments = cwd.split(/[\\/]/).filter((segment) => segment.length > 0);
   return segments.at(-1) ?? cwd;
 }
 
 interface GroupCache {
+  links: AppState["threadLinks"];
   threads: AppState["threads"];
   order: string[];
   sides: AppState["btw"]["sides"];
@@ -84,19 +90,40 @@ export function selectThreadsByWorkspace(state: AppState): WorkspaceGroup[] {
   const { sides, unclaimed } = state.btw;
   if (
     groupCache !== null && groupCache.threads === state.threads && groupCache.order === state.threadOrder &&
+    groupCache.links === state.threadLinks &&
     groupCache.sides === sides && groupCache.unclaimed === unclaimed
   ) {
     return groupCache.groups;
   }
   const groups = new Map<string, WorkspaceGroup>();
+  const nodes = new Map(state.threadOrder.flatMap(id => {
+    const thread = state.threads[id];
+    return thread === undefined || isSideThread(state, thread) ? [] : [[id, { ...thread, children: [], tasks: [] } as ThreadSummary] as const];
+  }));
+  const parents = new Map<string, string>();
+  for (const link of state.threadLinks) {
+    const parent = nodes.get(link.parentId);
+    if (parent === undefined) continue;
+    const child = link.childId === undefined ? undefined : nodes.get(link.childId);
+    if (child === undefined) {
+      if (link.taskId !== undefined) parent.tasks!.push(link);
+      continue;
+    }
+    const seen = new Set([child.id]);
+    let ancestor: string | undefined = parent.id;
+    while (ancestor !== undefined && !seen.has(ancestor)) { seen.add(ancestor); ancestor = parents.get(ancestor); }
+    if (ancestor !== undefined || parents.has(child.id)) continue;
+    parents.set(child.id, parent.id);
+    parent.children!.push(child);
+  }
   for (const id of state.threadOrder) {
-    const summary = state.threads[id];
-    if (summary === undefined || isSideThread(state, summary)) continue;
+    const summary = nodes.get(id);
+    if (summary === undefined || parents.has(id)) continue;
     const group = groups.get(summary.cwd);
     if (group === undefined) groups.set(summary.cwd, { cwd: summary.cwd, label: workspaceLabel(summary.cwd), threads: [summary] });
     else group.threads.push(summary);
   }
-  groupCache = { threads: state.threads, order: state.threadOrder, sides, unclaimed, groups: [...groups.values()] };
+  groupCache = { threads: state.threads, order: state.threadOrder, links: state.threadLinks, sides, unclaimed, groups: [...groups.values()] };
   return groupCache.groups;
 }
 

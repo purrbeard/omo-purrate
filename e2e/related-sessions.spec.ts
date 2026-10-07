@@ -1,0 +1,53 @@
+import { test, expect } from "@playwright/test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { launchApp, newSession, send, tempDir, threadRow, shot, setTheme } from "./helpers.ts";
+
+test("native work and related sessions stay under their parent and persist without rewriting sessions", async () => {
+  const home = tempDir("related-home"), workspace = tempDir("related-workspace"), userData = tempDir("related-user");
+  let launched = await launchApp({ omo: "fake", fakeHome: home, userData, pickDir: workspace });
+  try {
+    const page = launched.page;
+    const parent = await newSession(page);
+    await send(page, "main related work");
+    const store = path.join(workspace, ".omo", "senpi-task", "tasks");
+    mkdirSync(store, { recursive: true });
+    writeFileSync(path.join(store, "task.json"), JSON.stringify({ task_id: "task-child", parent_session_id: parent, status: "completed", description: "work", task_summary: "native child work", execution_mode: "in-process", model: "provider/model", residency_state: "persisted_only", depth: 1, created_at: "2026-10-07T00:00:00Z", updated_at: "2026-10-07T00:00:01Z" }));
+    await threadRow(page, parent).locator('[data-testid="thread-menu"]').click();
+    await page.getByRole("menuitem", { name: "New related session", exact: true }).click();
+    await send(page, "child related work");
+    const preferences = await page.evaluate(() => window.omo.getPreferences());
+    const child = Object.keys(preferences.threadParents)[0]!;
+    await page.reload();
+    await expect(threadRow(page, parent)).toBeVisible();
+    await expect(threadRow(page, child)).toHaveCount(0);
+    const toggle = threadRow(page, parent).locator("..").getByTestId("thread-children-toggle");
+    await toggle.click();
+    await expect(threadRow(page, child)).toBeVisible();
+    await expect(page.getByTestId("thread-child-task")).toHaveCount(1);
+    await page.getByTestId("thread-child-task").click();
+    await page.getByTestId("omo-activity-toggle").click();
+    await expect(page.getByTestId("omo-activity")).toContainText("native child work");
+    await page.getByTestId("omo-activity-toggle").click();
+    await threadRow(page, child).click();
+    await expect(page.getByTestId("assistant-message").last()).toContainText("child related work");
+    await shot(page, "related-sessions-light");
+    await setTheme(page, "dark");
+    await shot(page, "related-sessions-dark");
+    await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(640, 760));
+    await shot(page, "related-sessions-narrow-dark");
+    await page.getByTestId("open-settings").click();
+    await page.getByTestId("settings-theme-light").click();
+    await expect(page.locator("body")).not.toHaveAttribute("data-ds-dark-theme");
+    await page.keyboard.press("Escape");
+    await shot(page, "related-sessions-narrow-light");
+    await launched.app.close();
+    launched = await launchApp({ omo: "fake", fakeHome: home, userData, pickDir: workspace });
+    await expect(threadRow(launched.page, parent)).toBeVisible();
+    await threadRow(launched.page, parent).locator("..").getByTestId("thread-children-toggle").click();
+    await expect(threadRow(launched.page, child)).toBeVisible();
+    const threads = await launched.page.evaluate(async () => (await window.omo.request("thread/list", { limit: 100 })).data);
+    expect(threads.map(t => t.id).sort()).toEqual([parent, child].sort());
+    expect(threads.every(t => t.cwd === workspace)).toBe(true);
+  } finally { await launched.app.close(); }
+});

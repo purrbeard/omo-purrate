@@ -15,6 +15,7 @@ const SHIFT = DARWIN ? "⇧" : "Shift";
 const SHORTCUTS: readonly { id: string; label: MessageKey; keys: readonly string[] }[] = [
   { id: "new-session", label: "shell.newProject", keys: [MOD, "N"] },
   { id: "settings", label: "shell.openSettings", keys: [MOD, ","] },
+  { id: "model-picker", label: "shell.settings.nav.model", keys: [MOD, SHIFT, "M"] },
   { id: "toggle-sidebar", label: "shell.toggleSidebar", keys: [MOD, "\\"] },
   { id: "side-chat", label: "btw.toggle", keys: [MOD, "E"] },
   { id: "send", label: "composer.send", keys: ["Enter"] },

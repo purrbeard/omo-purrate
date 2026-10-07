@@ -1,5 +1,45 @@
 /* Ported from DSH ui-workspace rows/Rows.module.css (MIT, Copyright (c) 2026 DeepSeek). */
 
+.childrenToggle {
+  margin: 0 12px 4px 28px;
+  padding: 4px 8px;
+  color: var(--dsw-alias-label-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.childThreads {
+  min-width: 0;
+  margin-left: 16px;
+  padding-left: 8px;
+  border-left: 1px solid var(--dsw-alias-separator-primary);
+}
+
+.childTask {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-radius: var(--dsw-radius-md);
+  color: var(--dsw-alias-label-primary);
+  background: none;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.childTask span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.childTask small { flex-shrink: 0; color: var(--dsw-alias-label-secondary); }
+.childTask:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.childrenToggle:focus-visible, .childTask:focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: -2px; }
+.linkError { margin: 4px 8px; font-size: 12px; color: var(--dsw-alias-state-error-primary); overflow-wrap: anywhere; }
+
 .projectRow,
 .sessionRow {
   position: relative;

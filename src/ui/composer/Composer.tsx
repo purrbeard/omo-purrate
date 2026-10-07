@@ -2,16 +2,20 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import type { KeyboardEvent, MouseEvent, SyntheticEvent } from "react";
 import clsx from "clsx";
 import { IconFolderOpenOutlineRegular, IconPaperclipOutlineRegular, IconCloseOutlineRegular, Tooltip } from "@deepseek-ai/dsh-client-ui-primitives";
-import { ArrowUpGlyph, LockOpenGlyph } from "../glyphs";
-import { parseBtwCommand, selectIsTurnActive, selectSkillCatalog } from "../../state";
-import type { AppState, SkillCatalog } from "../../state";
+import { ArrowUpGlyph } from "../glyphs";
+import { parseBtwCommand, selectActiveCwd, selectIsTurnActive, selectSkillCatalog } from "../../state";
+import type { SkillCatalog } from "../../state";
 import { useT } from "../../i18n";
 import { useActions, useAppSelector } from "../app-context";
 import { useAskSide } from "../btw/use-ask-side";
 import { ConversationDock } from "../conversation/ConversationDock";
 import { TESTID } from "../testids";
 import { updatePreferences, useUiState } from "../ui-state";
+import { BackgroundWorkStrip } from "./BackgroundWorkStrip";
+import { CheckoutBar } from "./CheckoutBar";
 import { ModelPicker } from "./ModelPicker";
+import { PermissionPicker } from "./PermissionPicker";
+import { ReasoningPicker } from "./ReasoningPicker";
 import { SkillMenu } from "./SkillMenu";
 import type { SkillMenuStatus } from "./SkillMenu";
 import { acceptCommand, matchCommands, menuOptions } from "./commands";
@@ -27,9 +31,6 @@ const NO_THREAD_DRAFT = "";
 const EMPTY_DRAFT: SkillDraft = { text: "", selected: [] };
 const NO_OPTIONS: readonly MenuOption[] = [];
 
-const selectActiveCwd = (state: AppState): string | null =>
-  state.activeThreadId === null ? null : (state.threads[state.activeThreadId]?.cwd ?? null);
-
 function menuStatus(hasThread: boolean, loaded: boolean, catalog: SkillCatalog | null): SkillMenuStatus {
   if (!hasThread) return { kind: "startSession" };
   if (!loaded || catalog === null) return { kind: "resumeSession" };
@@ -38,7 +39,7 @@ function menuStatus(hasThread: boolean, loaded: boolean, catalog: SkillCatalog |
 }
 
 function basename(path: string): string {
-  const segments = path.split("/").filter((segment) => segment.length > 0);
+  const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
   return segments.at(-1) ?? path;
 }
 
@@ -337,6 +338,7 @@ export function Composer() {
   return (
     <div className={css.root}>
       <ConversationDock />
+      {activeThreadId !== null && <BackgroundWorkStrip threadId={activeThreadId} />}
       <div
         className={clsx(css.card, !connected && css.cardDisabled, keyword !== null && css.cardMagic, dropping && css.cardDrop)}
         data-testid={TESTID.composer}
@@ -423,20 +425,13 @@ export function Composer() {
         {keyword !== null && (
           <div className={css.keywordHint} data-testid={TESTID.keywordHint} role="status">
             <span className={css.keywordHintName}>{keyword.text}</span>
-            {t("composer.keyword.hint")}
+            {t(keyword.keyword === "mass-ulw" ? "composer.keyword.massHint" : "composer.keyword.hint")}
           </div>
         )}
         <div className={css.row}>
           <div className={css.tools}>
             <button type="button" className={css.chip} data-testid={TESTID.attachmentPick} aria-label={t("composer.images.attach")} disabled={!connected || busy || images.length >= IMAGE_LIMIT} onClick={() => void pickImages()}><IconPaperclipOutlineRegular size={16} /></button>
-            {connected && (
-              <Tooltip label={t("composer.fullAccess.tooltip")} side="top" align="center" delayMs={300}>
-                <span className={css.statusChip} data-testid={TESTID.fullAccessChip} tabIndex={0}>
-                  <LockOpenGlyph size={14} className={css.chipIcon} />
-                  <span className={css.chipLabel}>{t("composer.fullAccess.label")}</span>
-                </span>
-              </Tooltip>
-            )}
+            {connected && <PermissionPicker disabled={!connected} />}
             {activeThreadId === null && (
               <button
                 type="button"
@@ -459,6 +454,7 @@ export function Composer() {
               </span>
             )}
             <ModelPicker disabled={!connected} />
+            <ReasoningPicker disabled={!connected} />
             {turnActive && (
               <Tooltip label={t("composer.stop")} side="top" delayMs={500}>
                 <button
@@ -489,6 +485,7 @@ export function Composer() {
           </div>
         </div>
       </div>
+      <CheckoutBar />
     </div>
   );
 }

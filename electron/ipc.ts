@@ -5,19 +5,27 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { app, clipboard, dialog, ipcMain, shell } from "electron";
 import type { BrowserWindow, OpenDialogOptions } from "electron";
-import { ENV, IPC } from "../shared/ipc";
-import type { BranchResult, Diagnostics, HistoryResult, InstallResult, RequestEnvelope } from "../shared/ipc";
+import { ENV, IPC, PERMISSION_PRESETS } from "../shared/ipc";
+import type { PermissionPreset } from "../shared/ipc";
+import type { BranchResult, Diagnostics, HistoryResult, InstallResult, RequestEnvelope, SessionTreeOperation } from "../shared/ipc";
 import { CLIENT_METHODS } from "../shared/protocol";
 import type { ClientMethod, ClientParams, RequestId } from "../shared/protocol";
 import { openLogin } from "./accounts/login";
 import { readAccountUsage } from "./accounts/usage";
-import { branchSession } from "./history/branch-session";
+import { branchSession, retryEntryId } from "./history/branch-session";
+import { runSessionTree, readSessionTree } from "./omo/session-tree";
+import type { ModelRung } from "../shared/ipc";
 import { parseSessionJsonl } from "./history/session-jsonl";
-import { loadTaskWork } from "./history/task-work";
+import { loadTaskWork, readTaskLinks } from "./history/task-work";
 import { RpcRequestError } from "./omo/app-server-client";
 import { runInstaller } from "./omo/installer";
 import { applyProxySettings, getProxySettings } from "./omo/proxy";
+import { createGit } from "./git-info";
+import type { Git } from "./git-info";
+import { showThreadNotification } from "./notifications";
 import { createOpenWorkspace } from "./open-workspace";
+import { createWorkspaceSettings } from "./workspace-settings";
+import type { WorkspaceSettings } from "./workspace-settings";
 import type { OpenWorkspace } from "./open-workspace";
 import type { OmoSupervisor } from "./omo/supervisor";
 import type { PreferencesStore } from "./prefs";
@@ -40,6 +48,10 @@ export interface IpcDeps {
   homeDir: string;
   /** Defaults to the real mdfind/open spawner and shell.openPath; tests inject fakes. */
   openWorkspace?: OpenWorkspace;
+  /** Defaults to git through execFile with a 3 s timeout; tests inject fakes. */
+  git?: Git;
+  /** Project-settings reader/writer; tests inject fakes. */
+  workspaceSettings?: WorkspaceSettings;
 }
 
 const execFileAsync = promisify(execFile);
@@ -48,6 +60,13 @@ const defaultOpenWorkspace = (): OpenWorkspace =>
   createOpenWorkspace({
     exec: async (file, args) => (await execFileAsync(file, [...args])).stdout,
     openPath: (target) => shell.openPath(target),
+  });
+
+const GIT_TIMEOUT_MS = 3_000;
+
+const defaultGit = (): Git =>
+  createGit({
+    exec: async (file, args) => (await execFileAsync(file, [...args], { timeout: GIT_TIMEOUT_MS })).stdout,
   });
 
 const INTERNAL_ERROR = -32603;
@@ -60,6 +79,10 @@ function isClientMethod(value: unknown): value is ClientMethod {
 
 function isRequestId(value: unknown): value is RequestId {
   return typeof value === "number" || typeof value === "string";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function requireString(value: unknown, name: string): string {
@@ -76,6 +99,8 @@ function isInside(root: string, target: string): boolean {
 export function registerIpc(deps: IpcDeps): () => void {
   const { supervisor, prefs, getWindow, homeDir } = deps;
   const openWorkspace = deps.openWorkspace ?? defaultOpenWorkspace();
+  const git = deps.git ?? defaultGit();
+  const workspaceSettings = deps.workspaceSettings ?? createWorkspaceSettings();
   const send = (channel: string, payload: unknown): void => {
     const window = getWindow();
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(channel, payload);
@@ -105,7 +130,40 @@ export function registerIpc(deps: IpcDeps): () => void {
     return target;
   };
 
+  let treeBusy = false;
   const handlers: Record<string, (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown> = {
+    [IPC.sessionTree]: async (_event, threadId, operation) => {
+      if (typeof threadId !== "string" || typeof operation !== "object" || operation === null) throw new TypeError("invalid session tree request");
+      const request = operation as SessionTreeOperation;
+      if (!["list", "retry", "navigate"].includes(request.type)) throw new TypeError("invalid session tree operation");
+      if (request.type === "list") {
+        const { thread } = await supervisor.request("thread/read", { threadId, includeTurns: false });
+        return readSessionTree(await sessionFile(thread.path));
+      }
+      if (treeBusy) throw new Error("session tree navigation is already in progress");
+      treeBusy = true;
+      try {
+        const loaded = await supervisor.request("thread/loaded/list", {});
+        const snapshots = await Promise.all(loaded.data.map(id => supervisor.request("thread/read", { threadId: id, includeTurns: true })));
+        if (snapshots.some(({ thread }) => thread.status.type === "active")) throw new Error("finish the running turn before switching session branches");
+        const { thread } = snapshots.find(({ thread }) => thread.id === threadId) ?? await supervisor.request("thread/read", { threadId, includeTurns: true });
+        const target = await sessionFile(thread.path);
+        let nativeRequest: Extract<SessionTreeOperation, { type: "navigate" }>;
+        if (request.type === "retry") {
+          if (!request.point || typeof request.point.text !== "string" || !Number.isInteger(request.point.occurrence) || request.point.occurrence < 0) throw new TypeError("invalid retry point");
+          nativeRequest = { type: "navigate", entryId: retryEntryId(await readFile(target, "utf8"), request.point), intent: "select" };
+        } else nativeRequest = request;
+        if (nativeRequest.type === "navigate" && (typeof nativeRequest.entryId !== "string" || !["select", "resume"].includes(nativeRequest.intent))) throw new TypeError("invalid branch selection");
+        try {
+          return await supervisor.withSessionOwner((binary, env) => runSessionTree({ binary, env, sessionPath: target, cwd: thread.cwd, operation: nativeRequest, extensionPath: path.join(app.isPackaged ? process.resourcesPath : __dirname, "tree-selection-extension.js") }));
+        } finally {
+          for (const snapshot of snapshots) await supervisor.request("thread/resume", { threadId: snapshot.thread.id });
+          if (!snapshots.some(({ thread }) => thread.id === threadId)) await supervisor.request("thread/resume", { threadId });
+        }
+      } finally {
+        treeBusy = false;
+      }
+    },
     [IPC.readModelRouting]: () => readModelRouting(homeDir),
     [IPC.saveModelRouting]: async (_event, input) => {
       const result = await saveModelRouting(homeDir, input);
@@ -171,6 +229,7 @@ export function registerIpc(deps: IpcDeps): () => void {
       }
       try {
         // Params come from the renderer untyped; the app-server validates them against its schema.
+        if (treeBusy && ["turn/start", "thread/start", "thread/resume"].includes(method)) throw new Error("session tree navigation is in progress");
         const result = await supervisor.request(method, params as ClientParams<ClientMethod>);
         return { ok: true, result };
       } catch (error) {
@@ -202,6 +261,11 @@ export function registerIpc(deps: IpcDeps): () => void {
       requireString(cwd, "cwd"), requireString(parentSessionId, "parentSessionId"),
     ),
     [IPC.readAccountUsage]: () => readAccountUsage({ agentDir: supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent") }),
+    [IPC.loadThreadLinks]: async (_event, cwds) => {
+      if (!Array.isArray(cwds) || cwds.some(cwd => typeof cwd !== "string" || !path.isAbsolute(cwd))) throw new Error("Invalid workspace paths");
+      const agentDir = supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent");
+      return (await Promise.all([...new Set(cwds as string[])].map(cwd => readTaskLinks({ cwd, agentDir })))).flat();
+    },
     [IPC.openAccountLogin]: async (_event, provider) => {
       if (typeof provider !== "string" || !/^[a-z0-9-]{1,64}$/.test(provider)) throw new TypeError("provider must be a provider id");
       const omo = supervisor.getStatus().omo;
@@ -260,6 +324,14 @@ export function registerIpc(deps: IpcDeps): () => void {
     }),
     [IPC.getPreferences]: () => prefs.get(),
     [IPC.setPreferences]: (_event, patch) => prefs.set(patch),
+    [IPC.notify]: (_event, payload) => {
+      if (!isRecord(payload)) throw new TypeError("payload must be an object");
+      const { title, body, threadId } = payload;
+      showThreadNotification(
+        { title: requireString(title, "title"), body: requireString(body, "body"), threadId: requireString(threadId, "threadId") },
+        { getWindow, onActivate: (threadId) => send(IPC.notifyClick, threadId) },
+      );
+    },
     [IPC.copyText]: (_event, text) => {
       clipboard.writeText(requireString(text, "text"));
     },
@@ -276,6 +348,16 @@ export function registerIpc(deps: IpcDeps): () => void {
       if (target === null || target === undefined) return openWorkspace.openDefault(cwd);
       await openWorkspace.open(cwd, target);
       return target;
+    },
+    [IPC.gitInfo]: (_event, cwd) => git.info(requireString(cwd, "cwd")),
+    [IPC.gitStatus]: (_event, cwd) => git.status(requireString(cwd, "cwd")),
+    [IPC.gitCommitPush]: (_event, cwd, message, push) => git.commitAndPush(requireString(cwd, "cwd"), requireString(message, "message"), push === true),
+    [IPC.getPermissionPreset]: (_event, cwd) => workspaceSettings.getPermissionPreset(requireString(cwd, "cwd")),
+    [IPC.setPermissionPreset]: (_event, cwd, preset) => {
+      if (typeof preset !== "string" || !(PERMISSION_PRESETS as readonly string[]).includes(preset)) {
+        throw new TypeError(`unknown permission preset: ${String(preset)}`);
+      }
+      return workspaceSettings.setPermissionPreset(requireString(cwd, "cwd"), preset as PermissionPreset);
     },
   };
 

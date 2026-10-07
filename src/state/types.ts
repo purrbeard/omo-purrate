@@ -1,4 +1,4 @@
-import type { BridgeStatus, HistoricalTask, HistoryResult, HistoryTurn, TaskWork } from "../../shared/ipc";
+import type { BridgeStatus, HistoricalTask, HistoryResult, HistoryTurn, MemoryWriteNotice, SessionNotice, TaskWork } from "../../shared/ipc";
 import type { DagActivity, DagHeartbeat, DagRun, LiveTask, TodoPhase, WireGoal } from "../../shared/protocol";
 import type {
   CommandApprovalParams,
@@ -19,6 +19,8 @@ import type {
 } from "../../shared/protocol";
 
 export interface ThreadSummary {
+  children?: ThreadSummary[];
+  tasks?: import("../../shared/ipc").ThreadLink[];
   id: string;
   cwd: string;
   name: string | null;
@@ -75,6 +77,13 @@ export interface Conversation {
   /** The model omo reported in this thread's latest thread/start or thread/resume result. */
   session?: SessionModel;
   live: ThreadLiveState;
+  /** Memory writes and omo's special messages read from the session file. */
+  annotations: SessionAnnotations;
+}
+
+export interface SessionAnnotations {
+  notices: SessionNotice[];
+  memoryWrites: Record<string, MemoryWriteNotice>;
 }
 
 export interface ThreadLiveState {
@@ -101,7 +110,7 @@ export interface ThreadLiveState {
 export type PendingRequest =
   | { kind: "commandApproval"; id: RequestId; threadId: string; params: CommandApprovalParams; receivedAtMs: number }
   | { kind: "fileChangeApproval"; id: RequestId; threadId: string; params: FileChangeApprovalParams; receivedAtMs: number }
-  | { kind: "userInput"; id: RequestId; threadId: string; params: UserInputParams; receivedAtMs: number };
+  | { kind: "userInput"; id: RequestId; threadId: string; params: UserInputParams; receivedAtMs: number; resolved?: boolean };
 
 /** Notices the UI translates by code; a notice without a code shows its message as-is (omo's own error text). */
 export type NoticeCode = "noActiveThread" | "steered" | "branchBusy";
@@ -112,6 +121,7 @@ export interface Notice {
   message: string;
   threadId: string | null;
   code?: NoticeCode;
+  action?: "open-thread";
   /** "side" renders the notice inside the side chat panel of `threadId` (its main thread) instead of as a toast. */
   scope?: "side";
 }
@@ -163,6 +173,7 @@ export interface SkillCatalog {
 }
 
 export interface AppState {
+  threadLinks: import("../../shared/ipc").ThreadLink[];
   mcp: { servers: import("./mcp").McpServer[]; loading: boolean; error: string | null; loadedAt: number | null };
   bridge: BridgeStatus | null;
   models: Model[];
@@ -185,6 +196,7 @@ export interface AppState {
 }
 
 export type AppEvent =
+  | { type: "threads/links"; links: import("../../shared/ipc").ThreadLink[] }
   | { type: "taskWork/loaded"; threadId: string; work: TaskWork[]; generation: number }
   | { type: "mcp/updated"; mcp: AppState["mcp"] }
   | { type: "bridge/status"; status: BridgeStatus }
@@ -199,7 +211,9 @@ export type AppEvent =
   | { type: "thread/opened"; thread: Thread; resumed: boolean; session?: SessionModel }
   | { type: "thread/activated"; threadId: string | null }
   | { type: "history/loading"; threadId: string }
-  | { type: "history/loaded"; threadId: string; turns: HistoryTurn[]; todo?: HistoryResult["todo"]; tasks?: HistoricalTask[] }
+  | ({ type: "history/replaced"; threadId: string } & HistoryResult)
+  | { type: "history/loaded"; threadId: string; turns: HistoryTurn[]; todo?: HistoryResult["todo"]; tasks?: HistoricalTask[]; notices?: SessionNotice[]; memoryWrites?: Record<string, MemoryWriteNotice> }
+  | { type: "history/annotated"; threadId: string; notices: SessionNotice[]; memoryWrites: Record<string, MemoryWriteNotice> }
   | { type: "goal/loaded"; threadId: string; goal: WireGoal | null; generation: number; revision: number }
   | { type: "todo/loaded"; threadId: string; todo: HistoryResult["todo"]; generation: number; revision: number }
   | { type: "history/failed"; threadId: string; message: string }

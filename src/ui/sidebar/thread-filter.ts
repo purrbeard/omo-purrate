@@ -14,7 +14,8 @@ export interface ThreadFilter {
 
 /** True while omo reports a running turn in the thread. */
 export function isRunning(thread: ThreadSummary): boolean {
-  return thread.status.type === "active";
+  return thread.status.type === "active" || (thread.children?.some(isRunning) ?? false)
+    || (thread.tasks?.some(task => task.status === "running") ?? false);
 }
 
 /** True when the trimmed, case-insensitive `query` is empty or occurs in the thread's name, preview, or `title`. */
@@ -57,7 +58,10 @@ export function filterGroups(
   if (filter.query.trim() === "" && !filter.runningOnly && filter.period === "any") return [...groups];
   const result: WorkspaceGroup[] = [];
   for (const group of groups) {
-    const threads = group.threads.filter((thread) => threadPasses(thread, titleOf(thread), filter, nowMs));
+    const matches = (thread: ThreadSummary): boolean => threadPasses(thread, titleOf(thread), filter, nowMs)
+      || (thread.children?.some(matches) ?? false)
+      || (filter.query.trim() !== "" && (thread.tasks?.some(task => task.title.toLowerCase().includes(filter.query.trim().toLowerCase())) ?? false));
+    const threads = group.threads.filter(matches);
     if (threads.length > 0) result.push({ ...group, threads });
   }
   return result;

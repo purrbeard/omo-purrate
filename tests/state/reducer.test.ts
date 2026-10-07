@@ -207,6 +207,20 @@ describe("reduce", () => {
     expect(state.notices).toMatchObject([{ level: "error" }]);
   });
 
+  it("keeps an unanswered non-blocking question after the server cancels it at turn end", () => {
+    const received = reduce(createInitialState(), {
+      type: "rpc/serverRequest",
+      request: { id: 3, method: "item/tool/requestUserInput", params: {
+        threadId, turnId: "t1", itemId: "q", waitForAnswer: false,
+        questions: [{ id: "q1", header: "H", question: "?", options: null }],
+      } },
+      receivedAtMs: 5,
+    });
+    const resolved = reduce(received, notification("serverRequest/resolved", { threadId, requestId: 3 }));
+    expect(resolved.pendingRequests).toMatchObject([{ id: 3, kind: "userInput", resolved: true }]);
+    expect(reduce(resolved, { type: "rpc/serverRequestAnswered", id: 3 }).pendingRequests).toEqual([]);
+  });
+
   it("ignores items of unknown type", () => {
     const started = replay([turnStarted(threadId, "t1")]);
     const next = reduce(started, notification("item/started", { threadId, turnId: "t1", item: { type: "hologram", id: "h1" } }));

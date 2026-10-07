@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { branchSession, branchSessionText, userMessageText, uuidv7 } from "../../electron/history/branch-session";
+import { branchSession, branchSessionText, retryEntryId, userMessageText, uuidv7 } from "../../electron/history/branch-session";
 
 const header = { type: "session", version: 3, id: "source", timestamp: "2026-10-05T00:00:00.000Z", cwd: "/work", parentSession: "/older.jsonl" };
 const user = (id: string, parentId: string | null, text: string) => ({ type: "message", id, parentId, message: { role: "user", content: [{ type: "text", text }] } });
@@ -15,6 +15,14 @@ function parse(text: string): Array<Record<string, unknown>> {
 }
 
 describe("branchSessionText", () => {
+  it("locates a repeated native prompt only on the active branch without rewriting it", () => {
+    const original = jsonl(user("u1", null, "again"), assistant("a1", "u1"), user("u2", "a1", "again"), assistant("a2", "u2"));
+    expect(retryEntryId(original, { text: "again", occurrence: 1 })).toBe("u2");
+    const selected = original + JSON.stringify({ type: "custom", id: "selection", parentId: "a1", customType: "omoui.tree.selection", data: {} }) + "\n";
+    expect(retryEntryId(selected, { text: "again", occurrence: 0 })).toBe("u1");
+    expect(() => retryEntryId(selected, { text: "again", occurrence: 1 })).toThrow(/active branch/);
+    expect(selected).toContain('"id":"a2"');
+  });
   const source = jsonl(
     header,
     user("u1", null, "again"),

@@ -1,0 +1,136 @@
+/* Dependency columns on a horizontal canvas. Geometry (card size, pitches, padding) is owned by workflow-graph.ts and
+   arrives as inline sizes; this sheet only paints with the DSH token palette and the 8/12/16px rhythm. */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 0 12px;
+}
+.toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+}
+.zoomButton { width: 28px; padding: 0; font-size: 14px; }
+.scale {
+  min-width: 44px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* The canvas alone scrolls sideways; its height follows the scaled graph so the panel body keeps vertical scrolling. */
+.viewport {
+  position: relative;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.stage { position: relative; overflow: hidden; }
+.canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  background-image: radial-gradient(var(--dsw-alias-border-l2) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+.edges {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.edges g { color: var(--dsw-alias-border-l4); }
+.edges g[data-state="done"] { color: var(--dsw-alias-state-success-primary); }
+.edges g[data-state="ongoing"] { color: var(--dsw-alias-state-business-primary); }
+.edges g[data-state="error"] { color: var(--dsw-alias-state-error-primary); }
+.edges g[data-state="warning"] { color: var(--dsw-alias-state-warn-primary); }
+.edge {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+.arrow { fill: currentColor; stroke: none; }
+.columnLabel {
+  position: absolute;
+  box-sizing: border-box;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.node {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-button-elevated-fill);
+  box-shadow: inset 3px 0 0 var(--dsw-alias-border-l3);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.node:hover { background: var(--dsw-alias-interactive-bg-hover-solid); border-color: var(--dsw-alias-border-l4); }
+.node:active { background: var(--dsw-specific-selector); }
+.node:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+/* The status rail repeats the StateDot semantic on the card's leading edge; the status word carries it in text. */
+.node[data-dot="done"] { box-shadow: inset 3px 0 0 var(--dsw-alias-state-success-primary); }
+.node[data-dot="ongoing"] { box-shadow: inset 3px 0 0 var(--dsw-alias-state-business-primary); }
+.node[data-dot="error"] { box-shadow: inset 3px 0 0 var(--dsw-alias-state-error-primary); }
+.node[data-dot="warning"] { box-shadow: inset 3px 0 0 var(--dsw-alias-state-warn-primary); }
+.nodeHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.nodeName,
+.nodeStatus,
+.nodeDeps {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nodeName { font-weight: 500; }
+.nodeMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+.node[data-dot="error"] .nodeStatus { color: var(--dsw-alias-state-error-primary); }
+.nodeElapsed { flex: none; font-variant-numeric: tabular-nums; }
+.nodeDeps {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+.unresolved { color: var(--dsw-alias-state-warn-label); }
+.empty {
+  margin: 0;
+  padding: 16px 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+@media (prefers-reduced-motion: reduce) {
+  .node { transition: none; }
+}

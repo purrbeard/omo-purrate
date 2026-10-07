@@ -17,26 +17,31 @@ import {
   IconSparkleMedium,
   IconUserOutlineMedium,
   Tooltip,
+  Button,
   useModalLayer,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { IconProps } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useT } from "../../i18n";
 import type { MessageKey, Translate } from "../../i18n";
 import { TESTID } from "../testids";
-import { uiState, useUiState } from "../ui-state";
+import { uiState, updatePreferences, useUiState } from "../ui-state";
+import { DEFAULT_PREFERENCES } from "../../../shared/ipc";
+import { useAppStore } from "../../state";
 import { AboutSection } from "./AboutSection";
 import { AccountsSection } from "./AccountsSection";
 import { AndroidSection } from "./AndroidSection";
 import { GeneralSection } from "./GeneralSection";
+import { AppearanceSection } from "./AppearanceSection";
 import { DevicesSection } from "./DevicesSection";
 import { IphoneSection } from "./IphoneSection";
 import { KeybindingsSection } from "./KeybindingsSection";
 import { McpSection } from "./McpSection";
 import { ModelSection } from "./ModelSection";
 import { OmoSection } from "./OmoSection";
+import { SkillsSection } from "./SkillsSection";
 import css from "./SettingsDialog.module.css";
 
-type SectionId = "general" | "appearance" | "keybindings" | "model" | "omo" | "accounts" | "mcp" | "android" | "iphone" | "devices" | "about";
+type SectionId = "general" | "appearance" | "keybindings" | "model" | "skills" | "omo" | "accounts" | "mcp" | "android" | "iphone" | "devices" | "about";
 
 interface SectionEntry {
   id: SectionId;
@@ -95,18 +100,17 @@ const GROUPS: readonly SectionGroup[] = [
         id: "general",
         label: "shell.settings.nav.general",
         icon: IconSettingsOutlineMedium,
-        keys: ["shell.settings.theme", "shell.settings.language"],
+        keys: ["shell.settings.theme", "shell.settings.language", "shell.settings.threadNotifications", "shell.settings.timeFormat", "shell.settings.autoSettle"],
         terms: [],
         render: () => <GeneralSection />,
       },
-      // Theme and language live in GeneralSection; Appearance shows the same controls until that section is split.
       {
         id: "appearance",
         label: "shell.settings.nav.appearance",
         icon: IconPersonalizationOutlineMedium,
         keys: ["shell.settings.theme", "shell.settings.theme.light", "shell.settings.theme.dark"],
         terms: [],
-        render: () => <GeneralSection />,
+        render: () => <AppearanceSection />,
       },
       {
         id: "keybindings",
@@ -143,6 +147,14 @@ const GROUPS: readonly SectionGroup[] = [
         ],
         terms: ["omo", "opencodex"],
         render: () => <OmoSection />,
+      },
+      {
+        id: "skills",
+        label: "shell.settings.nav.skills",
+        icon: IconSparkleMedium,
+        keys: ["shell.settings.skills.intro"],
+        terms: ["skills"],
+        render: () => <SkillsSection />,
       },
       {
         id: "accounts",
@@ -227,9 +239,24 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
   const toggle = useRef<HTMLButtonElement>(null);
   const [query, setQuery] = useState("");
   const [navOpen, setNavOpen] = useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const store = useAppStore();
   const narrow = useNarrow();
   const drawerOpen = narrow && navOpen;
   useModalLayer(panel, true, onClose);
+  useEffect(() => {
+    const focusSearch = (event: globalThis.KeyboardEvent): void => {
+      if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.key !== "/") return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName))) return;
+      event.preventDefault();
+      if (narrow) setNavOpen(true);
+      search.current?.focus();
+    };
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, [narrow]);
 
   const groups = useMemo(
     () =>
@@ -322,6 +349,7 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
               {group.sections.map((entry) => (
                 <button
                   key={entry.id}
+                  data-testid={TESTID.settingsNavItem}
                   type="button"
                   className={clsx(css.navCell, entry.id === section && css.active)}
                   aria-current={entry.id === section ? "true" : undefined}
@@ -381,6 +409,19 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
         </header>
         <div className={css.options} key={section}>
           {current.render()}
+          <div className={css.card}>
+            <div className={css.cardBody}>
+              {confirmingReset ? <div role="alertdialog" aria-label={t("shell.settings.restoreConfirm")}>
+                <p>{t("shell.settings.restoreConfirm")}</p>
+                <Button variant="outline" onClick={() => setConfirmingReset(false)}>{t("common.cancel")}</Button>
+                <Button variant="primary" data-testid={TESTID.settingsRestoreConfirm} onClick={() => {
+                  setConfirmingReset(false);
+                  updatePreferences({ ...DEFAULT_PREFERENCES, onboardingCompleted: true, modelProfile: null, profileModels: {} }).then(() => { setResetError(null); store.dispatch({ type: "composer/modelSelected", modelId: null, effort: null, profile: null }); }, (error: unknown) => setResetError(error instanceof Error ? error.message : String(error)));
+                }}>{t("shell.settings.restoreConfirmAction")}</Button>
+              </div> : <Button variant="outline" data-testid={TESTID.settingsRestoreDefaults} onClick={() => setConfirmingReset(true)}>{t("shell.settings.restoreDefaults")}</Button>}
+              {resetError && <p role="alert" className={css.error}>{resetError}</p>}
+            </div>
+          </div>
         </div>
       </div>
     </div>,

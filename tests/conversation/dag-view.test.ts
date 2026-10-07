@@ -42,6 +42,13 @@ describe("compact work derivation", () => {
     expect(forest[0]?.children[0]?.children[0]?.task.task_id).toBe("grand");
     expect(forest).toHaveLength(1);
   });
+  it("does not count detached or restored task records as executing while the parent is live", () => {
+    const suspended = { ...task("owner"), residency_state: "persisted_only" };
+    const detached = { ...task("detached"), residency_state: "rpc_detached" };
+    const restored = { task_id: "history", status: "running", created_at: AT, source: "history" as const };
+    expect(workSummary([run], [suspended, detached, restored, task("resident")], true).running).toBe(1);
+    expect(workSummary([{ ...run, status: "completed" }], [], true).running).toBe(0);
+  });
   it("does not duplicate child work or loop through cyclic session links", () => {
     const forest = taskForest([task("owner", "s1"), task("child", "s2")], [
       work("owner", "s2", "s1"), work("child", "s1", "s2"),

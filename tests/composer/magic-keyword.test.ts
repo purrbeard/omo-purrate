@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { detectMagicKeyword, findMagicKeywords, segmentDraft } from "../../src/ui/composer/magic-keyword";
+import { serializeSkillDraft } from "../../src/ui/composer/skill-draft";
 
 describe("detectMagicKeyword", () => {
   it("matches ulw and ultrawork as whole words, case-insensitively", () => {
@@ -16,8 +17,18 @@ describe("detectMagicKeyword", () => {
     expect(detectMagicKeyword("/ULW-LOOP")).toMatchObject({ keyword: "ulw-loop", text: "/ULW-LOOP" });
   });
 
+  it("matches mass ulw variants as one keyword before ulw", () => {
+    for (const text of ["mass ulw", "mass-ulw", "/mass-ulw", "MASS ULW", "/MASS-ULW", "mass\tulw"]) {
+      expect(detectMagicKeyword(text)).toEqual({ keyword: "mass-ulw", text, start: 0, end: text.length });
+    }
+    expect(findMagicKeywords("please mass ulw, then ulw")).toEqual([
+      { keyword: "mass-ulw", text: "mass ulw", start: 7, end: 15 },
+      { keyword: "ulw", text: "ulw", start: 22, end: 25 },
+    ]);
+  });
+
   it("ignores the keyword inside other tokens", () => {
-    for (const text of ["ulw-loopx", "x/ulw-loop", "mass-ulw", "ulwx", "xulw", "ulw/", "ulw_mode", "ultraworker", "my_ulw"]) {
+    for (const text of ["ulw-loopx", "x/ulw-loop", "mass-ulwx", "xmass-ulw", "x/mass-ulw", "mass-ulw/", "mass-ulw_mode", "ulwx", "xulw", "ulw/", "ulw_mode", "ultraworker", "my_ulw"]) {
       expect(detectMagicKeyword(text), text).toBeNull();
     }
   });
@@ -48,7 +59,15 @@ describe("segmentDraft", () => {
 
   it("returns one plain segment for text without keywords, including the empty draft", () => {
     expect(segmentDraft("")).toEqual([{ kind: "text", text: "" }]);
-    expect(segmentDraft("mass-ulw")).toEqual([{ kind: "text", text: "mass-ulw" }]);
+    expect(segmentDraft("mass-ulwx")).toEqual([{ kind: "text", text: "mass-ulwx" }]);
     expect(segmentDraft("/ulw-loop go")).toEqual([{ kind: "keyword", text: "/ulw-loop" }, { kind: "text", text: " go" }]);
+  });
+
+  it("preserves raw mass-ulw text through highlighting and transport serialization", () => {
+    for (const text of ["  MASS ulw: fix it\n", "please mass-ulw then ULW", "/mass-ulw  keep this spacing"]) {
+      expect(segmentDraft(text).map((segment) => segment.text).join("")).toBe(text);
+      expect(serializeSkillDraft({ text, selected: [] })).toBe(text);
+    }
+    expect(serializeSkillDraft({ text: "/review /MASS-ULW  fix it", selected: ["review"] })).toBe("/skill:review /MASS-ULW  fix it");
   });
 });

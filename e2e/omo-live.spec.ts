@@ -17,7 +17,7 @@ const current = (): LaunchedApp => {
 };
 
 const start = async (): Promise<void> => {
-  launched = await launchApp({ omo: "fake", fakeHome, userData, pickDir });
+  launched = await launchApp({ omo: "fake", fakeHome, userData, pickDir, size: { width: 1440, height: 900 } });
 };
 
 const node = (page: Page, id: string) => page.locator(`[data-testid="${TESTID.dagNode}"][data-node-id="${id}"]`);
@@ -54,6 +54,7 @@ test("live stages show DAG states, child output, todo and goal across themes and
   await send(page, "SCENARIO:omo-live");
   await started;
   await byTestId(page, TESTID.omoActivityToggle).click();
+  await page.getByTestId("workflow-list").click();
 
   const run = byTestId(page, TESTID.dagRun);
   await expect(run).toContainText("mass-ulw display");
@@ -89,10 +90,11 @@ test("live stages show DAG states, child output, todo and goal across themes and
   await shot(page, "C001-live-dark");
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(760, 600));
   await expect(page.locator("html")).toHaveJSProperty("clientWidth", 760);
+  await page.getByTestId("workflow-close").click();
   await expect(byTestId(page, TESTID.composerInput)).toBeVisible();
   await expect(byTestId(page, TESTID.composerInput)).toBeEnabled();
   await shot(page, "C001-narrow");
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1280, 820));
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900));
   await setTheme(page, "light");
 });
 
@@ -111,6 +113,7 @@ test("thread switching isolates activity and final failure clears the goal", asy
   if (await byTestId(page, TESTID.omoActivityToggle).getAttribute("aria-expanded") === "false") {
     await byTestId(page, TESTID.omoActivityToggle).click();
   }
+  await page.getByTestId("workflow-list").click();
   await expect(byTestId(page, TESTID.dagRun)).toHaveAttribute("data-status", "running");
   await expect(task(page, "A")).toHaveAttribute("data-status", "completed");
   await expect(task(page, "B")).toHaveAttribute("data-status", "running");

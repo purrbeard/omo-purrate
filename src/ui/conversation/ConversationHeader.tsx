@@ -7,6 +7,7 @@ import { TESTID } from "../testids";
 import { uiState, useUiState } from "../ui-state";
 import { threadTitle, workspaceName } from "./format";
 import { OpenButton } from "./OpenButton";
+import { CommitPushButton } from "./CommitPushButton";
 import css from "./ConversationHeader.module.css";
 
 function SidebarToggle() {
@@ -26,17 +27,22 @@ function SidebarToggle() {
   );
 }
 
-/** Window-drag header strip: the breadcrumb (workspace badge, workspace, thread title), the activity chip, the running state and the Open split button. */
+/**
+ * Window-drag header strip: the breadcrumb (workspace badge, workspace, thread title), the activity chip, the running
+ * state, the Open split button and, at the far right, the panel toggles.
+ */
 export const ConversationHeader = memo(function ConversationHeader({
   active,
   thread,
   running,
   activity,
+  panels,
 }: {
   active: boolean;
   thread: ThreadSummary | null;
   running: boolean;
   activity?: ReactNode;
+  panels?: ReactNode;
 }) {
   const t = useT();
   const { sidebarVisible, workspacePanelOpen } = useUiState();
@@ -77,8 +83,10 @@ export const ConversationHeader = memo(function ConversationHeader({
             <TextShimmer active>{t("conversation.header.running")}</TextShimmer>
           </span>
         )}
+        {cwd !== "" && <CommitPushButton cwd={cwd} />}
         {cwd !== "" && <OpenButton cwd={cwd} />}
         {cwd !== "" && <button type="button" className={css.sidebarToggle} data-testid="workspace-toggle" aria-pressed={workspacePanelOpen} aria-label={t("shell.workspace.files")} onClick={() => uiState.setWorkspacePanelOpen(!workspacePanelOpen)}>{t("shell.workspace.files")}</button>}
+        {panels}
       </div>
     </header>
   );

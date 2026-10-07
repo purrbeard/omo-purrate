@@ -48,6 +48,18 @@ export function ModelSection() {
     <section className={css.section} data-testid="settings-model" aria-busy={saving}>
       <SectionHeading title={t("shell.settings.nav.model")} intro={t("shell.settings.model.intro")} />
       <div className={clsx(css.card, css.wrapRows)}>
+        <SettingRow title={t("shell.settings.model.default")} hint={t("shell.settings.model.defaultHint")}>
+          <select className={css.select} data-testid="settings-model-default" value={preferences?.modelId ?? ""} disabled={saving || preferences === null} onChange={(event) => {
+            setSaving(true);
+            updatePreferences({ modelId: event.target.value || null }).then(() => { setSaving(false); setError(null); }, (reason: unknown) => { setSaving(false); setError(errorMessage(reason)); });
+          }}>
+            <option value="">{t("shell.settings.model.askDefault")}</option>
+            {preferences?.modelId && !models.some((model) => model.id === preferences.modelId) && <option value={preferences.modelId}>{preferences.modelId}</option>}
+            {groups.map((group) => <optgroup key={group.provider} label={group.provider}>{group.models.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</optgroup>)}
+          </select>
+        </SettingRow>
+      </div>
+      <div className={clsx(css.card, css.wrapRows)}>
         {LANES.map((lane) => {
           const title = `${t(`composer.profile.${lane.family}`)} · ${t(`composer.profile.${lane.weight}`)}`;
           const configured = profileModels?.[lane.id];
@@ -102,6 +114,13 @@ export function ModelSection() {
         })}
       </div>
       {groups.length === 0 && <p className={css.muted}>{t("composer.model.empty")}</p>}
+      <div className={css.card}>
+        <div className={css.cardBody}>
+          <h3>{t("shell.settings.model.available")}</h3>
+          <p className={css.muted}>{t("shell.settings.model.availableHint")}</p>
+          {models.map((model) => <p key={model.id}><strong>{model.displayName}</strong> <code>{model.id}</code></p>)}
+        </div>
+      </div>
       <ModelRoutingSection />
       {error !== null && (
         <p className={css.error} role="alert">

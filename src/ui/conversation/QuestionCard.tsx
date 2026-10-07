@@ -259,6 +259,7 @@ export function QuestionCard({ request }: { request: QuestionRequest }) {
       aria-label={t("conversation.question.waiting")}
       aria-busy={busy}
     >
+      {request.resolved && <p className={css.followUp} role="status">{t("conversation.question.followUp")}</p>}
       {questions.map((question) => (
         <QuestionBlock
           key={question.id}

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export function runDagScenario(record, turn, { home, notify, guard }) {
+export function runDagScenario(record, turn, { home, notify, guard, background = false }) {
   const threadId = record.thread.id;
   const cwd = realpathSync(record.thread.cwd);
   // Use the native legacy workspace store instead of duplicating platform-specific project hashing.
@@ -108,7 +108,7 @@ export function runDagScenario(record, turn, { home, notify, guard }) {
       lastAssistantLine: stage === 1 ? "Run tests" : "Inspect screenshots", turns: 4, toolCalls: 9 });
   }
   emit();
-  return guard(turn, new Promise((resolve) => {
+  const progress = new Promise((resolve) => {
     record.advanceLive = () => {
       stage++;
       emit();
@@ -117,5 +117,6 @@ export function runDagScenario(record, turn, { home, notify, guard }) {
         resolve();
       }
     };
-  }));
+  });
+  return background ? Promise.resolve() : guard(turn, progress);
 }

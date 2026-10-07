@@ -1,10 +1,10 @@
-import { useCallback, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
+import type { SessionTreeResult } from "../../../shared/ipc";
 import { Button, IconEditOutlineRegular, IconRefreshOutlineRegular } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { UserMessageItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import { useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
-import { threadTitle } from "./format";
 import { resendOf } from "./resend";
 import css from "./BranchControls.module.css";
 
@@ -15,15 +15,43 @@ export interface BranchAt {
 }
 
 function useBranch({ threadId, turnId }: BranchAt): (item: UserMessageItem, text: string) => Promise<boolean> {
-  const t = useT();
   const actions = useActions();
-  const title = useAppSelector((state) => threadTitle(state.threads[threadId] ?? null, t("shell.newSession")));
-  // A branch of a branch keeps its title instead of stacking the suffix.
-  const suffix = t("conversation.branch.name", { title: "" });
-  const name = title.endsWith(suffix) ? title : t("conversation.branch.name", { title });
   return useCallback(
-    (item, text) => actions.branchFrom(threadId, turnId, item.id, text, name),
-    [actions, threadId, turnId, name],
+    (item, text) => actions.branchFrom(threadId, turnId, item.id, text, ""),
+    [actions, threadId, turnId],
+  );
+}
+
+/** Alternative answers stay in one native session rather than creating sidebar entries. */
+export function SessionBranches({ threadId }: { threadId: string }) {
+  const bridge = window.omo;
+  const actions = useActions();
+  const t = useT();
+  const lastTurn = useAppSelector(state => state.conversations[threadId]?.turns.at(-1));
+  const loaded = useAppSelector(state => state.conversations[threadId]?.historyState === "loaded");
+  const running = useAppSelector(state => state.conversations[threadId]?.activeTurnId !== null);
+  const [tree, setTree] = useState<SessionTreeResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    if (!loaded) return;
+    let cancelled = false;
+    void bridge.sessionTree(threadId, { type: "list" }).then(value => { if (!cancelled) setTree(value); }, () => { if (!cancelled) setTree(null); });
+    return () => { cancelled = true; };
+  }, [bridge, threadId, loaded, lastTurn?.id, lastTurn?.status, revision]);
+  if (!tree || tree.branches.length < 2) return null;
+  return (
+    <label className={css.branchPicker}>
+      <span>{t("conversation.branch.versions")}</span>
+      <select data-testid="session-branches" aria-label={t("conversation.branch.versions")} disabled={running || busy}
+        value={tree.branches.find(branch => branch.active)?.entryId ?? ""}
+        onChange={event => {
+          setBusy(true);
+          void actions.switchBranch(threadId, event.target.value, tree.leafId).finally(() => { setBusy(false); setRevision(value => value + 1); });
+        }}>
+        {tree.branches.map((branch, index) => <option key={branch.entryId} value={branch.entryId}>{index + 1}. {branch.label}</option>)}
+      </select>
+    </label>
   );
 }
 
@@ -94,7 +122,7 @@ export function EditMessageForm({ at, item, onClose }: { at: BranchAt; item: Use
   );
 }
 
-/** Regenerates the answer to `item` in a new branch, keeping the current answer in the original thread. */
+/** Regenerates inside the same session, keeping the current answer on its original tree branch. */
 export function RegenerateButton({ at, item, disabled }: { at: BranchAt; item: UserMessageItem; disabled: boolean }) {
   const t = useT();
   const branch = useBranch(at);

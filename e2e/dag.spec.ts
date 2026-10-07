@@ -5,7 +5,7 @@ import { byTestId, launchApp, newSession, send, setTheme, shot, tempDir, threadR
 
 test("compact DAG and nested subagent todos update without disturbing the conversation", async () => {
   const pickDir = tempDir("dag-workspace");
-  const launched = await launchApp({ omo: "fake", pickDir });
+  const launched = await launchApp({ omo: "fake", pickDir, size: { width: 1440, height: 900 } });
   const { page, app } = launched;
   const capture = async (name: string): Promise<void> => {
     mkdirSync("/tmp/dag-ev", { recursive: true });
@@ -26,6 +26,7 @@ test("compact DAG and nested subagent todos update without disturbing the conver
     await expect(byTestId(page, TESTID.omoActivity)).toHaveCount(0);
     await capture("collapsed");
     await chip.click();
+    await page.getByTestId("workflow-list").click();
     const panel = byTestId(page, TESTID.omoActivity);
     await expect(panel).toBeVisible();
     await expect(entity("layout").getByTestId(TESTID.taskSteps).first()).toHaveText("4/9");
@@ -63,12 +64,15 @@ test("compact DAG and nested subagent todos update without disturbing the conver
     await expect(page.locator("html")).toHaveJSProperty("clientWidth", 900);
     await expect(byTestId(page, TESTID.composerInput)).toBeVisible();
     await capture("expanded-narrow");
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1280, 820));
+    await page.getByTestId("workflow-close").click();
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900));
     // Apply locale through the same settings control used by the app.
     await byTestId(page, TESTID.openSettings).click();
+    await byTestId(page, TESTID.settingsDialog).locator('[data-section="appearance"]').click();
     await page.getByRole("tab", { name: "한국어", exact: true }).click();
     await page.keyboard.press("Escape");
     await expect(chip).toContainText("완료");
+    await chip.click();
     await capture("expanded-ko");
     const other = await newSession(page);
     await expect(threadRow(page, other)).toHaveAttribute("aria-current", "page");

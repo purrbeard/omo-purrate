@@ -53,6 +53,7 @@ test("full scenario: reasoning, approval, question, markdown answer", async () =
   threadId = await newSession(page);
   await send(page, "SCENARIO:full");
 
+  await page.getByTestId("turn-work-log").first().locator(":scope > summary").click();
   const reasoning = byTestId(page, TESTID.reasoning).first();
   await expect(reasoning).toBeVisible();
   await expect(reasoning).not.toHaveAttribute("data-streaming");
@@ -120,6 +121,7 @@ test("relaunch lists the thread and restores its history", async () => {
   await expect(row).toBeVisible();
   await row.getByRole("button").first().click();
   await expect(row).toHaveAttribute("aria-current", "page");
+  await page.getByTestId("turn-work-log").first().locator(":scope > summary").click();
   await expect(page.locator(`[data-testid="${TESTID.toolCard}"][data-tool="eval"]`)).toBeVisible();
   await expect(byTestId(page, TESTID.assistantMessage).filter({ hasText: "You picked B" })).toBeVisible();
   await shot(page, "C002-resumed");

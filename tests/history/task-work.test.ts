@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { loadTaskWork, taskStore } from "../../electron/history/task-work";
+import { loadTaskWork, readTaskLinks, taskStore } from "../../electron/history/task-work";
 
 const dirs: string[] = [];
 afterEach(async () => { await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))); });
@@ -21,7 +21,7 @@ function record(id: string, parent: string, child: string) {
     residency_state: "resident", model: "provider/model", created_at: "2026-10-05T00:00:00Z", updated_at: "2026-10-05T00:00:00Z",
     spawn_spec: { prompt: "Private prompt must not cross IPC" } };
 }
-async function save(store: string, value: ReturnType<typeof record>) {
+async function save(store: string, value: ReturnType<typeof record> & { task_summary?: string; name?: string }) {
   await writeFile(path.join(store, "tasks", `${value.task_id}.json`), JSON.stringify(value));
 }
 describe("read-only native child work", () => {
@@ -61,6 +61,49 @@ describe("read-only native child work", () => {
     expect(result[0]?.activity).toBe("Testing now");
     expect(result[0]?.task).not.toHaveProperty("spawn_spec");
   });
+  it("loads parent and child records and child todos when legacy contains only empty scaffolds", async () => {
+    const { agent, cwd, store } = await fixture();
+    await mkdir(path.join(cwd, ".omo", "senpi-task", "tasks"), { recursive: true });
+    await mkdir(path.join(cwd, ".omo", "senpi-task", "children", "st_empty", "sessions"), { recursive: true });
+    await save(store, record("st_parent", "root", "s1"));
+    await save(store, record("st_child", "s1", "s2"));
+    const directory = path.join(store, "children", "st_child", "sessions", "st_child");
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, "now_s2.jsonl"), [
+      { type: "session", id: "s2" },
+      { type: "custom", id: "todo", parentId: null, customType: "senpi.todo-state",
+        data: { schema: "v2", phases: [{ name: "Child work", tasks: [{ content: "Verify child", status: "in_progress" }] }] } },
+    ].map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+    expect(await taskStore(agent, cwd)).toBe(store);
+    const result = await loadTaskWork(agent, cwd, "root");
+    expect(result.map((work) => work.task.task_id)).toEqual(["st_parent", "st_child"]);
+    expect(result[1]?.todo?.phases[0]?.tasks).toEqual([{ content: "Verify child", status: "in_progress" }]);
+    expect((await readTaskLinks({ cwd, agentDir: agent })).sort((a, b) => a.taskId!.localeCompare(b.taskId!))).toEqual([
+      { parentId: "s1", childId: "s2", taskId: "st_child", title: "st_child", status: "running" },
+      { parentId: "root", childId: "s1", taskId: "st_parent", title: "st_parent", status: "running" },
+    ]);
+  });
+  it("indexes every parent and in-process task without reading child transcripts", async () => {
+    const { agent, cwd, store } = await fixture();
+    await save(store, { ...record("st_parent", "root", "s1"), task_summary: "Parent summary" });
+    await save(store, { ...record("st_child", "s1", "s2"), name: "Child name" });
+    await save(store, record("st_foreign", "foreign-root", "s3"));
+    await writeFile(path.join(store, "tasks", "st_local.json"), JSON.stringify({
+      task_id: "st_local", parent_session_id: "root", name: "Local work", status: "completed",
+    }));
+    await writeFile(path.join(store, "tasks", "partial.json"), '{"task_id":');
+    await writeFile(path.join(store, "tasks", "bad.json"), '{"parent_session_id":"root","task_id":99}');
+    await writeFile(path.join(store, "tasks", "host.json"), JSON.stringify({
+      ...record("st_host", "root", "s4"), host_session: { session_path: path.join(cwd, "outside.jsonl") },
+    }));
+    expect((await readTaskLinks({ cwd, agentDir: agent })).sort((a, b) => a.taskId!.localeCompare(b.taskId!))).toEqual([
+      { parentId: "s1", childId: "s2", taskId: "st_child", title: "Child name", status: "running" },
+      { parentId: "foreign-root", childId: "s3", taskId: "st_foreign", title: "st_foreign", status: "running" },
+      { parentId: "root", childId: "s4", taskId: "st_host", title: "st_host", status: "running" },
+      { parentId: "root", taskId: "st_local", title: "Local work", status: "completed" },
+      { parentId: "root", childId: "s1", taskId: "st_parent", title: "Parent summary", status: "running" },
+    ]);
+  });
   it("ignores incomplete and malformed records without inventing todos", async () => {
     const { agent, cwd, store } = await fixture();
     await save(store, record("st_parent", "root", "s1"));
@@ -81,18 +124,33 @@ describe("read-only native child work", () => {
       await symlink(outside, path.join(store, "tasks", "external.json"));
     }
     expect(await loadTaskWork(agent, cwd, "root")).toEqual([]);
+    expect(await readTaskLinks({ cwd, agentDir: agent })).toEqual([]);
     await mkdir(path.join(agent, "sessions"), { recursive: true });
     await writeFile(path.join(store, "tasks", "host.json"), JSON.stringify({
       ...record("st_host", "root", "s1"), host_session: { session_path: outside },
     }));
     await expect(loadTaskWork(agent, cwd, "root")).rejects.toThrow("outside its native store");
   });
-  it("prefers existing legacy stores and rejects unsafe session input", async () => {
-    const { agent, cwd } = await fixture();
+  it("preserves legacy records over agent records and rejects unsafe session input", async () => {
+    const { agent, cwd, store } = await fixture();
+    const legacy = path.join(cwd, ".omo", "senpi-task");
+    await mkdir(path.join(legacy, "tasks"), { recursive: true });
+    await save(legacy, record("st_legacy", "root", "s1"));
+    await save(store, record("st_agent", "root", "s2"));
+    expect(await taskStore(agent, cwd)).toBe(await realpath(legacy));
+    expect((await loadTaskWork(agent, cwd, "root")).map((work) => work.task.task_id)).toEqual(["st_legacy"]);
+    expect(await readTaskLinks({ cwd, agentDir: agent })).toEqual([
+      { parentId: "root", childId: "s1", taskId: "st_legacy", title: "st_legacy", status: "running" },
+    ]);
+    await expect(loadTaskWork(agent, cwd, "../escape")).rejects.toThrow("Invalid child work");
+  });
+  it("preserves an adopted legacy store even when only its marker remains", async () => {
+    const { agent, cwd, store } = await fixture();
     const legacy = path.join(cwd, ".omo", "senpi-task");
     await mkdir(legacy, { recursive: true });
+    await writeFile(path.join(legacy, ".in-project"), "");
+    await save(store, record("st_agent", "root", "s1"));
     expect(await taskStore(agent, cwd)).toBe(await realpath(legacy));
     expect(await loadTaskWork(agent, cwd, "root")).toEqual([]);
-    await expect(loadTaskWork(agent, cwd, "../escape")).rejects.toThrow("Invalid child work");
   });
 });

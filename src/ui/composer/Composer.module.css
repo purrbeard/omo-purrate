@@ -199,8 +199,7 @@
 }
 
 .keywordHint {
-  display: flex;
-  align-items: baseline;
+  display: block;
   margin: 2px 16px 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: 13px;
@@ -247,7 +246,6 @@
   }
 }
 
-.statusChip,
 .chip {
   display: inline-flex;
   align-items: center;
@@ -264,18 +262,6 @@
   font-size: 13px;
   line-height: 20px;
   font-weight: 500;
-}
-
-.statusChip {
-  outline: none;
-  cursor: default;
-}
-
-.statusChip:focus-visible {
-  box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-}
-
-.chip {
   cursor: pointer;
 }
 

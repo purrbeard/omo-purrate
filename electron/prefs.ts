@@ -1,20 +1,21 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { LocalePreference, ModelProfile, Preferences, ThemePreference } from "../shared/ipc";
+import { DEFAULT_PREFERENCES } from "../shared/ipc";
+import type { LocalePreference, ModelProfile, PalettePreference, Preferences, ThemePreference, ThreadNotificationPreference, TimeFormatPreference } from "../shared/ipc";
+
+export { DEFAULT_PREFERENCES };
 
 const THEMES: readonly ThemePreference[] = ["system", "light", "dark"];
+const PALETTES: readonly PalettePreference[] = ["omo", "classic", "mint", "ocean", "sbd"];
 const LOCALES: readonly LocalePreference[] = ["system", "en", "ko"];
 const PROFILES: readonly ModelProfile[] = ["daily-normal", "daily-heavy", "geeky-normal", "geeky-heavy"];
 const MAX_RECENT = 10;
 
-export const DEFAULT_PREFERENCES: Preferences = {
-  omoAutoUpdate: true,
-  theme: "system",
-  locale: "system",
-  lastWorkspace: null,
-  recentWorkspaces: [],
-  modelId: null,
-};
+const THREAD_NOTIFICATION_MODES: readonly ThreadNotificationPreference[] = ["off", "background", "always"];
+const TIME_FORMATS: readonly TimeFormatPreference[] = ["system", "12h", "24h"];
+const MIN_SETTLE_DAYS = 1;
+const MAX_SETTLE_DAYS = 365;
+const MAX_SETTLED = 200;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -50,17 +51,58 @@ function profileModels(value: unknown, current: Preferences["profileModels"]): P
   return next;
 }
 
+/** Older preferences without the flag count as completed when a workspace was already used, so upgrades skip the wizard. */
+function onboardingCompleted(patch: Record<string, unknown>, current: boolean): boolean {
+  if (typeof patch["onboardingCompleted"] === "boolean") return patch["onboardingCompleted"];
+  const last = patch["lastWorkspace"];
+  const usedWorkspace =
+    (typeof last === "string" && last !== "") ||
+    (Array.isArray(patch["recentWorkspaces"]) &&
+      patch["recentWorkspaces"].some((entry) => typeof entry === "string" && entry !== ""));
+  return usedWorkspace ? true : current;
+}
+
+/** Thread ids, deduplicated, newest last, at most MAX_SETTLED entries. */
+function threadIds(value: unknown, current: string[]): string[] {
+  if (!Array.isArray(value)) return current;
+  const unique: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string" && entry !== "" && !unique.includes(entry)) unique.push(entry);
+  }
+  return unique.slice(-MAX_SETTLED);
+}
+
+/** Whole days clamped into 1..365; anything that is not a finite number keeps the current value. */
+function settleDays(value: unknown, current: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return current;
+  return Math.min(MAX_SETTLE_DAYS, Math.max(MIN_SETTLE_DAYS, Math.round(value)));
+}
+
 /** Applies every valid field of patch to current; invalid or unknown values keep the current value. */
 function merge(current: Preferences, patch: unknown): Preferences {
   if (!isRecord(patch)) return current;
   const has = (key: keyof Preferences): boolean => key in patch;
   return {
+    threadParents: isRecord(patch["threadParents"])
+      ? Object.fromEntries(Object.entries(patch["threadParents"]).filter(([child, parent]) => typeof parent === "string" && child !== parent)) as Record<string, string>
+      : current.threadParents,
     omoAutoUpdate: typeof patch["omoAutoUpdate"] === "boolean" ? patch["omoAutoUpdate"] : current.omoAutoUpdate ?? true,
     theme: has("theme") ? pick(THEMES, patch["theme"], current.theme) : current.theme,
+    palette: has("palette") ? pick(PALETTES, patch["palette"], current.palette ?? "omo") : current.palette ?? "omo",
     locale: has("locale") ? pick(LOCALES, patch["locale"], current.locale) : current.locale,
     lastWorkspace: has("lastWorkspace") ? nullableString(patch["lastWorkspace"], current.lastWorkspace) : current.lastWorkspace,
     recentWorkspaces: has("recentWorkspaces") ? recent(patch["recentWorkspaces"], current.recentWorkspaces) : current.recentWorkspaces,
     modelId: has("modelId") ? nullableString(patch["modelId"], current.modelId) : current.modelId,
+    onboardingCompleted: onboardingCompleted(patch, current.onboardingCompleted),
+    threadNotifications: has("threadNotifications")
+      ? pick(THREAD_NOTIFICATION_MODES, patch["threadNotifications"], current.threadNotifications)
+      : current.threadNotifications,
+    inAppNotifications: typeof patch["inAppNotifications"] === "boolean" ? patch["inAppNotifications"] : current.inAppNotifications,
+    timeFormat: has("timeFormat") ? pick(TIME_FORMATS, patch["timeFormat"], current.timeFormat) : current.timeFormat,
+    autoSettle: typeof patch["autoSettle"] === "boolean" ? patch["autoSettle"] : current.autoSettle,
+    autoSettleDays: has("autoSettleDays") ? settleDays(patch["autoSettleDays"], current.autoSettleDays) : current.autoSettleDays,
+    settledThreads: has("settledThreads") ? threadIds(patch["settledThreads"], current.settledThreads) : current.settledThreads,
+    unsettledThreads: has("unsettledThreads") ? threadIds(patch["unsettledThreads"], current.unsettledThreads) : current.unsettledThreads,
     ...(has("modelProfile") ? { modelProfile: patch["modelProfile"] === null ? null :
       PROFILES.find(value => value === patch["modelProfile"]) ?? current.modelProfile ?? null }
       : current.modelProfile === undefined ? {} : { modelProfile: current.modelProfile }),

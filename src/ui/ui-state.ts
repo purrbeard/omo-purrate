@@ -7,7 +7,10 @@ export const SIDEBAR_DEFAULT_WIDTH = 280;
 
 export interface UiState {
   workspacePanelOpen: boolean;
+  workflowPanelOpen: boolean;
   settingsOpen: boolean;
+  /** First-run wizard visibility; opens on launch until the onboardingCompleted preference is true. */
+  onboardingOpen: boolean;
   sidebarVisible: boolean;
   sidebarWidth: number;
   /** Last preferences read from or written through the bridge; null until the first load. */
@@ -16,7 +19,9 @@ export interface UiState {
 
 let state: UiState = {
   workspacePanelOpen: false,
+  workflowPanelOpen: false,
   settingsOpen: false,
+  onboardingOpen: false,
   sidebarVisible: true,
   sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
   preferences: null,
@@ -40,10 +45,12 @@ export function clampSidebarWidth(width: number): number {
 }
 
 export const uiState = {
-  setWorkspacePanelOpen: (workspacePanelOpen: boolean): void => update({ workspacePanelOpen }),
+  setWorkspacePanelOpen: (workspacePanelOpen: boolean): void => update({ workspacePanelOpen, ...(workspacePanelOpen ? { workflowPanelOpen: false } : {}) }),
+  setWorkflowPanelOpen: (workflowPanelOpen: boolean): void => update({ workflowPanelOpen, ...(workflowPanelOpen ? { workspacePanelOpen: false } : {}) }),
   get: (): UiState => state,
   subscribe,
   setSettingsOpen: (settingsOpen: boolean): void => update({ settingsOpen }),
+  setOnboardingOpen: (onboardingOpen: boolean): void => update({ onboardingOpen }),
   setSidebarVisible: (sidebarVisible: boolean): void => update({ sidebarVisible }),
   toggleSidebar: (): void => update({ sidebarVisible: !state.sidebarVisible }),
   setSidebarWidth: (width: number): void => update({ sidebarWidth: clampSidebarWidth(width) }),

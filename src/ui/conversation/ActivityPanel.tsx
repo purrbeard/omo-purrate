@@ -8,11 +8,12 @@ import { TESTID } from "../testids";
 import {
   currentTodo, groupNodesByDependency, isHistoricalTask, isSuspended, knownNodeState, knownRunStatus, knownTaskStatus,
   nodeActivityLine, nodeDot, nodeElapsedMs, runDot, taskActivityLine, taskDot, taskElapsedMs, taskExcerpt,
-  taskForest, taskRoute, taskTitle, todoCounts, todoDot, workSummary,
+  taskForest, taskRoute, taskTitle, todoCounts, todoDot, waitingWork, workSummary,
   type NodeState, type RunStatus, type TaskStatus, type TaskTree,
 } from "./activity-model";
 import { formatDuration } from "./format";
 import { useTaskWork } from "./use-task-work";
+import { WorkflowGraph } from "./WorkflowGraph";
 import css from "./ActivityPanel.module.css";
 
 const NODE_LABELS = {
@@ -56,8 +57,9 @@ export function ActivityToggle({ threadId, open, controlsId, onToggle }: {
   const runs = useAppSelector((state) => selectDagRuns(state, threadId));
   const tasks = useAppSelector((state) => selectTasks(state, threadId));
   const freshness = useAppSelector((state) => selectThreadLiveState(state, threadId)?.freshness ?? "unattached");
+  const hasStoredWork = useAppSelector(state => state.threadLinks.some(link => link.parentId === threadId && link.taskId !== undefined));
   const { done, failed, running, total } = workSummary(runs, tasks, freshness === "live");
-  if (total === 0) return null;
+  if (total === 0 && !hasStoredWork) return null;
   const label = [t("activity.chipDone", { done, total }), ...(failed > 0 ? [t("activity.chipFailed", { failed })] : [])].join(" · ");
   return (
     <button type="button" className={css.toggle} data-testid={TESTID.omoActivityToggle} data-freshness={freshness}
@@ -73,8 +75,8 @@ export function ActivityToggle({ threadId, open, controlsId, onToggle }: {
 }
 
 /** One line per work entity; todos, full model, result and prompt are available without crowding the overview. */
-function WorkRow({ tree, node, activity, dependencies = [], live, now, depth = 0 }: {
-  tree?: TaskTree; node?: DagNode; activity?: DagActivity; dependencies?: string[]; live: boolean; now: number; depth?: number;
+function WorkRow({ tree, node, activity, dependencies = [], live, now, depth = 0, expanded }: {
+  tree?: TaskTree; node?: DagNode; activity?: DagActivity; dependencies?: string[]; live: boolean; now: number; depth?: number; expanded?: boolean;
 }) {
   const t = useT();
   const task = tree?.task;
@@ -107,7 +109,7 @@ function WorkRow({ tree, node, activity, dependencies = [], live, now, depth = 0
     <li className={css.entity} data-testid={node === undefined ? TESTID.omoTask : TESTID.dagNode}
       data-node-id={node?.id} data-task-id={task?.task_id} data-state={node?.state} data-status={task?.status}
       data-source={historical ? "history" : "live"} data-depth={depth}>
-      <details className={css.entityDetails}>
+      <details className={css.entityDetails} open={expanded}>
         <summary className={css.entityLine} title={[statusText, label, fullRoute, detail, node?.prompt].filter(Boolean).join("\n")}>
           <span className={css.dotSlot} title={statusText}>
             <StateDot state={node === undefined ? taskDot(status, executing) : nodeDot(status, executing)} size={10} />
@@ -164,13 +166,20 @@ function WorkRow({ tree, node, activity, dependencies = [], live, now, depth = 0
   );
 }
 
-function RunCard({ run, live, activity, trees, now }: {
-  run: DagRun; live: boolean; activity: Record<string, DagActivity> | undefined; trees: TaskTree[]; now: number;
+function RunCard({ run, live, activity, trees, now, view }: {
+  run: DagRun; live: boolean; activity: Record<string, DagActivity> | undefined; trees: TaskTree[]; now: number; view: "list" | "graph";
 }) {
   const t = useT();
   const groups = useMemo(() => groupNodesByDependency(run), [run]);
   const summary = workSummary([run], [], live);
   const knownStatus = knownRunStatus(run.status);
+  const [selected, setSelected] = useState<string | null>(null);
+  const selectedNode = run.nodes.find(node => node.id === selected);
+  const waves = [...run.waves].sort((a, b) => a.index - b.index);
+  const activeWave = waves.find(wave => wave.node_ids.some(id => run.nodes.some(node => node.id === id && node.state === "running")));
+  const started = Date.parse(run.created_at);
+  const ended = Date.parse(run.completed_at ?? run.updated_at);
+  const elapsed = Number.isFinite(started) && Number.isFinite(ended) ? Math.max(0, (live && run.status === "running" ? now : ended) - started) : null;
   return (
     <details className={css.run} open={run.status !== "completed"} data-testid={TESTID.dagRun} data-run-id={run.run_id} data-status={run.status}>
       <summary className={css.runHeader}>
@@ -179,7 +188,19 @@ function RunCard({ run, live, activity, trees, now }: {
         <span className={css.runCounts}>{t("activity.chipDone", summary)}{summary.failed > 0 && ` · ${t("activity.chipFailed", summary)}`}</span>
         <span className={css.runStatus}>{knownStatus === null ? run.status : t(RUN_LABELS[knownStatus])}</span>
       </summary>
-      <div className={css.waves}>
+      <div className={css.runOverview}>
+        {activeWave !== undefined && <span>{t("activity.run.wave", { index: activeWave.index + 1 })} / {waves.length}</span>}
+        <span>{t("activity.running", { count: summary.running })}</span>
+        <span>{t("activity.waiting", { count: waitingWork([run], []) })}</span>
+        {elapsed !== null && <span>{formatDuration(elapsed, t)}</span>}
+      </div>
+      {view === "graph" ? <>
+        <WorkflowGraph run={run} live={live} now={now} onSelect={setSelected} />
+        {selectedNode !== undefined && <ul className={css.list} key={selectedNode.id}>
+          <WorkRow node={selectedNode} tree={trees.find(tree => tree.task.task_id === selectedNode.task_id)} live={live} now={now}
+            activity={activity?.[selectedNode.id]} expanded dependencies={[...new Set([...selectedNode.depends_on, ...run.edges.filter(edge => edge.to === selectedNode.id).map(edge => edge.from)])]} />
+        </ul>}
+      </> : <div className={css.waves}>
         {groups.map((group) => (
           <div key={group.index ?? "rest"} className={css.wave}>
             <span className={css.layerTitle} title={t("activity.layer")}>{group.index === null ? "—" : group.index + 1}</span>
@@ -190,13 +211,13 @@ function RunCard({ run, live, activity, trees, now }: {
             </ul>
           </div>
         ))}
-      </div>
+      </div>}
     </details>
   );
 }
 
 /** Compact waves and ownership trees, with child todo checkpoints read only while the panel is inspected. */
-export function ActivityPanel({ threadId, id }: { threadId: string; id: string }) {
+export function ActivityPanel({ threadId, id, view = "list", docked = false }: { threadId: string; id: string; view?: "list" | "graph"; docked?: boolean }) {
   const t = useT();
   const error = useTaskWork(threadId);
   const live = useAppSelector((state) => selectThreadLiveState(state, threadId));
@@ -209,13 +230,16 @@ export function ActivityPanel({ threadId, id }: { threadId: string; id: string }
   const now = useNow(isLive && (tasks.some((task) => task.status === "running") ||
     runs.some((run) => run.status === "running") || live.taskWork.some((work) => work.task.status === "running")));
   if (live === null) return null;
+  const summary = workSummary(runs, tasks, isLive);
   return (
-    <section id={id} className={css.panel} data-testid={TESTID.omoActivity} data-freshness={live.freshness} aria-label={t("activity.region")}>
+    <section id={id} className={css.panel} data-docked={docked || undefined} data-testid={TESTID.omoActivity} data-freshness={live.freshness} aria-label={t("activity.region")}>
       <div className={css.inner}>
+        <div className={css.overview} data-testid="workflow-summary"><span>{t("activity.chipDone", summary)}</span><span>{t("activity.running", { count: summary.running })}</span><span>{t("activity.waiting", { count: waitingWork(runs, tasks) })}</span>{summary.failed > 0 && <span className={css.failureCount}>{t("activity.chipFailed", summary)}</span>}</div>
         {!isLive && <p className={css.freshness} role="status">{t(live.freshness === "stale" ? "activity.freshness.stale" : "activity.freshness.unattached")}</p>}
         {error !== null && <p className={css.error} role="status">{t("activity.children.error")} <span title={error}>{error}</span></p>}
-        <div className={css.legend} aria-hidden><span>{t("activity.column.work")}</span><span>{t("activity.column.agent")}</span><span>{t("activity.column.time")}</span><span>{t("activity.column.step")}</span></div>
-        {runs.map((run) => <RunCard key={run.run_id} run={run} live={isLive} activity={live.dagActivity[run.run_id]} trees={trees} now={now} />)}
+        {summary.total === 0 && <p className={css.empty}>{t("activity.empty")}</p>}
+        {view === "list" && <div className={css.legend} aria-hidden><span>{t("activity.column.work")}</span><span>{t("activity.column.agent")}</span><span>{t("activity.column.time")}</span><span>{t("activity.column.step")}</span></div>}
+        {runs.map((run) => <RunCard key={run.run_id} run={run} live={isLive} activity={live.dagActivity[run.run_id]} trees={trees} now={now} view={view} />)}
         {standalone.length > 0 && <section className={css.section}>
           <h2 className={css.sectionTitle}>{t("activity.tasks")}</h2>
           <ul className={css.list}>{standalone.map((tree) => <WorkRow key={tree.task.task_id} tree={tree} live={isLive} now={now} />)}</ul>

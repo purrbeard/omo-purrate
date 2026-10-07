@@ -5,6 +5,7 @@ import { errorMessage, useDiagnostics } from "./diagnostics";
 import { SectionHeading } from "./SectionHeading";
 import css from "./SettingsDialog.module.css";
 import { AppUpdateSection } from "./AppUpdateSection";
+import { uiState } from "../ui-state";
 
 const DSH_REPOSITORY_URL = "https://github.com/deepseek-ai/deepseek-harness";
 
@@ -26,6 +27,11 @@ export function AboutSection() {
     <section className={css.section}>
       <SectionHeading title={t("shell.settings.nav.about")} intro={t("shell.settings.about.intro")} />
       <AppUpdateSection />
+      <div className={css.card}>
+        <div className={css.cardBody}>
+          <button className={css.link} type="button" data-testid="settings-show-onboarding" onClick={() => { uiState.setOnboardingOpen(true); }}>{t("shell.settings.about.showOnboarding")}</button>
+        </div>
+      </div>
       <div className={css.card}>
         <div className={css.cardBody}>
           <dl className={css.facts}>

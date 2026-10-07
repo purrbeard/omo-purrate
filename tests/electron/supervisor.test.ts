@@ -34,7 +34,8 @@ class FakeClient implements SupervisedClient {
     this.initializeResult = this.startResult;
     return this.startResult;
   }
-  async stop(): Promise<void> {}
+  stopped = 0;
+  async stop(): Promise<void> { this.stopped++; }
   request = (): Promise<never> => Promise.reject(new Error("unused"));
   respond(): void {}
   onNotification(): () => void {
@@ -74,6 +75,24 @@ afterEach(() => {
 });
 
 describe("OmoSupervisor", () => {
+  it("releases session ownership before native tree access and reconnects on failure", async () => {
+    const clients: FakeClient[] = [];
+    const supervisor = new OmoSupervisor({
+      homeDir: "/tmp", baseEnv: {}, clientVersion: "test", resolveEnv: loginEnv,
+      locate: async () => ({ ok: true, binary }),
+      createClient: () => { const client = new FakeClient(INIT); clients.push(client); return client; },
+    });
+    await supervisor.start();
+    await expect(supervisor.withSessionOwner(async found => {
+      expect(found).toEqual(binary);
+      expect(clients[0]?.stopped).toBe(1);
+      expect(supervisor.getStatus().state).toBe("stopped");
+      throw new Error("stale leaf");
+    })).rejects.toThrow("stale leaf");
+    expect(clients).toHaveLength(2);
+    expect(supervisor.getStatus().state).toBe("connected");
+    await supervisor.stop();
+  });
   it("reports not-found with what was tried when the override is missing", async () => {
     const supervisor = new OmoSupervisor({
       homeDir: "/nonexistent-home",

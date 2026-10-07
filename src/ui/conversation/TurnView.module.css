@@ -19,6 +19,73 @@
   margin-top: 10px;
 }
 
+.workLog {
+  min-width: 0;
+}
+
+.workDetails {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+}
+
+.workSummary {
+  padding: 8px 12px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.workSummary:focus-visible {
+  outline: 2px solid var(--dsw-alias-label-primary);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.workMeta,
+.workError {
+  margin-left: 8px;
+}
+
+.workMeta {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.workError {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.workItems {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+}
+
+.workLive {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.workLive > :first-child {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.workPreview {
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
 .stopped {
   align-self: flex-start;
   padding: 0 6px;

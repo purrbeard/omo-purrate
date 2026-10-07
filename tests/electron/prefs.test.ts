@@ -15,6 +15,19 @@ afterEach(async () => {
 });
 
 describe("PreferencesStore", () => {
+  it("persists explicit related-session ownership without changing other preferences", () => {
+    const prefs = new PreferencesStore(dir);
+    prefs.set({ threadParents: { child: "main", self: "self", invalid: 2 }, settledThreads: ["old"] });
+    expect(new PreferencesStore(dir).get()).toMatchObject({ threadParents: { child: "main" }, settledThreads: ["old"] });
+  });
+  it("persists palette independently of color scheme and rejects unknown palettes", () => {
+    const prefs = new PreferencesStore(dir);
+    expect(prefs.get().palette).toBe("omo");
+    prefs.set({ palette: "sbd", theme: "dark" });
+    expect(prefs.set({ palette: "unknown" })).toMatchObject({ palette: "sbd", theme: "dark" });
+    expect(new PreferencesStore(dir).get()).toMatchObject({ palette: "sbd", theme: "dark" });
+    expect(prefs.set({ theme: "light" })).toMatchObject({ palette: "sbd", theme: "light" });
+  });
   it("returns defaults when no file exists", () => {
     expect(new PreferencesStore(dir).get()).toEqual(DEFAULT_PREFERENCES);
   });
@@ -91,10 +104,75 @@ describe("PreferencesStore", () => {
     });
   });
 
+  it("defaults onboarding to incomplete and completes old preferences that already used a workspace", async () => {
+    expect(new PreferencesStore(dir).get().onboardingCompleted).toBe(false);
+    await writeFile(path.join(dir, "preferences.json"), JSON.stringify({ recentWorkspaces: ["/w/0"] }));
+    expect(new PreferencesStore(dir).get().onboardingCompleted).toBe(true);
+    await writeFile(path.join(dir, "preferences.json"), JSON.stringify({ lastWorkspace: "/repo", recentWorkspaces: [] }));
+    expect(new PreferencesStore(dir).get().onboardingCompleted).toBe(true);
+    const store = new PreferencesStore(dir);
+    expect(store.set({ onboardingCompleted: false }).onboardingCompleted).toBe(false);
+    expect(store.set({ onboardingCompleted: "yes" }).onboardingCompleted).toBe(false);
+    expect(store.set({ onboardingCompleted: true }).onboardingCompleted).toBe(true);
+    expect(new PreferencesStore(dir).get().onboardingCompleted).toBe(true);
+  });
+
+  it("defaults the behaviour fields and backfills old preference files", async () => {
+    await writeFile(path.join(dir, "preferences.json"), JSON.stringify({ theme: "dark" }));
+    const store = new PreferencesStore(dir);
+    expect(store.get()).toMatchObject({
+      threadNotifications: "background",
+      inAppNotifications: true,
+      timeFormat: "system",
+      autoSettle: true,
+      autoSettleDays: 3,
+      settledThreads: [],
+      unsettledThreads: [],
+    });
+  });
+
+  it("validates thread notification and time format choices", () => {
+    const store = new PreferencesStore(dir);
+    expect(store.set({ threadNotifications: "always" }).threadNotifications).toBe("always");
+    expect(store.set({ threadNotifications: "sometimes" }).threadNotifications).toBe("always");
+    expect(store.set({ threadNotifications: 7 }).threadNotifications).toBe("always");
+    expect(store.set({ timeFormat: "24h" }).timeFormat).toBe("24h");
+    expect(store.set({ timeFormat: "24" }).timeFormat).toBe("24h");
+    expect(store.set({ inAppNotifications: false }).inAppNotifications).toBe(false);
+    expect(store.set({ inAppNotifications: "no" }).inAppNotifications).toBe(false);
+    expect(store.set({ autoSettle: false }).autoSettle).toBe(false);
+    expect(store.set({ autoSettle: 0 }).autoSettle).toBe(false);
+  });
+
+  it("clamps auto-settle days into 1..365 and ignores non-numbers", () => {
+    const store = new PreferencesStore(dir);
+    expect(store.set({ autoSettleDays: 0 }).autoSettleDays).toBe(1);
+    expect(store.set({ autoSettleDays: -5 }).autoSettleDays).toBe(1);
+    expect(store.set({ autoSettleDays: 400 }).autoSettleDays).toBe(365);
+    expect(store.set({ autoSettleDays: 3.6 }).autoSettleDays).toBe(4);
+    expect(store.set({ autoSettleDays: "7" }).autoSettleDays).toBe(4);
+    expect(new PreferencesStore(dir).get().autoSettleDays).toBe(4);
+  });
+
+  it("bounds and deduplicates settled and unsettled thread ids", () => {
+    const store = new PreferencesStore(dir);
+    const many = Array.from({ length: 205 }, (_, index) => `t${index}`);
+    const next = store.set({ settledThreads: ["a", "a", "", 4, ...many] });
+    expect(next.settledThreads).toEqual(many.slice(-200));
+    expect(store.set({ settledThreads: "x" }).settledThreads).toEqual(many.slice(-200));
+    expect(store.set({ unsettledThreads: ["u", "u"] }).unsettledThreads).toEqual(["u"]);
+  });
+
   it("persists atomically so a new store reads the saved values", async () => {
     new PreferencesStore(dir).set({ theme: "light", locale: "ko", lastWorkspace: "/repo", modelId: null });
     expect(await readdir(dir)).toEqual(["preferences.json"]);
     expect(JSON.parse(await readFile(path.join(dir, "preferences.json"), "utf8"))).toMatchObject({ theme: "light", locale: "ko" });
-    expect(new PreferencesStore(dir).get()).toEqual({ ...DEFAULT_PREFERENCES, theme: "light", locale: "ko", lastWorkspace: "/repo" });
+    expect(new PreferencesStore(dir).get()).toEqual({
+      ...DEFAULT_PREFERENCES,
+      theme: "light",
+      locale: "ko",
+      lastWorkspace: "/repo",
+      onboardingCompleted: true,
+    });
   });
 });

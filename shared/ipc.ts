@@ -82,14 +82,25 @@ export interface Diagnostics {
 }
 
 export type ThemePreference = "system" | "light" | "dark";
+export type PalettePreference = "omo" | "classic" | "mint" | "ocean" | "sbd";
 export type LocalePreference = "system" | "en" | "ko";
+
 
 export type ModelProfile = "daily-normal" | "daily-heavy" | "geeky-normal" | "geeky-heavy";
 
+/** When macOS notifications fire for threads other than the active one. */
+export type ThreadNotificationPreference = "off" | "background" | "always";
+
+/** How every clock time renders; "system" follows the OS clock preference. */
+export type TimeFormatPreference = "system" | "12h" | "24h";
+
 export interface Preferences {
+  /** Explicit ownership for related sessions; session files and cwd stay unchanged. */
+  threadParents: Record<string, string>;
   /** Automatic native omo updates on app launch; omitted in older preferences means enabled. */
   omoAutoUpdate?: boolean;
   theme: ThemePreference;
+  palette?: PalettePreference;
   locale: LocalePreference;
   /** Workspace directory used for the last new session. */
   lastWorkspace: string | null;
@@ -99,7 +110,43 @@ export interface Preferences {
   modelId: string | null;
   modelProfile?: ModelProfile | null;
   profileModels?: Partial<Record<ModelProfile, string>>;
+  /** True once the first-run wizard finished or was dismissed; older preferences without the field infer it from workspace use. */
+  onboardingCompleted: boolean;
+  /** When macOS notifications fire for threads other than the active one. */
+  threadNotifications: ThreadNotificationPreference;
+  /** Whether a focused window also shows an in-app toast for other threads' outcomes. */
+  inAppNotifications: boolean;
+  /** How every clock time renders; "system" follows the OS clock preference. */
+  timeFormat: TimeFormatPreference;
+  /** Whether inactive sidebar threads settle automatically after `autoSettleDays`. */
+  autoSettle: boolean;
+  /** Whole days of inactivity before an idle thread auto-settles, clamped to 1..365. */
+  autoSettleDays: number;
+  /** Thread ids the user settled manually; any new activity un-settles the thread again. */
+  settledThreads: string[];
+  /** Thread ids the user unsettled manually, blocking auto-settle until their next activity. */
+  unsettledThreads: string[];
 }
+
+/** Preferences every field resets to on "Restore device defaults" (Settings → General, top right). */
+export const DEFAULT_PREFERENCES: Preferences = {
+  threadParents: {},
+  omoAutoUpdate: true,
+  theme: "system",
+  locale: "system",
+  palette: "omo",
+  lastWorkspace: null,
+  recentWorkspaces: [],
+  modelId: null,
+  onboardingCompleted: false,
+  threadNotifications: "background",
+  inAppNotifications: true,
+  timeFormat: "system",
+  autoSettle: true,
+  autoSettleDays: 3,
+  settledThreads: [],
+  unsettledThreads: [],
+};
 
 /** One turn reconstructed from a session JSONL file. */
 export interface HistoryTurn {
@@ -130,10 +177,40 @@ export interface HistoricalTask {
   error_message_truncated?: boolean;
 }
 
+/** What omo recorded about one memory write on its memory tool result (`details.writeNotice`). */
+export interface MemoryWriteNotice {
+  sha: string;
+  subject: string;
+  affected: Array<{ path: string; insertions: number; deletions: number }>;
+  /** Bytes injected into every system prompt, all memory bytes, and memory files. */
+  size: { systemBytes: number; totalBytes: number; fileCount: number } | null;
+  entriesToday: number | null;
+  previousEntryAt: string | null;
+  lastConsolidationAt: string | null;
+}
+
+/**
+ * A session `custom_message` entry: context omo injected or showed outside the conversation items (memory notices,
+ * recalled memories, monitor and task wake-ups, model profile changes). `turnIndex` and `afterItems` place it among
+ * the parsed turns: after `afterItems` items of turn `turnIndex`. `display` is omo's own flag for user-facing ones.
+ */
+export interface SessionNotice {
+  id: string;
+  customType: string;
+  display: boolean;
+  text: string;
+  timestamp: number | null;
+  turnIndex: number;
+  afterItems: number;
+}
+
 export interface HistoryResult {
   turns: HistoryTurn[];
   todo: { phases: TodoPhase[] } | null;
   tasks: HistoricalTask[];
+  /** Memory writes keyed by the memory tool call id. */
+  memoryWrites?: Record<string, MemoryWriteNotice>;
+  notices?: SessionNotice[];
 }
 
 /** Read-only child work from native task records and each child's active session branch. */
@@ -171,6 +248,33 @@ export type MenuCommand = "new-session" | "settings" | "toggle-sidebar";
 export const OPEN_TARGET_IDS = ["vscode", "cursor", "terminal", "finder"] as const;
 export type OpenTargetId = (typeof OPEN_TARGET_IDS)[number];
 
+/** Git facts of one directory; null when the directory is not inside a git work tree. */
+export interface GitInfo {
+  /** Branch name, or the short sha of a detached HEAD. */
+  branch: string;
+  /** Absolute path of the work-tree root from `git rev-parse --show-toplevel`. */
+  root: string;
+  /** Commits on HEAD missing from the upstream; null when the branch has no upstream. */
+  ahead: number | null;
+  /** Commits on the upstream missing from HEAD; null when the branch has no upstream. */
+  behind: number | null;
+}
+
+/** Outcome of `git add -A` + commit (+ optional push); git failures reject before this resolves. */
+export interface GitCommitResult {
+  /** False when git reported nothing to commit. */
+  committed: boolean;
+  pushed: boolean;
+  /** "no-upstream" when a requested push was skipped because the branch has no upstream. */
+  pushSkipped: "no-upstream" | null;
+  /** Short sha of the created commit, when one was created. */
+  commitHash: string | null;
+}
+
+/** Permission presets the composer's picker offers; the values are omo `permissionPreset` settings keys. */
+export const PERMISSION_PRESETS = ["full-access", "workspace", "ask"] as const;
+export type PermissionPreset = (typeof PERMISSION_PRESETS)[number];
+
 export interface OpenTarget {
   id: OpenTargetId;
 }
@@ -193,6 +297,17 @@ export interface BranchPoint {
 export interface BranchResult {
   threadId: string;
   path: string;
+}
+
+export type SessionTreeOperation =
+  | { type: "list" }
+  | { type: "navigate"; entryId: string; intent: "select" | "resume"; expectedLeafId?: string | null }
+  | { type: "retry"; point: BranchPoint };
+
+export interface SessionTreeResult {
+  leafId: string | null;
+  branches: Array<{ entryId: string; label: string; active: boolean }>;
+  outcome?: "navigated" | "cancelled";
 }
 
 /** Subscription providers whose stored accounts report usage windows. */
@@ -221,7 +336,45 @@ export interface AccountUsage {
   message: string | null;
 }
 
+/** Identifies the thread a notification or toast is about, so opening it stays one hop. */
+export interface NotifyPayload {
+  title: string;
+  body: string;
+  threadId: string;
+}
+
+/** `"[native]"` sections of `~/.omo/omo.jsonc` that map a research agent or a task category to models. */
+export type ModelMappingKind = "agents" | "categories";
+
+/** One rung of a fallback chain: a provider/model id and an optional reasoning level such as "high". */
+export interface ModelRung {
+  model: string;
+  reasoning: string | null;
+}
+
+/** The overrides `~/.omo/omo.jsonc` holds; a name without an entry uses omo's built-in chain. */
+export interface ModelMapping {
+  path: string;
+  agents: Record<string, ModelRung[]>;
+  categories: Record<string, ModelRung[]>;
+}
+
+/** Built-in research agents and task categories omo 5.1 resolves models for. */
+export const MODEL_MAPPING_NAMES: Readonly<Record<ModelMappingKind, readonly string[]>> = {
+  agents: ["explore", "librarian", "plan-consultant", "plan-reviewer", "multimodal-looker", "omo-native-code-reviewer", "omo-native-gate-reviewer", "omo-native-qa-executor"],
+  categories: ["quick", "unspecified-low", "unspecified-high", "deep-low", "deep-high", "ultrabrain", "architect", "visual-engineering", "artistry", "writing"],
+};
+
+export interface ThreadLink {
+  parentId: string;
+  childId?: string;
+  taskId?: string;
+  title: string;
+  status?: import("./protocol").LiveTask["status"];
+}
+
 export interface OmoBridgeApi {
+  loadThreadLinks(cwds: string[]): Promise<ThreadLink[]>;
   readModelRouting(): Promise<ModelRoutingSettings>;
   saveModelRouting(input: ModelRoutingInput): Promise<ModelRoutingSettings>;
   importExistingMcpConfigs(): Promise<{ imported: string[]; sources: number }>;
@@ -271,6 +424,7 @@ export interface OmoBridgeApi {
    * session's active branch up to, but excluding, the user message at `point`; the source session is not modified.
    */
   branchSession(sessionPath: string, point: BranchPoint): Promise<BranchResult>;
+  sessionTree(threadId: string, operation: SessionTreeOperation): Promise<SessionTreeResult>;
   /** Native folder picker; resolves null on cancel. The OMO_UI_QA_PICK_DIR variable short-circuits the dialog. */
   pickDirectory(defaultPath?: string | null): Promise<string | null>;
   pickImages(): Promise<string[]>;
@@ -280,6 +434,10 @@ export interface OmoBridgeApi {
   getDiagnostics(): Promise<Diagnostics>;
   getPreferences(): Promise<Preferences>;
   setPreferences(patch: Partial<Preferences>): Promise<Preferences>;
+  /** Shows a macOS notification for a thread outcome; a click focuses the window and opens the thread. */
+  notify(payload: NotifyPayload): Promise<void>;
+  /** The thread the user clicked in a macOS notification. */
+  onNotifyClick(listener: (threadId: string) => void): () => void;
   onMenuCommand(listener: (command: MenuCommand) => void): () => void;
   copyText(text: string): Promise<void>;
   openExternal(url: string): Promise<void>;
@@ -288,11 +446,22 @@ export interface OmoBridgeApi {
   listOpenTargets(): Promise<OpenTarget[]>;
   /** Opens `cwd` (an absolute, existing directory) in `target`; with no target, the first installed editor, else Finder. Resolves the target used. */
   openWorkspace(cwd: string, target?: OpenTargetId | null): Promise<OpenTargetId>;
+  /** Branch, root, and upstream ahead/behind of `cwd`; null when it is not inside a git work tree. */
+  gitInfo(cwd: string): Promise<GitInfo | null>;
+  /** Verbatim `git status --porcelain` lines of `cwd`; empty when the work tree is clean. */
+  gitStatus(cwd: string): Promise<string[]>;
+  /** Stages all changes, commits `message`, and pushes when `push` is true; a push without an upstream is skipped and reported. */
+  gitCommitPush(cwd: string, message: string, push: boolean): Promise<GitCommitResult>;
+  /** The workspace's omo `permissionPreset`; "full-access" when unset. */
+  getPermissionPreset(cwd: string): Promise<PermissionPreset>;
+  /** Merges the preset into `<cwd>/.omo/settings.json` before the next turn; see docs/permissions.md. */
+  setPermissionPreset(cwd: string, preset: PermissionPreset): Promise<void>;
   readonly platform: string;
 }
 
 /** IPC channel names. Invoke channels use ipcRenderer.invoke; event channels use webContents.send. */
 export const IPC = {
+  loadThreadLinks: "history:thread-links",
   readModelRouting: "models:read-routing",
   saveModelRouting: "models:save-routing",
   importExistingMcpConfigs: "mcp:import-existing",
@@ -328,6 +497,7 @@ export const IPC = {
   loadHistory: "history:load",
   loadTaskWork: "history:task-work",
   branchSession: "history:branch",
+  sessionTree: "history:tree",
   readAccountUsage: "accounts:usage",
   openAccountLogin: "accounts:login",
   pickDirectory: "dialog:pick-directory",
@@ -336,12 +506,19 @@ export const IPC = {
   diagnostics: "app:diagnostics",
   getPreferences: "prefs:get",
   setPreferences: "prefs:set",
+  notify: "app:notify",
+  notifyClick: "app:notify-click",
   menuCommand: "menu:command",
   copyText: "app:copy-text",
   openExternal: "app:open-external",
   revealPath: "app:reveal-path",
   listOpenTargets: "app:list-open-targets",
   openWorkspace: "app:open-workspace",
+  gitInfo: "git:info",
+  gitStatus: "git:status",
+  gitCommitPush: "git:commit-push",
+  getPermissionPreset: "workspace:preset:get",
+  setPermissionPreset: "workspace:preset:set",
 } as const;
 
 /** Result envelope the main process returns from the `omo:request` invoke channel. */
@@ -358,6 +535,8 @@ export const ENV = {
   qaPickImages: "OMO_UI_QA_PICK_IMAGES",
   /** Overrides Electron's userData directory (tests and QA). */
   userData: "OMO_UI_USER_DATA",
+  /** Appends one JSON line per macOS thread notification to this file (tests and QA); the notification still shows. */
+  qaNotifyLog: "OMO_UI_QA_NOTIFY_LOG",
   /** Renderer dev-server URL loaded instead of dist/index.html. */
   devUrl: "OMO_UI_DEV_URL",
   /** "0" skips the launch-time omo update regardless of the preference (tests and QA). */

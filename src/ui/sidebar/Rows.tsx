@@ -1,5 +1,7 @@
 // Ported from DSH ui-workspace rows/Rows.tsx (MIT, Copyright (c) 2026 DeepSeek).
 import { useLayoutEffect, useRef, useState } from "react";
+import { useActions, useAppSelector } from "../app-context";
+import { knownTaskStatus } from "../conversation/activity-model";
 import type { KeyboardEvent } from "react";
 import clsx from "clsx";
 import {
@@ -13,10 +15,11 @@ import {
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { MenuEntry } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { ThreadSummary, WorkspaceGroup } from "../../state";
-import { useT } from "../../i18n";
+import { useLocale, useT } from "../../i18n";
 import { threadTitle } from "../conversation/format";
 import { GripGlyph } from "../glyphs";
 import { TESTID } from "../testids";
+import { useUiState } from "../ui-state";
 import { isRunning } from "./thread-filter";
 import { formatThreadTime } from "./thread-time";
 import { WorkspaceBadge } from "./WorkspaceBadge";
@@ -124,10 +127,20 @@ interface ThreadRowProps {
   onRename(threadId: string, name: string): void;
   onRequestDelete(threadId: string, title: string): void;
   onReveal(cwd: string): void;
+  /** Present (with the current settled state in `settled`) only where the sidebar offers Settle/Unsettle. */
+  settled?: boolean;
+  onSettle?(threadId: string, settled: boolean): void;
 }
 
-export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDelete, onReveal }: ThreadRowProps) {
+export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDelete, onReveal, settled = false, onSettle }: ThreadRowProps) {
   const t = useT();
+  const actions = useActions();
+  const currentId = useAppSelector(state => state.activeThreadId);
+  const [childrenOpen, setChildrenOpen] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const childCount = (thread.children?.length ?? 0) + (thread.tasks?.length ?? 0);
+  const locale = useLocale();
+  const { preferences } = useUiState();
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const title = threadTitle(thread, t("shell.newSession"));
@@ -158,8 +171,14 @@ export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDe
   }
 
   const items: MenuEntry[] = [
+    ...(onSettle === undefined
+      ? []
+      : [{ id: "settle", label: settled ? t("shell.sidebar.unsettle") : t("shell.sidebar.settle") } as const]),
     { id: "rename", label: t("shell.sidebar.rename"), icon: <IconEditOutlineRegular /> },
     { id: "reveal", label: t("shell.sidebar.revealInFinder"), icon: <IconFolderOpenOutlineRegular /> },
+    { id: "new-related", label: t("shell.newRelatedSession") },
+    ...(currentId !== null && currentId !== thread.id ? [{ id: "attach", label: t("shell.linkToCurrent") }] : []),
+    ...(preferences?.threadParents[thread.id] !== undefined ? [{ id: "detach", label: t("shell.unlinkSession") }] : []),
     { type: "separator", id: "danger" },
     { id: "delete", label: t("shell.sidebar.delete"), icon: <IconTrashOutlineRegular />, danger: true },
   ];
@@ -167,6 +186,18 @@ export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDe
   const select = (id: string): void => {
     setMenuOpen(false);
     switch (id) {
+      case "new-related":
+        void actions.newThread(thread.cwd, thread.id);
+        break;
+      case "attach":
+        if (currentId !== null) void actions.linkThread(thread.id, currentId).catch((error: unknown) => setLinkError(error instanceof Error ? error.message : String(error)));
+        break;
+      case "detach":
+        void actions.linkThread(thread.id, null).catch((error: unknown) => setLinkError(error instanceof Error ? error.message : String(error)));
+        break;
+      case "settle":
+        onSettle?.(thread.id, !settled);
+        break;
       case "rename":
         setRenaming(true);
         break;
@@ -180,6 +211,7 @@ export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDe
   };
 
   return (
+    <div>
     <div className={clsx(css.sessionRow, active && css.selected, menuOpen && css.menuOpen)} {...rowProps}>
       <button type="button" className={css.rowMain} onClick={() => onOpen(thread.id)}>
         <WorkspaceBadge cwd={thread.cwd} className={css.rowBadge} />
@@ -190,7 +222,7 @@ export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDe
             <span className={css.visuallyHidden}>{t("shell.sidebar.running")}</span>
           </span>
         )}
-        <span className={css.time}>{formatThreadTime(thread.updatedAt, nowMs, t)}</span>
+        <span className={css.time}>{formatThreadTime(thread.updatedAt, nowMs, t, preferences?.timeFormat ?? "system", locale)}</span>
       </button>
       <span className={css.rowActions}>
         <Menu
@@ -215,6 +247,13 @@ export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDe
           }
         />
       </span>
+    </div>
+    {childCount > 0 && <button type="button" className={css.childrenToggle} data-testid="thread-children-toggle" aria-expanded={childrenOpen} onClick={() => setChildrenOpen(!childrenOpen)}>{t("shell.childWork", { count: childCount })}</button>}
+    {linkError !== null && <p role="alert" className={css.linkError}>{linkError}</p>}
+    {childrenOpen && <div className={css.childThreads} data-testid="thread-children">
+      {thread.children?.map(child => <ThreadRow key={child.id} thread={child} active={child.id === currentId} nowMs={nowMs} onOpen={onOpen} onRename={onRename} onRequestDelete={onRequestDelete} onReveal={onReveal} />)}
+      {thread.tasks?.map(task => <button type="button" key={task.taskId} className={css.childTask} data-testid="thread-child-task" title={task.taskId} onClick={() => onOpen(thread.id)}><span>{task.title || task.taskId}</span><small>{t(`activity.task.${knownTaskStatus(task.status ?? "pending") ?? "pending"}`)}</small></button>)}
+    </div>}
     </div>
   );
 }

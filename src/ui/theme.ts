@@ -1,5 +1,5 @@
-import { flushSync } from "react-dom";
 import type { ThemePreference } from "../../shared/ipc";
+import { flushSync } from "react-dom";
 import { themeRevealGeometry } from "./theme-reveal";
 
 let appliedPreference: ThemePreference | undefined;
@@ -15,10 +15,7 @@ function setDark(dark: boolean): void {
   else document.body.removeAttribute(DARK_ATTRIBUTE);
 }
 
-/**
- * Applies a theme preference to `document.body` (DSH dark tokens key off `data-ds-dark-theme`).
- * "system" follows `prefers-color-scheme` until another preference is applied.
- */
+/** Applies brightness and follows OS changes while the system preference is selected. */
 export function applyThemePreference(pref: ThemePreference): void {
   if (appliedPreference === pref) return;
   stopFollowingSystem?.();
@@ -40,18 +37,33 @@ export function applyThemePreference(pref: ThemePreference): void {
  * cancel its update callback, so an update whose choice was superseded by a later one applies and persists nothing.
  */
 export function revealThemePreference(pref: ThemePreference, control: HTMLElement, persist: () => void): void {
+  const dark = pref === "dark" || (pref === "system" && window.matchMedia(DARK_QUERY).matches);
+  if (dark === document.body.hasAttribute(DARK_ATTRIBUTE)) {
+    // No visible change, but this is still the latest choice: a pending reveal must not apply after it.
+    activeTransition?.skipTransition();
+    latestChoice++;
+    applyThemePreference(pref);
+    persist();
+    return;
+  }
+  revealThemeChange(control, () => {
+    applyThemePreference(pref);
+    persist();
+  });
+}
+
+/**
+ * Runs the circle-reveal view transition from `control` while `apply` swaps tokens inside the
+ * snapshot update callback. Reduced motion or a missing ViewTransition API applies directly.
+ */
+export function revealThemeChange(control: HTMLElement, apply: () => void): void {
   activeTransition?.skipTransition();
   const choice = ++latestChoice;
-  const dark = pref === "dark" || (pref === "system" && window.matchMedia(DARK_QUERY).matches);
   const update = (): void => {
     if (choice !== latestChoice) return;
-    flushSync(() => {
-      applyThemePreference(pref);
-      persist();
-    });
+    flushSync(apply);
   };
-  if (dark === document.body.hasAttribute(DARK_ATTRIBUTE)
-    || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches
     || typeof document.startViewTransition !== "function") {
     update();
     return;

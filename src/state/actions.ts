@@ -2,6 +2,7 @@ import type { AccountUsage, BridgeStatus, OmoBridgeApi } from "../../shared/ipc"
 import type { ApprovalDecision, ProviderAccount, ReasoningEffort, RequestId, RpcNotification, ThreadSessionResult } from "../../shared/protocol";
 import { messageInput, type ImageInput } from "../ui/composer/attachments";
 import { resendOf, storedText } from "../ui/conversation/resend";
+import { uiState } from "../ui/ui-state";
 import type { AppStore } from "./store";
 import type { AppState, NoticeCode, SessionModel, SideChat } from "./types";
 import { parseStoredSides, selectSidesOf, sideDraftKey, sideName } from "./btw";
@@ -91,16 +92,16 @@ export interface AppActions {
   /** Activates the thread and loads its session history when not yet loaded; never resumes it. */
   openThread(threadId: string): Promise<void>;
   /** Starts and activates a thread in `cwd`; resolves its id, or null on failure. */
-  newThread(cwd: string): Promise<string | null>;
+  newThread(cwd: string, parentId?: string): Promise<string | null>;
+  linkThread(childId: string, parentId: string | null): Promise<void>;
   /** Sends to the active thread: steers the running turn, otherwise resumes the thread if needed and starts a turn; resolves true when omo accepted the message. */
   sendMessage(text: string, images?: readonly ImageInput[]): Promise<boolean>;
   interrupt(): Promise<void>;
   /**
-   * Edits or rerolls from a user message: writes a new session holding `threadId`'s history before the message
-   * `itemId`, resumes and activates it under `name`, and sends `text` with the message's images as its next turn.
-   * The original thread is left unchanged. Resolves true when omo accepted the turn.
+   * Edits or rerolls in the native session tree, preserving original answers and the message's images.
    */
   branchFrom(threadId: string, turnId: string, itemId: string, text: string, name: string): Promise<boolean>;
+  switchBranch(threadId: string, entryId: string, expectedLeafId: string | null): Promise<boolean>;
   renameThread(threadId: string, name: string): Promise<void>;
   deleteThread(threadId: string): Promise<void>;
   answerApproval(id: RequestId, decision: ApprovalDecision, reason?: string): Promise<void>;
@@ -211,6 +212,21 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     }
   };
 
+  // Memory writes and omo's special messages exist only in the session file. Reading it is costly for long sessions,
+  // so only a turn that called the memory tool re-reads it; opening a thread reads everything anyway.
+  const refreshAnnotations = async (threadId: string): Promise<void> => {
+    const state = store.getState();
+    const path = state.threads[threadId]?.path ?? null;
+    if (path === null || state.conversations[threadId] === undefined) return;
+    try {
+      const history = await bridge.loadHistory(path);
+      store.dispatch({ type: "history/annotated", threadId, notices: history.notices ?? [], memoryWrites: history.memoryWrites ?? {} });
+    } catch (error) {
+      // The transcript stays usable without annotations; the next memory turn retries.
+      console.warn("Could not refresh session annotations", error);
+    }
+  };
+
   const loadMcpServers = async (): Promise<void> => {
     const request = ++mcpRead;
     const threadId = store.getState().activeThreadId;
@@ -256,6 +272,10 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       if (!Array.isArray(result.data)) throw new Error("omo returned a malformed thread/list result");
       const nextCursor = typeof result.nextCursor === "string" ? result.nextCursor : null;
       store.dispatch({ type: "threads/listed", threads: result.data.filter(isThread), nextCursor, append });
+      const links = await bridge.loadThreadLinks([...new Set(Object.values(store.getState().threads).map(thread => thread.cwd))]);
+      const preferences = await bridge.getPreferences();
+      const related = Object.entries(preferences.threadParents).map(([childId, parentId]) => ({ childId, parentId, title: "" }));
+      store.dispatch({ type: "threads/links", links: [...links, ...related] });
     });
 
   const loadSkills = async (cwd: string, { force = false }: { force?: boolean } = {}): Promise<void> => {
@@ -296,7 +316,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
   };
 
   /** Sends to a thread: steers its running turn, otherwise resumes the thread when needed and starts a turn. */
-  const deliver = async (threadId: string, text: string, announceSteer: boolean, images: readonly ImageInput[] = []): Promise<boolean> => {
+  const deliver = async (threadId: string, text: string, announceSteer: boolean, images: readonly ImageInput[] = [], selection?: AppState["composer"]): Promise<boolean> => {
     let imagePaths: string[];
     try {
       imagePaths = await Promise.all(images.map((image) => (image.type === "localImage" ? image.path : bridge.saveImage(image.url))));
@@ -328,7 +348,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         await ensureSkills(resumed.thread.cwd);
       }
       store.dispatch({ type: "user/messageSent", threadId, clientId, text, ...(images.length === 0 ? {} : { images }), sentAtMs: now() });
-      const { modelId, effort } = store.getState().composer;
+      const { modelId, effort } = selection ?? store.getState().composer;
       await bridge.request("turn/start", {
         threadId,
         input: messageInput(text, imagePaths),
@@ -458,7 +478,12 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
           store.dispatch({ type: "rpc/notification", notification, receivedAtMs: now() });
           const parsed = parseNotification(notification);
           if (parsed?.method === "mcpServer/startupStatus/updated" && mcpSectionOpen) void loadMcpServers();
-          if (parsed?.method === "turn/completed") void readGoal(parsed.params.threadId);
+          if (parsed?.method === "turn/completed") {
+            void readGoal(parsed.params.threadId);
+            if (parsed.params.turn.items.some((item) => item.type === "dynamicToolCall" && item.tool === "memory")) {
+              void refreshAnnotations(parsed.params.threadId);
+            }
+          }
           if (parsed?.method === "item/completed" && parsed.params.item.type === "dynamicToolCall") {
             const item = parsed.params.item;
             if (item.tool === "todo" || (item.tool === "eval" && evalIncludesTodo(item.arguments, item.contentItems))) {
@@ -526,12 +551,35 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       }
     },
 
-    async newThread(cwd) {
+    async linkThread(childId, parentId) {
+      const preferences = await bridge.getPreferences();
+      const threadParents = { ...preferences.threadParents };
+      if (parentId === null) delete threadParents[childId];
+      else {
+        const seen = new Set([childId]);
+        let ancestor: string | undefined = parentId;
+        while (ancestor !== undefined) {
+          if (seen.has(ancestor)) throw new Error("Related session ownership cannot contain a cycle");
+          seen.add(ancestor);
+          ancestor = threadParents[ancestor] ?? store.getState().threadLinks.find(link => link.childId === ancestor)?.parentId;
+        }
+        threadParents[childId] = parentId;
+      }
+      uiState.setPreferences(await bridge.setPreferences({ threadParents }));
+      await refreshThreads();
+    },
+    async newThread(cwd, parentId) {
       const { modelId } = store.getState().composer;
       try {
         const result = await bridge.request("thread/start", modelId === null ? { cwd } : { cwd, model: modelId });
         if (!isThread(result.thread)) throw new Error("omo returned a malformed thread/start result");
         const threadId = result.thread.id;
+        if (parentId !== undefined) {
+          const preferences = await bridge.getPreferences();
+          const threadParents = { ...preferences.threadParents, [threadId]: parentId };
+          uiState.setPreferences(await bridge.setPreferences({ threadParents }));
+          store.dispatch({ type: "threads/links", links: [...store.getState().threadLinks, { parentId, childId: threadId, title: "" }] });
+        }
         store.dispatch({ type: "thread/opened", thread: result.thread, resumed: true, session: sessionOf(result) });
         store.dispatch({ type: "thread/activated", threadId });
         store.dispatch({ type: "history/loaded", threadId, turns: [] });
@@ -567,8 +615,22 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       }
     },
 
-    async branchFrom(threadId, turnId, itemId, text, name) {
+    async switchBranch(threadId, entryId, expectedLeafId) {
+      try {
+        const result = await bridge.sessionTree(threadId, { type: "navigate", entryId, intent: "resume", expectedLeafId });
+        if (result.outcome === "cancelled") return false;
+        const path = store.getState().threads[threadId]?.path;
+        if (!path) return false;
+        store.dispatch({ type: "history/replaced", threadId, ...(await bridge.loadHistory(path)) });
+        return true;
+      } catch (error) {
+        fail(error, threadId);
+        return false;
+      }
+    },
+    async branchFrom(threadId, turnId, itemId, text, _name) {
       const state = store.getState();
+      const selection = state.composer;
       const conversation = state.conversations[threadId];
       const path = state.threads[threadId]?.path ?? null;
       if (conversation === undefined || path === null) return false;
@@ -584,7 +646,6 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       if (clicked === undefined) return false;
       const key = resendOf(clicked.content).text;
       const repeat = shown.slice(0, index).filter((entry) => resendOf(entry.item.content).text === key).length;
-      let branchId: string;
       try {
         const history = await bridge.loadHistory(path);
         const stored = history.turns.flatMap((turn) => turn.items.flatMap((item) => (item.type === "userMessage" ? [item] : [])));
@@ -592,21 +653,15 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         if (target === undefined) throw new Error("This message is not in the saved session yet; reopen the thread and try again.");
         const raw = storedText(target.content);
         const occurrence = stored.slice(0, stored.indexOf(target)).filter((item) => storedText(item.content) === raw).length;
-        const branch = await bridge.branchSession(path, { text: raw, occurrence });
-        branchId = branch.threadId;
-        const resumed = await bridge.request("thread/resume", { threadId: branchId });
-        if (!isThread(resumed.thread)) throw new Error("omo returned a malformed thread/resume result");
-        store.dispatch({ type: "thread/opened", thread: resumed.thread, resumed: true, session: sessionOf(resumed) });
-        store.dispatch({ type: "thread/activated", threadId: branchId });
-        store.dispatch({ type: "history/loaded", threadId: branchId, ...(await bridge.loadHistory(branch.path)) });
-        await bridge.request("thread/name/set", { threadId: branchId, name });
-        store.dispatch({ type: "rpc/notification", notification: { method: "thread/name/updated", params: { threadId: branchId, threadName: name } }, receivedAtMs: now() });
+        const moved = await bridge.sessionTree(threadId, { type: "retry", point: { text: raw, occurrence } });
+        if (moved.outcome === "cancelled") return false;
+        store.dispatch({ type: "history/replaced", threadId, ...(await bridge.loadHistory(path)) });
       } catch (error) {
         fail(error, threadId);
         return false;
       }
       void refreshThreads();
-      return deliver(branchId, text, false, resendOf(clicked.content).images);
+      return deliver(threadId, text, false, resendOf(clicked.content).images, selection);
     },
 
     renameThread: (threadId, name) =>
@@ -649,6 +704,13 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
 
     answerUserInput: (id, answers, comment) =>
       guarded(async () => {
+        const request = store.getState().pendingRequests.find((pending) => pending.id === id);
+        if (request?.kind === "userInput" && request.resolved) {
+          const text = request.params.questions.map((question) => `${question.question}\n${(answers[question.id] ?? []).join(", ")}`).join("\n\n");
+          if (!await deliver(request.threadId, comment ? `${text}\n\n${comment}` : text, false)) return;
+          store.dispatch({ type: "rpc/serverRequestAnswered", id });
+          return;
+        }
         const wireAnswers = Object.fromEntries(
           Object.entries(answers).map(([questionId, values]) => [questionId, { answers: values }]),
         );
@@ -667,6 +729,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     },
 
     setSidePanel(open) {
+      if (open) { uiState.setWorkflowPanelOpen(false); uiState.setWorkspacePanelOpen(false); }
       store.dispatch({ type: "btw/toggled", open });
     },
 

@@ -9,6 +9,7 @@ import { Composer } from "./ui/composer/Composer";
 import { ConversationPane } from "./ui/conversation/ConversationPane";
 import { useNewSessionFlow } from "./ui/new-session";
 import { NoticeToasts } from "./ui/notices/NoticeToasts";
+import { ThreadNotifications } from "./ui/notices/ThreadNotifications";
 import { ConnectionBanner } from "./ui/onboarding/ConnectionBanner";
 import { Onboarding } from "./ui/onboarding/Onboarding";
 import { SettingsDialog } from "./ui/settings/SettingsDialog";
@@ -17,7 +18,9 @@ import { Sidebar } from "./ui/sidebar/Sidebar";
 import { applyThemePreference } from "./ui/theme";
 import { uiState, useUiState } from "./ui/ui-state";
 import { WorkspacePanel } from "./ui/workspace/WorkspacePanel";
+import { WorkflowPanel } from "./ui/conversation/WorkflowPanel";
 import { ProjectPickerHost } from "./ui/projects/ProjectPickerHost";
+import { SetupWizard } from "./ui/wizard/SetupWizard";
 
 function MainPane() {
   return (
@@ -31,12 +34,13 @@ function MainPane() {
 
 const renderSidePanel = (placement: "docked" | "overlay") => <SidePanel placement={placement} />;
 const renderWorkspacePanel = (placement: "docked" | "overlay") => <WorkspacePanel placement={placement} onClose={() => uiState.setWorkspacePanelOpen(false)} />;
+const renderWorkflowPanel = (placement: "docked" | "overlay") => <WorkflowPanel placement={placement} />;
 
 function Shell() {
   const bridgeState = useAppSelector((state) => state.bridge?.state ?? null);
   const sidePanelOpen = useAppSelector((state) => state.btw.open);
   useSidePanelShortcut();
-  const { sidebarVisible, sidebarWidth, workspacePanelOpen } = useUiState();
+  const { sidebarVisible, sidebarWidth, workspacePanelOpen, workflowPanelOpen, onboardingOpen } = useUiState();
   const newSession = useNewSessionFlow();
 
   useEffect(() => {
@@ -79,11 +83,13 @@ function Shell() {
         sidebarVisible={sidebarVisible}
         sidebarWidth={sidebarWidth}
         onSidebarWidthChange={uiState.setSidebarWidth}
-        rightPanel={workspacePanelOpen ? renderWorkspacePanel : sidePanelOpen ? renderSidePanel : null}
-        rightPanelWidth={workspacePanelOpen ? 440 : SIDE_PANEL_WIDTH}
+        rightPanel={workspacePanelOpen ? renderWorkspacePanel : workflowPanelOpen ? renderWorkflowPanel : sidePanelOpen ? renderSidePanel : null}
+        rightPanelWidth={workspacePanelOpen ? 440 : workflowPanelOpen ? 580 : SIDE_PANEL_WIDTH}
       />
       <SettingsDialog />
       <ProjectPickerHost />
+      {onboardingOpen && <SetupWizard />}
+      <ThreadNotifications />
       <NoticeToasts />
     </>
   );
@@ -101,6 +107,7 @@ export function App() {
     void window.omo.getPreferences().then((loaded) => {
       if (current) {
         uiState.setPreferences(loaded);
+        if (!loaded.onboardingCompleted) uiState.setOnboardingOpen(true);
         store.dispatch({ type: "composer/modelSelected", modelId: loaded.modelId, effort: null, profile: loaded.modelProfile });
       }
     });
@@ -119,6 +126,9 @@ export function App() {
 
   const theme = preferences?.theme ?? "system";
   useEffect(() => applyThemePreference(theme), [theme]);
+  const palette = preferences?.palette ?? "omo";
+  useEffect(() => { document.body.dataset.palette = palette; }, [palette]);
+
 
   const locale = resolveLocale(preferences?.locale ?? "system", navigator.language);
   useEffect(() => {

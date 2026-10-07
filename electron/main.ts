@@ -99,6 +99,7 @@ function sendMenuCommand(command: MenuCommand): void {
 }
 
 function run(): void {
+  if (process.platform === "win32") app.setAppUserModelId("io.github.purrbeard.omoui.windows");
   const homeDir = os.homedir();
   const prefs = new PreferencesStore(app.getPath("userData"));
   const supervisor = new OmoSupervisor({

@@ -27,6 +27,14 @@
   padding: 20px 24px 0;
 }
 
+.followUp {
+  margin: 0;
+  padding: 16px 24px 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
 .eyebrow {
   margin-bottom: 5px;
   color: var(--dsw-alias-label-tertiary);

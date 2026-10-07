@@ -172,8 +172,16 @@ export function workSummary(runs: readonly DagRun[], tasks: readonly ActivityTas
     total: states.length,
     done: states.filter((state) => state === "completed").length,
     failed: states.filter((state) => state === "failed" || state === "error" || state === "lost").length,
-    running: live ? states.filter((state) => state === "running").length : 0,
+    running: live ? runs.reduce((count, run) => count + run.nodes.filter((node) => run.status === "running" && node.state === "running" &&
+      (node.task_id === undefined || !tasks.some((task) => task.task_id === node.task_id && (isHistoricalTask(task) || isSuspended(task))))).length, 0) +
+      tasks.filter((task) => !linked.has(task.task_id) && task.status === "running" && !isHistoricalTask(task) && !isSuspended(task)).length : 0,
   };
+}
+
+export function waitingWork(runs: readonly DagRun[], tasks: readonly ActivityTask[]): number {
+  const linked = new Set(runs.flatMap(run => run.nodes.map(node => node.task_id)));
+  return runs.flatMap(run => run.nodes).filter(node => ["pending", "blocked", "scheduled"].includes(node.state)).length +
+    tasks.filter(task => !linked.has(task.task_id) && task.status === "pending").length;
 }
 
 export interface TaskTree {

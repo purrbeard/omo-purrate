@@ -49,6 +49,27 @@
   margin-top: 4px;
 }
 
+.branchPicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.branchPicker select {
+  max-width: min(480px, 70%);
+  min-width: 0;
+  padding: 4px 8px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-fill-tertiary);
+  border: 1px solid var(--dsw-alias-separator-primary);
+  border-radius: var(--dsw-radius-sm);
+  font: inherit;
+}
+
 .editor {
   display: flex;
   flex-direction: column;

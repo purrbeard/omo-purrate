@@ -12,6 +12,8 @@ files:
 asar: true
 # The DSH MIT notice and the font license ship with every copy of the app (Contents/Resources).
 extraResources:
+  - from: dist-electron/tree-selection-extension.js
+    to: tree-selection-extension.js
   - from: build/icon.png
     to: icon.png
   - from: NOTICE

@@ -1,0 +1,597 @@
+/* OmO palette layer: body[data-palette='classic' | 'mint' | 'ocean' | 'sbd'] re-tints the DSH tokens that
+   omo-theme.css overrides (surfaces, sidebar, menus, inputs, bubble, code, text, accents, links, buttons) for the
+   light theme and, under [data-ds-dark-theme], the dark theme. Imported first by omo-theme.css; the attribute
+   selectors outrank omo-theme's `body` / `body[data-ds-dark-theme]` rules, so a body without data-palette (or with
+   an unknown value) keeps the OmO violet palette untouched. Every dark block redeclares the full light token set:
+   the light block and omo-theme's dark block share specificity (0,1,1) and omo-theme's wins by source order.
+   Status tokens (--dsw-alias-state-error/success/warn-*, diff colors), the LED readout and geometry are never
+   touched here. Component CSS modules keep reading only --dsw-* / --ds-* variables. */
+
+/* Classic: warm beige paper, brown ink, amber-to-brown accents. */
+body[data-palette='classic'] {
+  /* Surfaces */
+  --dsw-alias-bg-base: #f7f1e6;
+  --dsw-alias-bg-layer-1: #fffdf9;
+  --dsw-alias-bg-layer-2: #fdfaf4;
+  --dsw-alias-bg-layer-3: #f8f2e8;
+  --dsw-alias-bg-module-platform: #f0e7d8;
+  --dsw-alias-bg-overlay: #e9ddc8;
+  /* Sidebar */
+  --dsw-specific-sidebar-fill: #f1e8d8;
+  --dsw-specific-sidebar-nav-item-hover: #eadfcb;
+  --dsw-specific-sidebar-nav-item-active: #e2d4ba;
+  --dsw-omo-sidebar-tint: 160 110 60;
+  --dsw-omo-sidebar-glow: rgba(160, 110, 60, 0.08);
+  --dsw-alias-scrollbar-bg-l1: #d9ccb6;
+  --dsw-alias-scrollbar-hover-l1: #c9b99f;
+  --dsw-alias-scrollbar-bg-l2: #d8c9b0;
+  --dsw-alias-scrollbar-hover-l2: #c7b597;
+  /* Menus */
+  --dsw-menu-surface-fill: rgba(251, 247, 239, 0.58);
+  --dsw-alias-menu-group-header-fill: rgba(251, 247, 239, 0.94);
+  /* Inputs and controls */
+  --dsw-specific-input-major: #fffcf6;
+  --dsw-specific-selector: #efe4d2;
+  --dsw-alias-border-l1: rgba(70, 45, 20, 0.07);
+  --dsw-alias-border-l2: rgba(70, 45, 20, 0.11);
+  --dsw-alias-border-l3: #e2d6c2;
+  --dsw-alias-border-l4: rgba(70, 45, 20, 0.17);
+  --dsw-alias-interactive-bg-hover: rgba(70, 45, 20, 0.05);
+  --dsw-alias-interactive-bg-active: rgba(70, 45, 20, 0.09);
+  --dsw-alias-interactive-bg-hover-solid: #ece2d0;
+  /* User bubble and code */
+  --dsw-specific-bubble: #efe2cd;
+  --dsw-alias-markdown-code-block: #f1e9da;
+  --dsw-alias-markdown-code-block-banner: #ebe1cf;
+  --dsw-alias-markdown-inline-code: #efe5d3;
+  /* Text */
+  --dsw-alias-label-primary: #2a1f14;
+  --dsw-alias-label-secondary: #5c4d3c;
+  --dsw-alias-label-tertiary: #7d6b57;
+  --dsw-alias-label-caption: #a08e78;
+  --dsw-alias-label-dimmed: #d6c9b4;
+  --dsw-alias-label-primary-foreground: #fffaf2;
+  /* Accent (composer send button, keyword gradient), links, focus and info */
+  --dsw-omo-accent-orange: #d98b2b;
+  --dsw-omo-accent-green: #8a5a2b;
+  --dsw-omo-accent-green-hover: #74491f;
+  --dsw-omo-accent-foreground: #fffaf2;
+  --dsw-omo-keyword-gradient: linear-gradient(90deg, var(--dsw-omo-accent-orange), var(--dsw-omo-accent-green));
+  --dsw-alias-link: #8a4b1f;
+  --dsw-alias-state-business-primary: #9a5b2a;
+  --dsw-alias-state-business-tertiary: #f6ead9;
+  --dsw-alias-button-info-fill: #9a5b2a;
+  --dsw-alias-button-info-hover: #74491f;
+  --dsw-alias-label-deep-diving: color-mix(in srgb, var(--dsw-alias-state-business-primary) 70%, var(--dsw-alias-label-primary));
+  --dsw-alias-label-deep-diving-shimmer: color-mix(in srgb, var(--dsw-alias-state-business-primary) 30%, var(--dsw-alias-label-primary));
+  /* Buttons: the primary fill stays dark-on-light / light-on-dark like DSH, so --dsw-alias-label-primary-foreground
+     also fits the QuestionCard check drawn on --dsw-alias-label-primary and the Switch thumb. */
+  --dsw-alias-brand-primary: #5a3a22;
+  --dsw-alias-button-primary-fill: #5a3a22;
+  --dsw-alias-button-primary-hover: #6e4a2e;
+  --dsw-alias-button-elevated-fill: #fffdf9;
+  --dsw-alias-button-floating-fill: #fffdf9;
+  --dsw-alias-button-floating-hover: #f3eadb;
+  --dsw-alias-button-ghost-active-fill: #ede3d1;
+  --dsw-alias-button-ghost-active-hover: #e6dac5;
+  --dsw-alias-button-ghost-active-border: #9d7d57;
+}
+
+body[data-palette='classic'][data-ds-dark-theme] {
+  /* Surfaces */
+  --dsw-alias-bg-base: #1b1612;
+  --dsw-alias-bg-layer-1: #251e18;
+  --dsw-alias-bg-layer-2: #2c241c;
+  --dsw-alias-bg-layer-3: #352b22;
+  --dsw-alias-bg-module-platform: #352b22;
+  --dsw-alias-bg-overlay: #3f3328;
+  /* Sidebar */
+  --dsw-specific-sidebar-fill: #211a14;
+  --dsw-specific-sidebar-nav-item-hover: #2c241c;
+  --dsw-specific-sidebar-nav-item-active: #3b3025;
+  --dsw-omo-sidebar-tint: 214 160 104;
+  --dsw-omo-sidebar-glow: rgba(214, 160, 104, 0.09);
+  --dsw-alias-scrollbar-bg-l1: #4a3f34;
+  --dsw-alias-scrollbar-hover-l1: #5a4d40;
+  --dsw-alias-scrollbar-bg-l2: #4d4035;
+  --dsw-alias-scrollbar-hover-l2: #5e4f42;
+  /* Menus */
+  --dsw-menu-surface-fill: rgba(58, 46, 36, 0.45);
+  --dsw-alias-menu-group-header-fill: rgba(44, 36, 28, 0.94);
+  /* Inputs and controls */
+  --dsw-specific-input-major: #241d17;
+  --dsw-specific-selector: #2f261e;
+  --dsw-alias-border-l1: rgba(255, 235, 210, 0.07);
+  --dsw-alias-border-l2: rgba(255, 235, 210, 0.11);
+  --dsw-alias-border-l3: rgba(255, 235, 210, 0.13);
+  --dsw-alias-border-l4: rgba(255, 235, 210, 0.17);
+  --dsw-alias-interactive-bg-hover: rgba(255, 235, 210, 0.05);
+  --dsw-alias-interactive-bg-active: rgba(255, 235, 210, 0.08);
+  --dsw-alias-interactive-bg-hover-solid: #2f261e;
+  /* User bubble and code */
+  --dsw-specific-bubble: #33281e;
+  --dsw-alias-markdown-code-block: #17120e;
+  --dsw-alias-markdown-code-block-banner: #2a211a;
+  --dsw-alias-markdown-inline-code: #2e251c;
+  /* Text */
+  --dsw-alias-label-primary: #f5ede2;
+  --dsw-alias-label-secondary: #bfb2a2;
+  --dsw-alias-label-tertiary: #9a8c7b;
+  --dsw-alias-label-caption: #7c6f60;
+  --dsw-alias-label-dimmed: #4a3f35;
+  --dsw-alias-label-primary-foreground: #1b1612;
+  /* Accent (composer send button, keyword gradient), links, focus and info */
+  --dsw-omo-accent-orange: #e8a24a;
+  --dsw-omo-accent-green: #cf9150;
+  --dsw-omo-accent-green-hover: #dca065;
+  --dsw-omo-accent-foreground: #1b1612;
+  --dsw-omo-keyword-gradient: linear-gradient(90deg, var(--dsw-omo-accent-orange), var(--dsw-omo-accent-green));
+  --dsw-alias-link: #e0a26a;
+  --dsw-alias-state-business-primary: #d8a06a;
+  --dsw-alias-state-business-tertiary: #4a3828;
+  --dsw-alias-button-info-fill: #d8a06a;
+  --dsw-alias-button-info-hover: #dca065;
+  --dsw-alias-label-deep-diving: color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, var(--dsw-alias-label-tertiary));
+  --dsw-alias-label-deep-diving-shimmer: color-mix(in srgb, var(--dsw-alias-state-business-primary) 65%, var(--dsw-alias-label-primary));
+  /* Buttons: the primary fill stays dark-on-light / light-on-dark like DSH, so --dsw-alias-label-primary-foreground
+     also fits the QuestionCard check drawn on --dsw-alias-label-primary and the Switch thumb. */
+  --dsw-alias-brand-primary: #f1e3cf;
+  --dsw-alias-button-primary-fill: #f1e3cf;
+  --dsw-alias-button-primary-hover: #e4d2b8;
+  --dsw-alias-button-elevated-fill: #2c241c;
+  --dsw-alias-button-floating-fill: #2a221b;
+  --dsw-alias-button-floating-hover: #352b22;
+  --dsw-alias-button-ghost-active-fill: #3a2f25;
+  --dsw-alias-button-ghost-active-hover: #443729;
+  --dsw-alias-button-ghost-active-border: #8a6f55;
+}
+
+/* Mint: pale mint paper in light, deep green in dark, lime-to-green accents. */
+body[data-palette='mint'] {
+  /* Surfaces */
+  --dsw-alias-bg-base: #f1f8f3;
+  --dsw-alias-bg-layer-1: #fbfefc;
+  --dsw-alias-bg-layer-2: #f6fbf8;
+  --dsw-alias-bg-layer-3: #eff7f2;
+  --dsw-alias-bg-module-platform: #e5f1e9;
+  --dsw-alias-bg-overlay: #d9e9df;
+  /* Sidebar */
+  --dsw-specific-sidebar-fill: #e7f3ea;
+  --dsw-specific-sidebar-nav-item-hover: #dfece4;
+  --dsw-specific-sidebar-nav-item-active: #d3e6da;
+  --dsw-omo-sidebar-tint: 34 139 84;
+  --dsw-omo-sidebar-glow: rgba(34, 139, 84, 0.08);
+  --dsw-alias-scrollbar-bg-l1: #c4d9cb;
+  --dsw-alias-scrollbar-hover-l1: #afc9b8;
+  --dsw-alias-scrollbar-bg-l2: #bfd6c7;
+  --dsw-alias-scrollbar-hover-l2: #a9c5b3;
+  /* Menus */
+  --dsw-menu-surface-fill: rgba(243, 250, 245, 0.58);
+  --dsw-alias-menu-group-header-fill: rgba(243, 250, 245, 0.94);
+  /* Inputs and controls */
+  --dsw-specific-input-major: #fbfefc;
+  --dsw-specific-selector: #e3efe6;
+  --dsw-alias-border-l1: rgba(20, 60, 40, 0.07);
+  --dsw-alias-border-l2: rgba(20, 60, 40, 0.11);
+  --dsw-alias-border-l3: #d2e3d8;
+  --dsw-alias-border-l4: rgba(20, 60, 40, 0.17);
+  --dsw-alias-interactive-bg-hover: rgba(20, 60, 40, 0.05);
+  --dsw-alias-interactive-bg-active: rgba(20, 60, 40, 0.09);
+  --dsw-alias-interactive-bg-hover-solid: #e0ede5;
+  /* User bubble and code */
+  --dsw-specific-bubble: #dff0e5;
+  --dsw-alias-markdown-code-block: #eaf3ed;
+  --dsw-alias-markdown-code-block-banner: #e0ece4;
+  --dsw-alias-markdown-inline-code: #e4f0e8;
+  /* Text */
+  --dsw-alias-label-primary: #0f2419;
+  --dsw-alias-label-secondary: #3f564a;
+  --dsw-alias-label-tertiary: #5f7568;
+  --dsw-alias-label-caption: #8ea196;
+  --dsw-alias-label-dimmed: #c9d9cf;
+  --dsw-alias-label-primary-foreground: #f4fbf6;
+  /* Accent (composer send button, keyword gradient), links, focus and info */
+  --dsw-omo-accent-orange: #6cbb5e;
+  --dsw-omo-accent-green: #1b7f4b;
+  --dsw-omo-accent-green-hover: #166a3f;
+  --dsw-omo-accent-foreground: #f4fbf6;
+  --dsw-omo-keyword-gradient: linear-gradient(90deg, var(--dsw-omo-accent-orange), var(--dsw-omo-accent-green));
+  --dsw-alias-link: #15733f;
+  --dsw-alias-state-business-primary: #1c7f4b;
+  --dsw-alias-state-business-tertiary: #eaf8ef;
+  --dsw-alias-button-info-fill: #1c7f4b;
+  --dsw-alias-button-info-hover: #166a3f;
+  --dsw-alias-label-deep-diving: color-mix(in srgb, var(--dsw-alias-state-business-primary) 70%, var(--dsw-alias-label-primary));
+  --dsw-alias-label-deep-diving-shimmer: color-mix(in srgb, var(--dsw-alias-state-business-primary) 30%, var(--dsw-alias-label-primary));
+  /* Buttons: the primary fill stays dark-on-light / light-on-dark like DSH, so --dsw-alias-label-primary-foreground
+     also fits the QuestionCard check drawn on --dsw-alias-label-primary and the Switch thumb. */
+  --dsw-alias-brand-primary: #1f5c3a;
+  --dsw-alias-button-primary-fill: #1f5c3a;
+  --dsw-alias-button-primary-hover: #2a7049;
+  --dsw-alias-button-elevated-fill: #fbfefc;
+  --dsw-alias-button-floating-fill: #fbfefc;
+  --dsw-alias-button-floating-hover: #e8f2ec;
+  --dsw-alias-button-ghost-active-fill: #dcebe2;
+  --dsw-alias-button-ghost-active-hover: #d1e4d9;
+  --dsw-alias-button-ghost-active-border: #639578;
+}
+
+body[data-palette='mint'][data-ds-dark-theme] {
+  /* Surfaces */
+  --dsw-alias-bg-base: #0f1b15;
+  --dsw-alias-bg-layer-1: #172820;
+  --dsw-alias-bg-layer-2: #1d3027;
+  --dsw-alias-bg-layer-3: #243a2f;
+  --dsw-alias-bg-module-platform: #243a2f;
+  --dsw-alias-bg-overlay: #2b4537;
+  /* Sidebar */
+  --dsw-specific-sidebar-fill: #13211a;
+  --dsw-specific-sidebar-nav-item-hover: #1b2d24;
+  --dsw-specific-sidebar-nav-item-active: #27402f;
+  --dsw-omo-sidebar-tint: 80 200 130;
+  --dsw-omo-sidebar-glow: rgba(80, 200, 130, 0.09);
+  --dsw-alias-scrollbar-bg-l1: #334f42;
+  --dsw-alias-scrollbar-hover-l1: #416051;
+  --dsw-alias-scrollbar-bg-l2: #355245;
+  --dsw-alias-scrollbar-hover-l2: #446355;
+  /* Menus */
+  --dsw-menu-surface-fill: rgba(36, 58, 47, 0.45);
+  --dsw-alias-menu-group-header-fill: rgba(28, 44, 36, 0.94);
+  /* Inputs and controls */
+  --dsw-specific-input-major: #15241c;
+  --dsw-specific-selector: #1d2f25;
+  --dsw-alias-border-l1: rgba(200, 240, 215, 0.07);
+  --dsw-alias-border-l2: rgba(200, 240, 215, 0.11);
+  --dsw-alias-border-l3: rgba(200, 240, 215, 0.13);
+  --dsw-alias-border-l4: rgba(200, 240, 215, 0.17);
+  --dsw-alias-interactive-bg-hover: rgba(200, 240, 215, 0.05);
+  --dsw-alias-interactive-bg-active: rgba(200, 240, 215, 0.08);
+  --dsw-alias-interactive-bg-hover-solid: #1d2f25;
+  /* User bubble and code */
+  --dsw-specific-bubble: #1f3429;
+  --dsw-alias-markdown-code-block: #0b1510;
+  --dsw-alias-markdown-code-block-banner: #1a2b22;
+  --dsw-alias-markdown-inline-code: #1e3027;
+  /* Text */
+  --dsw-alias-label-primary: #eaf6ee;
+  --dsw-alias-label-secondary: #a9c2b3;
+  --dsw-alias-label-tertiary: #88a494;
+  --dsw-alias-label-caption: #6c8777;
+  --dsw-alias-label-dimmed: #35493f;
+  --dsw-alias-label-primary-foreground: #0f1b15;
+  /* Accent (composer send button, keyword gradient), links, focus and info */
+  --dsw-omo-accent-orange: #9ad68a;
+  --dsw-omo-accent-green: #3ecf7f;
+  --dsw-omo-accent-green-hover: #5ad993;
+  --dsw-omo-accent-foreground: #0b1a12;
+  --dsw-omo-keyword-gradient: linear-gradient(90deg, var(--dsw-omo-accent-orange), var(--dsw-omo-accent-green));
+  --dsw-alias-link: #5fd39a;
+  --dsw-alias-state-business-primary: #4cc98a;
+  --dsw-alias-state-business-tertiary: #1f4a35;
+  --dsw-alias-button-info-fill: #4cc98a;
+  --dsw-alias-button-info-hover: #5ad993;
+  --dsw-alias-label-deep-diving: color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, var(--dsw-alias-label-tertiary));
+  --dsw-alias-label-deep-diving-shimmer: color-mix(in srgb, var(--dsw-alias-state-business-primary) 65%, var(--dsw-alias-label-primary));
+  /* Buttons: the primary fill stays dark-on-light / light-on-dark like DSH, so --dsw-alias-label-primary-foreground
+     also fits the QuestionCard check drawn on --dsw-alias-label-primary and the Switch thumb. */
+  --dsw-alias-brand-primary: #d7f0e1;
+  --dsw-alias-button-primary-fill: #d7f0e1;
+  --dsw-alias-button-primary-hover: #c4e5d2;
+  --dsw-alias-button-elevated-fill: #1d3027;
+  --dsw-alias-button-floating-fill: #1a2c23;
+  --dsw-alias-button-floating-hover: #243a2f;
+  --dsw-alias-button-ghost-active-fill: #294233;
+  --dsw-alias-button-ghost-active-hover: #304c3b;
+  --dsw-alias-button-ghost-active-border: #5f9a78;
+}
+
+/* Ocean: sky-blue paper in light, navy in dark, cyan-to-blue accents. */
+body[data-palette='ocean'] {
+  /* Surfaces */
+  --dsw-alias-bg-base: #eff5fb;
+  --dsw-alias-bg-layer-1: #fbfdff;
+  --dsw-alias-bg-layer-2: #f5f9fd;
+  --dsw-alias-bg-layer-3: #edf3fa;
+  --dsw-alias-bg-module-platform: #e3ecf6;
+  --dsw-alias-bg-overlay: #d6e2f0;
+  /* Sidebar */
+  --dsw-specific-sidebar-fill: #e4edf7;
+  --dsw-specific-sidebar-nav-item-hover: #dce7f3;
+  --dsw-specific-sidebar-nav-item-active: #cfdff0;
+  --dsw-omo-sidebar-tint: 37 99 235;
+  --dsw-omo-sidebar-glow: rgba(37, 99, 235, 0.08);
+  --dsw-alias-scrollbar-bg-l1: #c0d0e3;
+  --dsw-alias-scrollbar-hover-l1: #a9bed6;
+  --dsw-alias-scrollbar-bg-l2: #b9cbe1;
+  --dsw-alias-scrollbar-hover-l2: #a2b8d2;
+  /* Menus */
+  --dsw-menu-surface-fill: rgba(243, 248, 253, 0.58);
+  --dsw-alias-menu-group-header-fill: rgba(243, 248, 253, 0.94);
+  /* Inputs and controls */
+  --dsw-specific-input-major: #fbfdff;
+  --dsw-specific-selector: #e0eaf6;
+  --dsw-alias-border-l1: rgba(20, 50, 90, 0.07);
+  --dsw-alias-border-l2: rgba(20, 50, 90, 0.11);
+  --dsw-alias-border-l3: #cfdced;
+  --dsw-alias-border-l4: rgba(20, 50, 90, 0.17);
+  --dsw-alias-interactive-bg-hover: rgba(20, 50, 90, 0.05);
+  --dsw-alias-interactive-bg-active: rgba(20, 50, 90, 0.09);
+  --dsw-alias-interactive-bg-hover-solid: #dde8f4;
+  /* User bubble and code */
+  --dsw-specific-bubble: #dbe8f7;
+  --dsw-alias-markdown-code-block: #e8f0f8;
+  --dsw-alias-markdown-code-block-banner: #dde8f3;
+  --dsw-alias-markdown-inline-code: #e2ebf5;
+  /* Text */
+  --dsw-alias-label-primary: #0d1b2e;
+  --dsw-alias-label-secondary: #3b4e68;
+  --dsw-alias-label-tertiary: #5d6f87;
+  --dsw-alias-label-caption: #8c9bb0;
+  --dsw-alias-label-dimmed: #c6d2e2;
+  --dsw-alias-label-primary-foreground: #f5f9ff;
+  /* Accent (composer send button, keyword gradient), links, focus and info */
+  --dsw-omo-accent-orange: #13a3c7;
+  --dsw-omo-accent-green: #1f66d0;
+  --dsw-omo-accent-green-hover: #1a56b0;
+  --dsw-omo-accent-foreground: #f5f9ff;
+  --dsw-omo-keyword-gradient: linear-gradient(90deg, var(--dsw-omo-accent-orange), var(--dsw-omo-accent-green));
+  --dsw-alias-link: #1a5fc4;
+  --dsw-alias-state-business-primary: #1d66c9;
+  --dsw-alias-state-business-tertiary: #e1edfb;
+  --dsw-alias-button-info-fill: #1d66c9;
+  --dsw-alias-button-info-hover: #1a56b0;
+  --dsw-alias-label-deep-diving: color-mix(in srgb, var(--dsw-alias-state-business-primary) 70%, var(--dsw-alias-label-primary));
+  --dsw-alias-label-deep-diving-shimmer: color-mix(in srgb, var(--dsw-alias-state-business-primary) 30%, var(--dsw-alias-label-primary));
+  /* Buttons: the primary fill stays dark-on-light / light-on-dark like DSH, so --dsw-alias-label-primary-foreground
+     also fits the QuestionCard check drawn on --dsw-alias-label-primary and the Switch thumb. */
+  --dsw-alias-brand-primary: #17345c;
+  --dsw-alias-button-primary-fill: #17345c;
+  --dsw-alias-button-primary-hover: #214a7e;
+  --dsw-alias-button-elevated-fill: #fbfdff;
+  --dsw-alias-button-floating-fill: #fbfdff;
+  --dsw-alias-button-floating-hover: #e6eef8;
+  --dsw-alias-button-ghost-active-fill: #d9e5f3;
+  --dsw-alias-button-ghost-active-hover: #cddcee;
+  --dsw-alias-button-ghost-active-border: #6189b8;
+}
+
+body[data-palette='ocean'][data-ds-dark-theme] {
+  /* Surfaces */
+  --dsw-alias-bg-base: #0c1627;
+  --dsw-alias-bg-layer-1: #152339;
+  --dsw-alias-bg-layer-2: #1a2b44;
+  --dsw-alias-bg-layer-3: #213651;
+  --dsw-alias-bg-module-platform: #213651;
+  --dsw-alias-bg-overlay: #2a4164;
+  /* Sidebar */
+  --dsw-specific-sidebar-fill: #101b2f;
+  --dsw-specific-sidebar-nav-item-hover: #19293f;
+  --dsw-specific-sidebar-nav-item-active: #243a57;
+  --dsw-omo-sidebar-tint: 96 165 250;
+  --dsw-omo-sidebar-glow: rgba(96, 165, 250, 0.09);
+  --dsw-alias-scrollbar-bg-l1: #324c74;
+  --dsw-alias-scrollbar-hover-l1: #3f5d8a;
+  --dsw-alias-scrollbar-bg-l2: #34507a;
+  --dsw-alias-scrollbar-hover-l2: #426290;
+  /* Menus */
+  --dsw-menu-surface-fill: rgba(34, 54, 84, 0.45);
+  --dsw-alias-menu-group-header-fill: rgba(26, 42, 66, 0.94);
+  /* Inputs and controls */
+  --dsw-specific-input-major: #131f35;
+  --dsw-specific-selector: #1a2a45;
+  --dsw-alias-border-l1: rgba(190, 215, 255, 0.07);
+  --dsw-alias-border-l2: rgba(190, 215, 255, 0.11);
+  --dsw-alias-border-l3: rgba(190, 215, 255, 0.13);
+  --dsw-alias-border-l4: rgba(190, 215, 255, 0.17);
+  --dsw-alias-interactive-bg-hover: rgba(190, 215, 255, 0.05);
+  --dsw-alias-interactive-bg-active: rgba(190, 215, 255, 0.08);
+  --dsw-alias-interactive-bg-hover-solid: #1a2a45;
+  /* User bubble and code */
+  --dsw-specific-bubble: #1c3050;
+  --dsw-alias-markdown-code-block: #091120;
+  --dsw-alias-markdown-code-block-banner: #172740;
+  --dsw-alias-markdown-inline-code: #1b2c46;
+  /* Text */
+  --dsw-alias-label-primary: #eaf2ff;
+  --dsw-alias-label-secondary: #a8bbd8;
+  --dsw-alias-label-tertiary: #8599b8;
+  --dsw-alias-label-caption: #6a7e9e;
+  --dsw-alias-label-dimmed: #30405a;
+  --dsw-alias-label-primary-foreground: #0c1627;
+  /* Accent (composer send button, keyword gradient), links, focus and info */
+  --dsw-omo-accent-orange: #38bdf8;
+  --dsw-omo-accent-green: #2f6fe0;
+  --dsw-omo-accent-green-hover: #2a62cc;
+  --dsw-omo-accent-foreground: #ffffff;
+  --dsw-omo-keyword-gradient: linear-gradient(90deg, var(--dsw-omo-accent-orange), var(--dsw-omo-accent-green));
+  --dsw-alias-link: #7db3ff;
+  --dsw-alias-state-business-primary: #6aa6ff;
+  --dsw-alias-state-business-tertiary: #1f3a5e;
+  --dsw-alias-button-info-fill: #6aa6ff;
+  --dsw-alias-button-info-hover: #2a62cc;
+  --dsw-alias-label-deep-diving: color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, var(--dsw-alias-label-tertiary));
+  --dsw-alias-label-deep-diving-shimmer: color-mix(in srgb, var(--dsw-alias-state-business-primary) 65%, var(--dsw-alias-label-primary));
+  /* Buttons: the primary fill stays dark-on-light / light-on-dark like DSH, so --dsw-alias-label-primary-foreground
+     also fits the QuestionCard check drawn on --dsw-alias-label-primary and the Switch thumb. */
+  --dsw-alias-brand-primary: #d6e6fb;
+  --dsw-alias-button-primary-fill: #d6e6fb;
+  --dsw-alias-button-primary-hover: #c2d8f5;
+  --dsw-alias-button-elevated-fill: #1a2b44;
+  --dsw-alias-button-floating-fill: #172740;
+  --dsw-alias-button-floating-hover: #213651;
+  --dsw-alias-button-ghost-active-fill: #243b5a;
+  --dsw-alias-button-ghost-active-hover: #2c4668;
+  --dsw-alias-button-ghost-active-border: #5a86c4;
+}
+
+/* SBD: pale red paper in light, black charcoal in dark, restrained strong red accents. */
+body[data-palette='sbd'] {
+  /* Surfaces */
+  --dsw-alias-bg-base: #fbf3f3;
+  --dsw-alias-bg-layer-1: #fffcfc;
+  --dsw-alias-bg-layer-2: #fdf8f8;
+  --dsw-alias-bg-layer-3: #f8f0f0;
+  --dsw-alias-bg-module-platform: #f5e8e8;
+  --dsw-alias-bg-overlay: #efdcdc;
+  /* Sidebar */
+  --dsw-specific-sidebar-fill: #f7eaea;
+  --dsw-specific-sidebar-nav-item-hover: #f1e1e1;
+  --dsw-specific-sidebar-nav-item-active: #ead4d4;
+  --dsw-omo-sidebar-tint: 209 32 42;
+  --dsw-omo-sidebar-glow: rgba(209, 32, 42, 0.06);
+  --dsw-alias-scrollbar-bg-l1: #dfc9c9;
+  --dsw-alias-scrollbar-hover-l1: #cfb3b3;
+  --dsw-alias-scrollbar-bg-l2: #dcc4c4;
+  --dsw-alias-scrollbar-hover-l2: #caadad;
+  /* Menus */
+  --dsw-menu-surface-fill: rgba(253, 247, 247, 0.58);
+  --dsw-alias-menu-group-header-fill: rgba(253, 247, 247, 0.94);
+  /* Inputs and controls */
+  --dsw-specific-input-major: #fffcfc;
+  --dsw-specific-selector: #f5e6e6;
+  --dsw-alias-border-l1: rgba(80, 20, 25, 0.07);
+  --dsw-alias-border-l2: rgba(80, 20, 25, 0.11);
+  --dsw-alias-border-l3: #e8d6d6;
+  --dsw-alias-border-l4: rgba(80, 20, 25, 0.17);
+  --dsw-alias-interactive-bg-hover: rgba(80, 20, 25, 0.05);
+  --dsw-alias-interactive-bg-active: rgba(80, 20, 25, 0.09);
+  --dsw-alias-interactive-bg-hover-solid: #f1e2e2;
+  /* User bubble and code */
+  --dsw-specific-bubble: #f6e3e3;
+  --dsw-alias-markdown-code-block: #f6eded;
+  --dsw-alias-markdown-code-block-banner: #f0e2e2;
+  --dsw-alias-markdown-inline-code: #f3e6e6;
+  /* Text */
+  --dsw-alias-label-primary: #1c1516;
+  --dsw-alias-label-secondary: #514446;
+  --dsw-alias-label-tertiary: #75676a;
+  --dsw-alias-label-caption: #a19395;
+  --dsw-alias-label-dimmed: #dccfcf;
+  --dsw-alias-label-primary-foreground: #fff8f8;
+  /* Accent (composer send button, keyword gradient), links, focus and info */
+  --dsw-omo-accent-orange: #7f0d14;
+  --dsw-omo-accent-green: #c81e28;
+  --dsw-omo-accent-green-hover: #ad1820;
+  --dsw-omo-accent-foreground: #fff8f8;
+  --dsw-omo-keyword-gradient: linear-gradient(90deg, var(--dsw-omo-accent-orange), var(--dsw-omo-accent-green));
+  --dsw-alias-link: #b3161f;
+  --dsw-alias-state-business-primary: #c01d28;
+  --dsw-alias-state-business-tertiary: #fae0e2;
+  --dsw-alias-button-info-fill: #c01d28;
+  --dsw-alias-button-info-hover: #ad1820;
+  --dsw-alias-label-deep-diving: color-mix(in srgb, var(--dsw-alias-state-business-primary) 70%, var(--dsw-alias-label-primary));
+  --dsw-alias-label-deep-diving-shimmer: color-mix(in srgb, var(--dsw-alias-state-business-primary) 30%, var(--dsw-alias-label-primary));
+  /* Buttons: the primary fill stays dark-on-light / light-on-dark like DSH, so --dsw-alias-label-primary-foreground
+     also fits the QuestionCard check drawn on --dsw-alias-label-primary and the Switch thumb. */
+  --dsw-alias-brand-primary: #1c1a1a;
+  --dsw-alias-button-primary-fill: #1c1a1a;
+  --dsw-alias-button-primary-hover: #363232;
+  --dsw-alias-button-elevated-fill: #fffcfc;
+  --dsw-alias-button-floating-fill: #fffcfc;
+  --dsw-alias-button-floating-hover: #f5e9e9;
+  --dsw-alias-button-ghost-active-fill: #f0dfdf;
+  --dsw-alias-button-ghost-active-hover: #ead2d2;
+  --dsw-alias-button-ghost-active-border: #b67b80;
+}
+
+body[data-palette='sbd'][data-ds-dark-theme] {
+  /* Surfaces */
+  --dsw-alias-bg-base: #0f0f10;
+  --dsw-alias-bg-layer-1: #1a1a1b;
+  --dsw-alias-bg-layer-2: #202022;
+  --dsw-alias-bg-layer-3: #28282a;
+  --dsw-alias-bg-module-platform: #28282a;
+  --dsw-alias-bg-overlay: #333336;
+  /* Sidebar */
+  --dsw-specific-sidebar-fill: #141415;
+  --dsw-specific-sidebar-nav-item-hover: #202022;
+  --dsw-specific-sidebar-nav-item-active: #2d2a2b;
+  --dsw-omo-sidebar-tint: 244 63 74;
+  --dsw-omo-sidebar-glow: rgba(244, 63, 74, 0.07);
+  --dsw-alias-scrollbar-bg-l1: #424247;
+  --dsw-alias-scrollbar-hover-l1: #525258;
+  --dsw-alias-scrollbar-bg-l2: #45454a;
+  --dsw-alias-scrollbar-hover-l2: #56565c;
+  /* Menus */
+  --dsw-menu-surface-fill: rgba(44, 44, 46, 0.45);
+  --dsw-alias-menu-group-header-fill: rgba(32, 32, 34, 0.94);
+  /* Inputs and controls */
+  --dsw-specific-input-major: #171718;
+  --dsw-specific-selector: #222224;
+  --dsw-alias-border-l1: rgba(255, 255, 255, 0.07);
+  --dsw-alias-border-l2: rgba(255, 255, 255, 0.11);
+  --dsw-alias-border-l3: rgba(255, 255, 255, 0.13);
+  --dsw-alias-border-l4: rgba(255, 255, 255, 0.17);
+  --dsw-alias-interactive-bg-hover: rgba(255, 255, 255, 0.05);
+  --dsw-alias-interactive-bg-active: rgba(255, 255, 255, 0.08);
+  --dsw-alias-interactive-bg-hover-solid: #222224;
+  /* User bubble and code */
+  --dsw-specific-bubble: #2a2224;
+  --dsw-alias-markdown-code-block: #0a0a0b;
+  --dsw-alias-markdown-code-block-banner: #1c1c1e;
+  --dsw-alias-markdown-inline-code: #232325;
+  /* Text */
+  --dsw-alias-label-primary: #f4f1f1;
+  --dsw-alias-label-secondary: #b4adad;
+  --dsw-alias-label-tertiary: #8f8787;
+  --dsw-alias-label-caption: #6f6868;
+  --dsw-alias-label-dimmed: #3b3838;
+  --dsw-alias-label-primary-foreground: #0f0f10;
+  /* Accent (composer send button, keyword gradient), links, focus and info */
+  --dsw-omo-accent-orange: #ff6b74;
+  --dsw-omo-accent-green: #d9262f;
+  --dsw-omo-accent-green-hover: #c4202a;
+  --dsw-omo-accent-foreground: #ffffff;
+  --dsw-omo-keyword-gradient: linear-gradient(90deg, var(--dsw-omo-accent-orange), var(--dsw-omo-accent-green));
+  --dsw-alias-link: #ff6b74;
+  --dsw-alias-state-business-primary: #f45b64;
+  --dsw-alias-state-business-tertiary: #3d1c1f;
+  --dsw-alias-button-info-fill: #f45b64;
+  --dsw-alias-button-info-hover: #c4202a;
+  --dsw-alias-label-deep-diving: color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, var(--dsw-alias-label-tertiary));
+  --dsw-alias-label-deep-diving-shimmer: color-mix(in srgb, var(--dsw-alias-state-business-primary) 65%, var(--dsw-alias-label-primary));
+  /* Buttons: the primary fill stays dark-on-light / light-on-dark like DSH, so --dsw-alias-label-primary-foreground
+     also fits the QuestionCard check drawn on --dsw-alias-label-primary and the Switch thumb. */
+  --dsw-alias-brand-primary: #f2e7e7;
+  --dsw-alias-button-primary-fill: #f2e7e7;
+  --dsw-alias-button-primary-hover: #e4d5d5;
+  --dsw-alias-button-elevated-fill: #202022;
+  --dsw-alias-button-floating-fill: #1d1d1f;
+  --dsw-alias-button-floating-hover: #28282a;
+  --dsw-alias-button-ghost-active-fill: #2c2c2f;
+  --dsw-alias-button-ghost-active-hover: #343437;
+  --dsw-alias-button-ghost-active-border: #7a7a80;
+}
+
+/* The nearly opaque macOS menu fill (design-platform.css / omo-theme.css) follows each palette's menu tint. */
+html[data-platform='darwin'] body[data-palette='classic'] {
+  --dsw-specific-menu: rgba(251, 247, 239, 0.94);
+}
+
+html[data-platform='darwin'] body[data-palette='classic'][data-ds-dark-theme] {
+  --dsw-specific-menu: rgba(44, 36, 28, 0.94);
+}
+
+html[data-platform='darwin'] body[data-palette='mint'] {
+  --dsw-specific-menu: rgba(243, 250, 245, 0.94);
+}
+
+html[data-platform='darwin'] body[data-palette='mint'][data-ds-dark-theme] {
+  --dsw-specific-menu: rgba(28, 44, 36, 0.94);
+}
+
+html[data-platform='darwin'] body[data-palette='ocean'] {
+  --dsw-specific-menu: rgba(243, 248, 253, 0.94);
+}
+
+html[data-platform='darwin'] body[data-palette='ocean'][data-ds-dark-theme] {
+  --dsw-specific-menu: rgba(26, 42, 66, 0.94);
+}
+
+html[data-platform='darwin'] body[data-palette='sbd'] {
+  --dsw-specific-menu: rgba(253, 247, 247, 0.94);
+}
+
+html[data-platform='darwin'] body[data-palette='sbd'][data-ds-dark-theme] {
+  --dsw-specific-menu: rgba(32, 32, 34, 0.94);
+}

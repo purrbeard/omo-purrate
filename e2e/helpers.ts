@@ -22,6 +22,8 @@ export interface LaunchOptions {
   extraEnv?: Record<string, string>;
   /** Wait for the bridge to report "connected" before returning; defaults to true. */
   waitForConnected?: boolean;
+  /** Leave the first-run wizard enabled; by default a fresh userData is seeded so the wizard stays hidden. */
+  onboarding?: boolean;
 }
 
 export interface LaunchDirs {
@@ -42,6 +44,24 @@ export interface LaunchedApp {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * Marks onboarding completed in userData's preferences so specs never meet the wizard. Preferences a spec wrote
+ * itself are kept; an explicit onboardingCompleted in them wins.
+ */
+function seedSkipOnboarding(userData: string): void {
+  const file = path.join(userData, "preferences.json");
+  let existing: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (isRecord(parsed)) existing = parsed;
+  } catch (error) {
+    if (!isRecord(error) || error["code"] !== "ENOENT") throw error;
+    mkdirSync(userData, { recursive: true });
+  }
+  if ("onboardingCompleted" in existing) return;
+  writeFileSync(file, `${JSON.stringify({ ...existing, onboardingCompleted: true })}\n`);
+}
 
 export function tempDir(label: string): string {
   return mkdtempSync(path.join(tmpdir(), `omo-ui-e2e-${label}-`));
@@ -84,6 +104,7 @@ export async function launchApp(options: LaunchOptions): Promise<LaunchedApp> {
   const preferences = path.join(userData, "preferences.json");
   if (!existsSync(preferences)) writeFileSync(preferences, JSON.stringify({ locale: "en" }));
   env[ENV.userData] = userData;
+  if (options.onboarding !== true) seedSkipOnboarding(userData);
   const pickDir = options.pickDir ?? null;
   if (pickDir !== null) env[ENV.qaPickDir] = pickDir;
 
@@ -182,6 +203,7 @@ export async function setTheme(page: Page, theme: "light" | "dark"): Promise<voi
   await byTestId(page, TESTID.openSettings).click();
   const dialog = byTestId(page, TESTID.settingsDialog);
   await expect(dialog).toBeVisible();
+  await dialog.locator('[data-section="appearance"]').click();
   const choice = byTestId(page, theme === "dark" ? TESTID.settingsThemeDark : TESTID.settingsThemeLight);
   await choice.click();
   await expect(choice).toHaveAttribute("aria-pressed", "true");

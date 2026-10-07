@@ -140,6 +140,10 @@ export function AppFrame({
   }, []);
 
   const cols = computeColumns(viewport, sidebarVisible ? sidebarWidth : 0, rightPanel === null ? 0 : rightPanelWidth);
+  if (rightPanelWidth >= 580 && cols.rightbar > 0 && viewport - cols.sidebar - rightPanelWidth < 520) {
+    cols.center += cols.rightbar;
+    cols.rightbar = 0;
+  }
   const docked = rightPanel !== null && cols.rightbar > 0;
   const colsRef = useRef(cols);
   colsRef.current = cols;

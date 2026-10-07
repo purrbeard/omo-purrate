@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Deterministic stand-in for the omo CLI: `--version` and `app-server --listen stdio://`.
+// Deterministic stand-in for the omo CLI: version, app-server, and native session-tree RPC.
 import { randomUUID } from "node:crypto";
 import {
   appendFileSync,
@@ -10,6 +10,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  watch,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,6 +34,7 @@ const DEMO = process.env.FAKE_OMO_DEMO === undefined ? null : JSON.parse(readFil
 const threads = new Map();
 const pendingResponses = new Map();
 const timers = new Set();
+const watchers = new Set();
 let home = "";
 let sessionsDir = "";
 let logPath;
@@ -223,6 +225,30 @@ function loadSessionFile(file) {
       thread.preview = firstText(Array.isArray(entry.message.content) ? entry.message.content : []);
     }
   }
+  const entries = new Map(lines.slice(1).filter((entry) => isRecord(entry) && typeof entry.id === "string").map((entry) => [entry.id, entry]));
+  const branch = [];
+  for (let id = lastEntryId; id !== null;) {
+    const entry = entries.get(id);
+    if (entry === undefined) break;
+    branch.push(entry);
+    id = typeof entry.parentId === "string" ? entry.parentId : null;
+  }
+  let turn = null;
+  for (const entry of branch.reverse()) {
+    if (entry.type !== "message" || !isRecord(entry.message)) continue;
+    const message = entry.message;
+    if (message.role === "user") {
+      turn = {
+        id: entry.id, items: [{ type: "userMessage", id: entry.id, clientId: null, content: message.content }],
+        itemsView: "full", status: "completed", error: null,
+        startedAt: Math.floor(Date.parse(entry.timestamp) / 1000), completedAt: null, durationMs: null,
+      };
+      thread.turns.push(turn);
+    } else if (turn !== null && message.role === "assistant") {
+      const text = firstText(Array.isArray(message.content) ? message.content : []);
+      if (text !== "") turn.items.push({ type: "agentMessage", id: entry.id, text, phase: "final_answer" });
+    }
+  }
   addThread(thread, { archived, lastEntryId });
 }
 
@@ -313,6 +339,30 @@ function sleep(turn, ms) {
         resolve();
       }, ms);
       timers.add(timer);
+    }),
+  );
+}
+
+/**
+ * Resolves once `file` exists. The directory is watched before the first existence check, so a release that landed
+ * in between is still seen; interrupting the turn closes the watcher and throws Interrupted, like sleep.
+ */
+function awaitFile(turn, file) {
+  return guard(
+    turn,
+    new Promise((resolve, reject) => {
+      const watcher = watch(dirname(file), () => {
+        if (existsSync(file)) finish(resolve);
+      });
+      watchers.add(watcher);
+      const finish = (settle, value) => {
+        watcher.close();
+        watchers.delete(watcher);
+        settle(value);
+      };
+      watcher.on("error", (error) => finish(reject, error));
+      void turn.interruptSignal.then(() => finish(() => {}));
+      if (existsSync(file)) finish(resolve);
     }),
   );
 }
@@ -676,6 +726,18 @@ function runScenario(record, turn, text) {
   const scene = DEMO?.scenes?.find((candidate) => text.includes(candidate.match));
   if (scene !== undefined) return runDemoScene(record, turn, scene);
   if (text.includes("SCENARIO:omo-live")) return runLive(record, turn);
+  if (text.includes("SCENARIO:workflow-background")) {
+    const tool = { type: "dynamicToolCall", id: nextItemId(turn), namespace: null, tool: "read", arguments: { path: "shared/protocol.ts" }, status: "inProgress", contentItems: null, success: null, durationMs: null };
+    startItem(turn, tool);
+    recordEntry(record, assistantEntry([{ type: "toolCall", id: tool.id, name: "read", arguments: tool.arguments }], "toolUse"));
+    Object.assign(tool, { status: "completed", success: true, contentItems: [{ type: "inputText", text: "Runtime dependency contract checked." }], durationMs: 120 });
+    finishItem(turn, tool);
+    recordEntry(record, toolResultEntry(tool.id, "read", "Runtime dependency contract checked.", false));
+    const message = openAgentMessage(turn);
+    appendAgentDelta(turn, message, "Background workflow started. You can continue this conversation.");
+    closeAgentMessage(record, turn, message, "stop");
+    return runDagScenario(record, turn, { home, notify, guard, background: true });
+  }
   if (text.includes("SCENARIO:dag")) return runDagScenario(record, turn, { home, notify, guard });
   if (text === "SCENARIO:skills-history") {
     const item = openAgentMessage(turn);
@@ -697,6 +759,25 @@ function runScenario(record, turn, text) {
     return;
   }
   if (text.includes("SCENARIO:full")) return runFull(record, turn);
+  if (text.includes("SCENARIO:async-question")) {
+    const id = `async-question-${turn.wire.id}`;
+    write({ id, method: "item/tool/requestUserInput", params: {
+      threadId: record.thread.id, turnId: turn.wire.id, itemId: "async-question", waitForAnswer: false,
+      questions: [{ id: "choice", header: "Choice", question: "Pick A or B?", options: [{ label: "A", description: "First" }, { label: "B", description: "Second" }] }],
+    } });
+    const item = openAgentMessage(turn);
+    appendAgentDelta(turn, item, "The question is waiting for your answer.");
+    closeAgentMessage(record, turn, item, "stop");
+    notify("serverRequest/resolved", { threadId: record.thread.id, requestId: id });
+    return;
+  }
+  // SCENARIO:gate:<file> streams nothing until <file> exists, then echoes: a test holds the turn open for as long as it
+  // needs (switch threads, change a setting) and releases it by creating the file, with no timing assumption.
+  if (text.includes("SCENARIO:gate:")) {
+    const gate = /SCENARIO:gate:(.+)$/m.exec(text)?.[1]?.trim();
+    if (gate === undefined || gate === "") throw new Error("SCENARIO:gate needs a file path");
+    return awaitFile(turn, gate).then(() => runEcho(record, turn, text));
+  }
   // SCENARIO:quiet[:ms] streams nothing for ms (default 3000) before echoing, like a long model call with hidden thinking.
   if (text.includes("SCENARIO:quiet")) {
     return sleep(turn, Number(/SCENARIO:quiet:(\d+)/.exec(text)?.[1] ?? 3000)).then(() => runEcho(record, turn, text));
@@ -1062,6 +1143,9 @@ function handleRequest(id, method, params) {
     case "thread/list":
       respond(id, listThreads(params));
       return;
+    case "thread/loaded/list":
+      respond(id, { data: [...threads.values()].filter((record) => record.loaded).map((record) => record.thread.id) });
+      return;
     case "thread/start": {
       const thread = { ...defaultThread(randomUUID()), cwd: requireString(params, "cwd") };
       const record = addThread(thread, { loaded: true });
@@ -1163,8 +1247,67 @@ function serve() {
   lines.on("close", () => {
     for (const timer of timers) clearTimeout(timer);
     timers.clear();
+    for (const watcher of watchers) watcher.close();
+    watchers.clear();
     process.exitCode = 0;
   });
+}
+
+function serveTree(file) {
+  const entries = readFileSync(file, "utf8").split(/\r?\n/).filter((line) => line.trim()).map((line) => JSON.parse(line)).filter((entry) => entry.type !== "session");
+  let leafId = entries.at(-1)?.id ?? null;
+  logPath = process.env.FAKE_OMO_LOG;
+  const lines = createInterface({ input: process.stdin });
+  lines.on("line", (line) => {
+    if (!line.trim()) return;
+    const frame = JSON.parse(line);
+    if (logPath !== undefined) appendFileSync(logPath, `${JSON.stringify(frame)}\n`);
+    const reply = (data) => write({ id: frame.id, type: "response", command: frame.type, success: true, data });
+    const reject = (error, errorCode, errorData) => write({ id: frame.id, type: "response", command: frame.type, success: false, error, errorCode, ...(errorData === undefined ? {} : { errorData }) });
+    switch (frame.type) {
+      case "get_tree": {
+        const nodes = new Map(entries.map((entry) => [entry.id, { entry, children: [] }]));
+        const tree = [];
+        for (const node of nodes.values()) {
+          const parent = nodes.get(node.entry.parentId);
+          if (parent === undefined) tree.push(node);
+          else parent.children.push(node);
+        }
+        reply({ tree, leafId });
+        break;
+      }
+      case "navigate_tree": {
+        if (frame.expectedLeafId !== undefined && frame.expectedLeafId !== leafId) {
+          reject("Session leaf changed", "stale_leaf", { leafId });
+          break;
+        }
+        const entry = entries.find((entry) => entry.id === frame.entryId);
+        if (entry === undefined) {
+          reject("Session entry not found", "entry_not_found");
+          break;
+        }
+        const user = entry.type === "message" && entry.message?.role === "user";
+        leafId = user ? entry.parentId : entry.id;
+        reply({ outcome: "navigated", leafId, ...(user ? { editorText: firstText(entry.message.content) } : {}) });
+        break;
+      }
+      case "extension_request": {
+        if (frame.name !== "omoui.tree.persist") {
+          reject("Extension not found", "not_found");
+          break;
+        }
+        const entry = { type: "custom", customType: "omoui.tree.selection", data: {}, id: randomUUID().slice(0, 8), parentId: leafId, timestamp: new Date().toISOString() };
+        appendFileSync(file, `${JSON.stringify(entry)}\n`);
+        entries.push(entry);
+        leafId = entry.id;
+        reply({});
+        break;
+      }
+      default:
+        reject("Command not found", "not_found");
+    }
+  });
+  lines.on("close", () => { process.exitCode = 0; });
 }
 
 const argv = process.argv.slice(2);
@@ -1172,6 +1315,8 @@ if (argv.length === 1 && argv[0] === "--version") {
   process.stdout.write(`${VERSION_LINE}\n`);
 } else if (argv.length === 3 && argv[0] === "app-server" && argv[1] === "--listen" && argv[2] === "stdio://") {
   serve();
+} else if (argv.length === 7 && argv[0] === "--mode" && argv[1] === "rpc" && argv[2] === "--session" && argv[4] === "--no-extensions" && argv[5] === "--extension") {
+  serveTree(argv[3]);
 } else {
   process.stderr.write(USAGE);
   process.exitCode = 2;

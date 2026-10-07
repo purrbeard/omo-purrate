@@ -10,7 +10,7 @@ import routeCss from "./ModelRoutingSection.module.css";
 import { groupModels } from "../composer/model-groups";
 
 const CATEGORIES = ["quick", "deep-low", "deep-high", "ultrabrain", "architect", "writing", "artistry", "visual-engineering", "unspecified-low", "unspecified-high"];
-const AGENTS = ["explore", "librarian"];
+const AGENTS = ["explore", "librarian", "plan-consultant", "plan-reviewer", "omo-native-code-reviewer", "omo-native-gate-reviewer", "omo-native-qa-executor"];
 
 export function ModelRoutingSection() {
   const t = useT();
@@ -65,6 +65,16 @@ export function ModelRoutingSection() {
               <option value="">{t(models.length === 0 ? "composer.model.empty" : "shell.settings.routing.choose")}</option>
               {modelGroups.map((provider) => <optgroup key={provider.provider} label={provider.provider}>{provider.models.map((model) => <option key={model.id} value={model.id}>{model.displayName} · {model.id}</option>)}</optgroup>)}
             </select>
+            {group !== "mappings" && row.models.map((ref, index) => <div key={`${index}:${ref}`} className={routeCss.chainRung}>
+              <code>{ref}</code>
+              <select aria-label={`${row.name}: ${t("shell.settings.mapping.reasoning", { model: ref })}`} disabled={saving} value={ref.includes(":") ? ref.slice(ref.lastIndexOf(":") + 1) : ""} onChange={(event) => { const next = [...row.models]; const base = ref.includes(":") ? ref.slice(0, ref.lastIndexOf(":")) : ref; next[index] = event.target.value ? `${base}:${event.target.value}` : base; update(group, row.name, next.join("\n")); }}>
+                <option value="">{t("shell.settings.mapping.reasoningDefault")}</option>
+                {["off", "minimal", "low", "medium", "high", "xhigh", "max"].map((level) => <option key={level} value={level}>{level}</option>)}
+              </select>
+              <Button variant="outline" size="sm" disabled={saving || index === 0} aria-label={`${row.name}: ${t("shell.settings.mapping.up")} ${index + 1}`} onClick={() => { const next = [...row.models]; [next[index - 1], next[index]] = [next[index]!, next[index - 1]!]; update(group, row.name, next.join("\n")); }}>↑</Button>
+              <Button variant="outline" size="sm" disabled={saving || index === row.models.length - 1} aria-label={`${row.name}: ${t("shell.settings.mapping.down")} ${index + 1}`} onClick={() => { const next = [...row.models]; [next[index + 1], next[index]] = [next[index]!, next[index + 1]!]; update(group, row.name, next.join("\n")); }}>↓</Button>
+              <Button variant="outline" size="sm" disabled={saving} aria-label={t("shell.settings.mapping.remove", { model: ref })} onClick={() => update(group, row.name, row.models.filter((_, i) => i !== index).join("\n"))}>×</Button>
+            </div>)}
             {group === "mappings" ? <input className={routeCss.input} list="omo-routing-models" aria-label={row.name} data-route-group={group} data-route-name={row.name} disabled={saving} value={drafts[`${group}:${row.name}`] ?? row.models.join("\n")} onChange={(event) => update(group, row.name, event.target.value)} /> : <textarea className={routeCss.input} rows={2} aria-label={row.name} data-route-group={group} data-route-name={row.name} disabled={saving} value={drafts[`${group}:${row.name}`] ?? row.models.join("\n")} placeholder="provider/model:high" onChange={(event) => update(group, row.name, event.target.value)} />}
           </div>
         </SettingRow>)}

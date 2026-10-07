@@ -29,3 +29,27 @@
   gap: 8px;
   max-width: 100%;
 }
+.chainRung {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 300px;
+}
+.chainRung code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.chainRung select {
+  min-width: 72px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-3);
+  color: var(--dsw-alias-label-primary);
+  padding: 4px;
+  font: inherit;
+  font-size: 11px;
+}

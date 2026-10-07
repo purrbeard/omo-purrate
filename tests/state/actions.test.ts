@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { OMO_INSTALL_COMMAND } from "../../shared/ipc";
+import { DEFAULT_PREFERENCES, OMO_INSTALL_COMMAND } from "../../shared/ipc";
 import type { AccountUsage, BranchPoint, BranchResult, BridgeStatus, HistoryResult, HistoryTurn, OmoBridgeApi, OpenTarget, OpenTargetId, Preferences } from "../../shared/ipc";
 import type {
   ClientMethod,
@@ -63,6 +63,13 @@ function bridgeStatus(state: BridgeStatus["state"]): BridgeStatus {
 }
 
 class FakeBridge implements OmoBridgeApi {
+  notify(): ReturnType<OmoBridgeApi["notify"]> { return Promise.resolve(); }
+  onNotifyClick(): ReturnType<OmoBridgeApi["onNotifyClick"]> { return () => undefined; }
+  gitInfo(): ReturnType<OmoBridgeApi["gitInfo"]> { return Promise.resolve(null); }
+  gitStatus(): ReturnType<OmoBridgeApi["gitStatus"]> { return Promise.resolve([]); }
+  gitCommitPush(): ReturnType<OmoBridgeApi["gitCommitPush"]> { return Promise.resolve({ committed: true, pushed: false, pushSkipped: null, commitHash: "fixture" }); }
+  getPermissionPreset(): ReturnType<OmoBridgeApi["getPermissionPreset"]> { return Promise.resolve("full-access"); }
+  setPermissionPreset(): ReturnType<OmoBridgeApi["setPermissionPreset"]> { return Promise.resolve(); }
   readModelRouting(): ReturnType<OmoBridgeApi["readModelRouting"]> { return Promise.resolve({ configPath: "", categories: [], agents: [], mappings: [] }); }
   saveModelRouting(input: Parameters<OmoBridgeApi["saveModelRouting"]>[0]): ReturnType<OmoBridgeApi["saveModelRouting"]> { return Promise.resolve({ configPath: "", ...input }); }
   importExistingMcpConfigs(): ReturnType<OmoBridgeApi["importExistingMcpConfigs"]> { return Promise.resolve({ imported: [], sources: 0 }); }
@@ -85,6 +92,7 @@ class FakeBridge implements OmoBridgeApi {
   getProxySettings(): ReturnType<OmoBridgeApi["getProxySettings"]> { return Promise.resolve({ baseUrl: "", apiKeyConfigured: false, modelCount: 0 }); }
   applyProxySettings(): ReturnType<OmoBridgeApi["applyProxySettings"]> { return Promise.resolve({ baseUrl: "", apiKeyConfigured: false, modelCount: 0 }); }
   loadTaskWork(): ReturnType<OmoBridgeApi["loadTaskWork"]> { return Promise.resolve([]); }
+  loadThreadLinks(): ReturnType<OmoBridgeApi["loadThreadLinks"]> { return Promise.resolve([]); }
   getIphoneStatus(): ReturnType<OmoBridgeApi["getIphoneStatus"]> { return Promise.resolve({ enabled: false, state: "searching", devices: [] }); }
   onIphoneStatus(): () => void { return () => {}; }
   readonly platform = "darwin";
@@ -106,7 +114,7 @@ class FakeBridge implements OmoBridgeApi {
   });
   mcp: (params: ClientParams<"mcpServerStatus/list">) => unknown = () => ({ data: [], nextCursor: null });
   status = bridgeStatus("starting");
-  preferences: Preferences = { theme: "system", locale: "system", lastWorkspace: null, recentWorkspaces: [], modelId: null };
+  preferences: Preferences = { ...DEFAULT_PREFERENCES, onboardingCompleted: true };
   private readonly statusListeners = new Set<(status: BridgeStatus) => void>();
   private readonly handlers: Handlers = {
     "mcpServerStatus/list": (params) => this.mcp(params) as ClientResult<"mcpServerStatus/list">,
@@ -193,6 +201,16 @@ class FakeBridge implements OmoBridgeApi {
     this.branches.push({ sessionPath, point });
     return { threadId: BRANCH_ID, path: BRANCH_PATH };
   }
+  async sessionTree(_threadId: string, operation: Parameters<OmoBridgeApi["sessionTree"]>[1]): ReturnType<OmoBridgeApi["sessionTree"]> {
+    if (operation.type === "retry") {
+      this.branches.push({ sessionPath: SESSION_PATH, point: operation.point });
+      const history = await this.history();
+      let matches = 0;
+      const index = history.turns.findIndex(turn => turn.items.some(item => item.type === "userMessage" && item.content.some(input => input.type === "text" && input.text === operation.point.text) && matches++ === operation.point.occurrence));
+      this.history = async () => ({ ...history, turns: history.turns.slice(0, index) });
+    }
+    return { leafId: "leaf", branches: [], outcome: "navigated" };
+  }
   async pickDirectory(): Promise<string | null> {
     return null;
   }
@@ -266,6 +284,15 @@ async function listThread(setupResult: ReturnType<typeof setup>): Promise<void> 
 }
 
 describe("createActions", () => {
+  it("stores related-session ownership, rejects cycles and detaches without changing sessions", async () => {
+    const context = setup();
+    await context.actions.newThread("/tmp/work/project", "main");
+    expect(context.bridge.preferences.threadParents[THREAD_ID]).toBe("main");
+    await expect(context.actions.linkThread("main", THREAD_ID)).rejects.toThrow("cycle");
+    await context.actions.linkThread(THREAD_ID, null);
+    expect(context.bridge.preferences.threadParents).toEqual({});
+    expect(context.store.getState().threads[THREAD_ID]).toBeDefined();
+  });
   it("drops malformed thread/list entries and keeps the valid ones", async () => {
     const context = setup();
     context.bridge.threadList = () => ({ data: [null, { id: 7 }, makeThread(THREAD_ID, { path: SESSION_PATH })], nextCursor: 5 });
@@ -573,6 +600,26 @@ describe("createActions", () => {
     expect(context.store.getState().pendingRequests).toEqual([]);
   });
 
+  it("sends an expired non-blocking question answer as a follow-up in the same thread", async () => {
+    const context = setup();
+    await listThread(context);
+    await context.actions.openThread(THREAD_ID);
+    context.store.dispatch({ type: "rpc/serverRequest", request: { id: 11, method: "item/tool/requestUserInput",
+      params: { threadId: THREAD_ID, turnId: "t", itemId: "i", waitForAnswer: false,
+        questions: [{ id: "q1", header: "Choice", question: "Which option?", options: null }] } }, receivedAtMs: 1 });
+    context.store.dispatch(notification("serverRequest/resolved", { threadId: THREAD_ID, requestId: 11 }));
+    context.bridge.failing.add("turn/start");
+    await context.actions.answerUserInput(11, { q1: ["B"] });
+    expect(context.store.getState().pendingRequests).toHaveLength(1);
+    context.bridge.failing.delete("turn/start");
+    await context.actions.answerUserInput(11, { q1: ["B"] });
+    expect(context.bridge.responses).toEqual([]);
+    expect(context.bridge.calls.filter((call) => call.method === "turn/start").at(-1)?.params).toMatchObject({
+      threadId: THREAD_ID, input: [{ type: "text", text: "Which option?\nB" }],
+    });
+    expect(context.store.getState().pendingRequests).toEqual([]);
+  });
+
   it("loads history from the session path without resuming the thread", async () => {
     const context = setup();
     await listThread(context);
@@ -581,6 +628,58 @@ describe("createActions", () => {
     expect(context.bridge.methods()).not.toContain("thread/resume");
     expect(context.store.getState().conversations[THREAD_ID]?.historyState).toBe("loaded");
     expect(context.store.getState().activeThreadId).toBe(THREAD_ID);
+  });
+
+  it("loads session annotations when opening history and keeps them on a turns-only reload", async () => {
+    const context = setup();
+    const notices: NonNullable<HistoryResult["notices"]> = [{
+      id: "notice-1", customType: "environment-context", display: false, text: "cwd", timestamp: 1, turnIndex: 0, afterItems: 0,
+    }];
+    const memoryWrites: NonNullable<HistoryResult["memoryWrites"]> = { "memory-1": {
+      sha: "abc123", subject: "", affected: [], size: null, entriesToday: null, previousEntryAt: null, lastConsolidationAt: null,
+    } };
+    context.bridge.history = async () => ({ turns: [], todo: null, tasks: [], notices, memoryWrites });
+    await listThread(context);
+    await context.actions.openThread(THREAD_ID);
+    expect(context.store.getState().conversations[THREAD_ID]?.annotations).toEqual({ notices, memoryWrites });
+    context.store.dispatch({ type: "history/loaded", threadId: THREAD_ID, turns: [] });
+    expect(context.store.getState().conversations[THREAD_ID]?.annotations).toEqual({ notices, memoryWrites });
+    context.store.dispatch({ type: "history/annotated", threadId: THREAD_ID, notices: [], memoryWrites: {} });
+    expect(context.store.getState().conversations[THREAD_ID]?.annotations).toEqual({ notices: [], memoryWrites: {} });
+  });
+
+  it("refreshes annotations after a memory turn without replacing live transcript or task state", async () => {
+    const context = setup();
+    await listThread(context);
+    await context.actions.openThread(THREAD_ID);
+    const disconnect = context.actions.connect();
+    await waitForState(context.store, (state) => state.bridge?.state === "starting");
+    const before = context.bridge.historyLoads.length;
+    const notices: NonNullable<HistoryResult["notices"]> = [{
+      id: "notice-1", customType: "omo-memory:notice", display: true, text: "memory", timestamp: 1, turnIndex: 0, afterItems: 1,
+    }];
+    const memoryWrites: NonNullable<HistoryResult["memoryWrites"]> = { "memory-1": {
+      sha: "abc123", subject: "", affected: [], size: null, entriesToday: 1, previousEntryAt: null, lastConsolidationAt: null,
+    } };
+    context.bridge.history = async () => ({ turns: [], todo: null, tasks: [], notices, memoryWrites });
+    context.bridge.emitNotification("turn/completed", { threadId: THREAD_ID,
+      turn: { id: "normal-turn", status: "completed", error: null, items: [{ type: "agentMessage", id: "answer-1", text: "done", phase: null }] } });
+    expect(context.bridge.historyLoads).toHaveLength(before);
+    const refreshed = waitForState(context.store, (state) => state.conversations[THREAD_ID]?.annotations.notices === notices);
+    context.bridge.emitNotification("turn/completed", { threadId: THREAD_ID,
+      turn: { id: "memory-turn", status: "completed", error: null, items: [{
+        type: "dynamicToolCall", id: "memory-1", namespace: null, tool: "memory", arguments: {}, status: "completed",
+        contentItems: [], success: true, durationMs: 1,
+      }] } });
+    const live = context.store.getState().conversations[THREAD_ID]?.live;
+    const state = await refreshed;
+    disconnect();
+    expect(context.bridge.historyLoads).toHaveLength(before + 1);
+    expect(state.conversations[THREAD_ID]?.annotations).toEqual({ notices, memoryWrites });
+    expect(state.conversations[THREAD_ID]?.turns.map((turn) => turn.id)).toEqual(["normal-turn", "memory-turn"]);
+    expect(state.conversations[THREAD_ID]?.live.tasks).toBe(live?.tasks);
+    expect(state.conversations[THREAD_ID]?.live.historicalTasks).toBe(live?.historicalTasks);
+    expect(state.conversations[THREAD_ID]?.live.todo).toBe(live?.todo);
   });
 
   it("refreshes models and threads when the bridge becomes connected", async () => {
@@ -958,17 +1057,32 @@ describe("branching from a user message", () => {
     return context;
   }
 
-  it("branches before the chosen repeat of a message and sends the edited text to the branch", async () => {
+  it("selects the chosen repeat and sends the edited text inside the same session", async () => {
     const context = await opened();
     await expect(context.actions.branchFrom(THREAD_ID, "3", "u", "edited", "first (edited)")).resolves.toBe(true);
     expect(context.bridge.branches).toEqual([{ sessionPath: SESSION_PATH, point: { text: "again", occurrence: 1 } }]);
-    expect(context.bridge.methods()).toEqual(["thread/resume", "thread/name/set", "thread/list", "turn/start"]);
-    expect(context.bridge.calls[0]?.params).toEqual({ threadId: BRANCH_ID });
-    expect(context.bridge.calls[1]?.params).toEqual({ threadId: BRANCH_ID, name: "first (edited)" });
-    expect(context.bridge.calls[3]?.params).toMatchObject({ threadId: BRANCH_ID, input: [{ type: "text", text: "edited" }] });
-    expect(context.store.getState().activeThreadId).toBe(BRANCH_ID);
-    expect(context.bridge.historyLoads.at(-1)).toBe(BRANCH_PATH);
-    expect(context.store.getState().conversations[BRANCH_ID]?.turns.map((turn) => turn.id)).toEqual(["1", "2", "3"]);
+    expect(context.bridge.methods()).not.toContain("thread/name/set");
+    expect(context.bridge.calls.find(call => call.method === "thread/resume")?.params).toEqual({ threadId: THREAD_ID });
+    expect(context.bridge.calls.find(call => call.method === "turn/start")?.params).toMatchObject({ threadId: THREAD_ID, input: [{ type: "text", text: "edited" }] });
+    expect(context.store.getState().activeThreadId).toBe(THREAD_ID);
+    expect(context.bridge.historyLoads.at(-1)).toBe(SESSION_PATH);
+    expect(context.store.getState().conversations[THREAD_ID]?.turns.slice(0, 2).map(turn => turn.id)).toEqual(["1", "2"]);
+  });
+
+  it("sends the selected model and effort even if tree navigation changes the composer", async () => {
+    const context = await opened();
+    context.store.dispatch({ type: "composer/modelSelected", modelId: "opencodex/p2bc7fb/gpt-6.1-sol", effort: "high" });
+    const dispatch = context.store.dispatch;
+    context.store.dispatch = (event) => {
+      dispatch(event);
+      if (event.type === "history/replaced") {
+        dispatch({ type: "composer/modelSelected", modelId: "opencodex/openai/gpt-6.1-sol", effort: "low" });
+      }
+    };
+    await expect(context.actions.branchFrom(THREAD_ID, "3", "u", "edited", "regenerated")).resolves.toBe(true);
+    expect(context.bridge.calls.find((call) => call.method === "turn/start")?.params).toMatchObject({
+      model: "opencodex/p2bc7fb/gpt-6.1-sol", effort: "high",
+    });
   });
 
   it("refuses while a turn of the thread is running and leaves the session alone", async () => {
@@ -979,6 +1093,18 @@ describe("branching from a user message", () => {
     expect(context.bridge.branches).toEqual([]);
     expect(selectToastNotice(context.store.getState())).toMatchObject({ code: "branchBusy" });
     disconnect();
+  });
+
+  it("keeps the visible branch when native navigation is cancelled or fails", async () => {
+    const context = await opened();
+    const source = context.store.getState().conversations[THREAD_ID];
+    context.bridge.sessionTree = async () => ({ leafId: "original", branches: [], outcome: "cancelled" });
+    await expect(context.actions.switchBranch(THREAD_ID, "alternate", "original")).resolves.toBe(false);
+    expect(context.store.getState().conversations[THREAD_ID]).toBe(source);
+    context.bridge.sessionTree = async () => { throw new Error("stale leaf"); };
+    await expect(context.actions.switchBranch(THREAD_ID, "alternate", "original")).resolves.toBe(false);
+    expect(context.store.getState().conversations[THREAD_ID]).toBe(source);
+    expect(context.bridge.methods()).not.toContain("turn/start");
   });
 
   it("reports a message that the saved session does not hold instead of branching", async () => {

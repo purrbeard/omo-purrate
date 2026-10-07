@@ -1,4 +1,5 @@
-import { memo, useMemo, useState, type ReactNode } from "react";
+import { Fragment, memo, useMemo, useState, type ReactNode } from "react";
+import type { MemoryWriteNotice, SessionNotice } from "../../../shared/ipc";
 import {
   IconContextInjectionOutlineRegular,
   IconPlanOutlineRegular,
@@ -10,14 +11,20 @@ import { useT } from "../../i18n";
 import type { ConversationItem, ConversationTurn } from "../../state";
 import { TESTID } from "../testids";
 import { AssistantMessage } from "./AssistantMessage";
+import { MemoryWriteCard, NoticeRow } from "./SessionNotices";
 import { EditMessageButton, EditMessageForm, RegenerateButton, userRowClass, type BranchAt } from "./BranchControls";
-import { elapsedMs } from "./format";
+import { elapsedMs, formatDuration } from "./format";
 import { useConversationLabels } from "./labels";
 import { ReasoningRow } from "./ReasoningRow";
 import { RenderBoundary } from "./RenderBoundary";
 import { ToolCard } from "./ToolCard";
+import { toolRowModel } from "./tool-model";
 import { UserBubble, userMessageParts } from "./UserBubble";
+import { workLogEntries } from "./work-log";
 import css from "./TurnView.module.css";
+
+const NO_NOTICES: readonly SessionNotice[] = [];
+const NO_WRITES: Readonly<Record<string, MemoryWriteNotice>> = {};
 
 function assertNever(value: never): never {
   throw new Error(`Unhandled conversation item: ${JSON.stringify(value)}`);
@@ -108,6 +115,66 @@ const ItemView = memo(function ItemView({ entry, cwd, branch }: { entry: Convers
   );
 });
 
+function WorkLog({ entries, turn, cwd, memoryWrites }: {
+  entries: readonly ConversationItem[];
+  turn: ConversationTurn;
+  cwd: string | null;
+  memoryWrites: Readonly<Record<string, MemoryWriteNotice>>;
+}) {
+  const t = useT();
+  const models = entries.flatMap((entry) => {
+    switch (entry.item.type) {
+      case "commandExecution":
+      case "fileChange":
+      case "mcpToolCall":
+      case "dynamicToolCall":
+      case "webSearch":
+        return [toolRowModel(entry.item, entry.streaming, elapsedMs(entry.startedAtMs, entry.completedAtMs), cwd)];
+      default:
+        return [];
+    }
+  });
+  const active = models.filter((model) => model.state === "running");
+  const thinking = entries.some((entry) => entry.item.type === "reasoning" && entry.streaming);
+  const errors = models.filter((model) => model.state === "error").length;
+  const current = active.at(-1);
+  const duration = elapsedMs(turn.startedAtMs, turn.completedAtMs);
+  return (
+    <div className={css.workLog} data-flow="work">
+      {(current !== undefined || thinking) && (
+        <div className={css.workLive} role="status">
+          <StateDot state="ongoing" size={12} />
+          <span>{t("conversation.tool.state.running")}</span>
+          <span className={css.workPreview}>
+            {current === undefined ? t("conversation.reasoning.thinking") : [
+              current.titleKey === null ? current.title : t(current.titleKey), current.summary,
+            ].filter(Boolean).join(" · ")}
+          </span>
+        </div>
+      )}
+      <details data-testid="turn-work-log" className={css.workDetails}>
+        <summary className={css.workSummary}>
+          <span>{t("conversation.workLog.title")}</span>
+          <span className={css.workMeta}>{t("conversation.workLog.count", { count: entries.length })}</span>
+          {errors > 0 && <span className={css.workError}>{t("conversation.workLog.errors", { count: errors })}</span>}
+          {duration !== null && <span className={css.workMeta}>{formatDuration(duration, t)}</span>}
+        </summary>
+        <div className={css.workItems}>
+          {entries.map((entry) => {
+            const write = entry.item.type === "dynamicToolCall" && entry.item.tool === "memory" ? memoryWrites[entry.item.id] : undefined;
+            return (
+              <Fragment key={entry.item.id}>
+                <ItemView entry={entry} cwd={cwd} branch={null} />
+                {write !== undefined && <MemoryWriteCard write={write} />}
+              </Fragment>
+            );
+          })}
+        </div>
+      </details>
+    </div>
+  );
+}
+
 function TurnErrorRow({ error, retrying }: { error: TurnError | null; retrying: boolean }) {
   const t = useT();
   const message = typeof error?.message === "string" ? error.message.trim() : "";
@@ -135,21 +202,37 @@ export const TurnView = memo(function TurnView({
   cwd,
   branch = null,
   last = false,
+  notices = NO_NOTICES,
+  memoryWrites = NO_WRITES,
 }: {
   turn: ConversationTurn;
   cwd: string | null;
   branch?: BranchContext | null;
   last?: boolean;
+  /** omo's special messages recorded in this turn, placed after `afterItems` items. */
+  notices?: readonly SessionNotice[];
+  memoryWrites?: Readonly<Record<string, MemoryWriteNotice>>;
 }) {
   const t = useT();
   const failed = turn.error !== null || turn.status === "failed";
   const prompt = turn.items.find((entry) => entry.item.type === "userMessage")?.item;
   const turnBranch = useMemo<TurnBranch | null>(() => (branch === null ? null : { ...branch, turnId: turn.id }), [branch, turn.id]);
+  const work = useMemo(() => workLogEntries(turn.items).filter(entry => memoryWrites[entry.item.id] === undefined), [turn.items, memoryWrites]);
+  const workIds = useMemo(() => new Set(work.map((entry) => entry.item.id)), [work]);
   return (
     <div className={css.turn} data-testid={TESTID.turn} data-turn-id={turn.id} data-status={turn.status}>
-      {turn.items.map((entry) => (
-        <ItemView key={entry.item.id} entry={entry} cwd={cwd} branch={turnBranch} />
-      ))}
+      {turn.items.map((entry, index) => {
+        const write = memoryWrites[entry.item.id];
+        return (
+          <Fragment key={entry.item.id}>
+            {notices.filter((notice) => notice.afterItems === index).map((notice) => <NoticeRow key={notice.id} notice={notice} />)}
+            {write !== undefined && <MemoryWriteCard write={write} />}
+            {entry === work[0] && <WorkLog entries={work} turn={turn} cwd={cwd} memoryWrites={memoryWrites} />}
+            {!workIds.has(entry.item.id) && memoryWrites[entry.item.id] === undefined && <ItemView entry={entry} cwd={cwd} branch={turnBranch} />}
+          </Fragment>
+        );
+      })}
+      {notices.filter((notice) => notice.afterItems >= turn.items.length).map((notice) => <NoticeRow key={notice.id} notice={notice} />)}
       {failed && <TurnErrorRow error={turn.error} retrying={turn.status === "inProgress"} />}
       {turn.status === "interrupted" && <span className={css.stopped}>{t("conversation.turn.stopped")}</span>}
       {turnBranch !== null && last && turn.status !== "inProgress" && prompt?.type === "userMessage" && (
