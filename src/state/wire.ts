@@ -93,7 +93,7 @@ function isTypedPart(textType: string): (value: unknown) => boolean {
 }
 
 function isFileUpdateChange(value: unknown): boolean {
-  return isObject(value) && isString(value["path"]) && (value["diff"] === undefined || isString(value["diff"]));
+  return isObject(value) && isString(value["path"]) && isString(value["diff"]);
 }
 
 /** The fields of each item type that the reducer edits or the conversation view reads without a fallback. */

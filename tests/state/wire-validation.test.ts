@@ -15,6 +15,7 @@ describe("wire item validation", () => {
     ["a commandExecution without a command", { type: "commandExecution", id: "c", aggregatedOutput: null }],
     ["a commandExecution with numeric output", { type: "commandExecution", id: "c", command: "ls", aggregatedOutput: 3 }],
     ["a fileChange with a null change", { type: "fileChange", id: "f", changes: [null] }],
+    ["a fileChange without the required diff", { type: "fileChange", id: "f", changes: [{ path: "src/main.ts", kind: { type: "update" } }] }],
     ["an mcpToolCall with a malformed error", { type: "mcpToolCall", id: "t", server: "s", tool: "x", error: { message: 1 } }],
     ["a dynamicToolCall with a null content item", { type: "dynamicToolCall", id: "d", tool: "eval", contentItems: [null] }],
     ["a dynamicToolCall inputText without text", { type: "dynamicToolCall", id: "d", tool: "eval", contentItems: [{ type: "inputText" }] }],
