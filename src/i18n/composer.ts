@@ -1,5 +1,6 @@
 export const messages = {
   en: {
+    "composer.model.unavailable": "Unavailable: {id}",
     "composer.profile.model": "Choose profile model",
     "composer.profile.automatic": "Automatic",
     "composer.profile.tab": "Profile",
@@ -93,6 +94,7 @@ export const messages = {
     "composer.skills.scope.admin": "Admin",
   },
   ko: {
+    "composer.model.unavailable": "사용 불가: {id}",
     "composer.profile.model": "프로필 모델 선택",
     "composer.profile.automatic": "자동 선택",
     "composer.profile.tab": "프로필",

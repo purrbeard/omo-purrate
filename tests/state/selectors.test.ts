@@ -38,6 +38,10 @@ describe("resolveComposerModel", () => {
     expect(resolveComposerModel(catalog, "openai/gpt-6.1-sol", null)?.id).toBe("openai/gpt-6.1-sol");
   });
 
+  it("does not replace an unavailable explicit pick with the active thread model", () => {
+    expect(resolveComposerModel(catalog, "opencodex/disabled", { modelProvider: "openai", model: "gpt-6.1-sol", reasoningEffort: "high" })).toBeNull();
+  });
+
   it("uses the model omo reported for the active thread instead of a per-provider default", () => {
     const session = { modelProvider: "anthropic-subscription", model: "claude-opus-5-5", reasoningEffort: "medium" as const };
     expect(resolveComposerModel(catalog, null, session)?.id).toBe("anthropic-subscription/claude-opus-5-5");

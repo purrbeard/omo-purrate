@@ -41,6 +41,23 @@ async function readModels(file: string) {
 }
 
 describe("opencodex proxy settings", () => {
+  it("stores only advertised active full IDs and clears stale models when none are enabled", async () => {
+    const f = await fixture({ data: [
+      { id: "opencode-go/deepseek-v4.1-flash", owned_by: "opencode-go", supports_reasoning_effort: true, reasoning_efforts: ["low", "high", "max"] },
+      { id: "cursor/off", disabled: true },
+    ] });
+    await applyProxySettings(f.dir, { baseUrl: f.baseUrl });
+    const provider = (await readModels(f.file)).providers["opencodex"];
+    expect(provider?.models).toHaveLength(1);
+    expect(provider?.models[0]).toMatchObject({ id: "opencode-go/deepseek-v4.1-flash", name: "opencode-go · opencode-go/deepseek-v4.1-flash", thinkingLevelMap: { low: "low", high: "high", max: "max" } });
+    const closed = once(server!, "close");
+    server!.closeAllConnections();
+    server!.close();
+    await closed;
+    const empty = await fixture({ data: [] });
+    await expect(applyProxySettings(f.dir, { baseUrl: empty.baseUrl })).resolves.toMatchObject({ modelCount: 0 });
+    expect((await readModels(f.file)).providers["opencodex"]?.models).toEqual([]);
+  });
   it("reads a missing configuration without making a request", async () => {
     const f = await fixture();
     await expect(getProxySettings(f.dir)).resolves.toEqual({ baseUrl: "", apiKeyConfigured: false, modelCount: 0 });
@@ -70,10 +87,11 @@ describe("opencodex proxy settings", () => {
     expect((await readModels(f.file)).providers["opencodex"]?.apiKey).toBe("private-token");
   });
 
-  it.each([undefined, "", "  "])("preserves the existing key for input %j, providers, model overrides, aliases, and root fields", async (apiKey) => {
+  it.each([undefined, "", "  "])("preserves the existing key for input %j and overrides while replacing stale models with active original IDs", async (apiKey) => {
     const f = await fixture({ data: [
       { id: "kept", supports_reasoning_effort: true, reasoning_efforts: [{ value: "high" }], capabilities: { context_length: 200000 } },
       { id: "gpt-6.1-sol", supports_reasoning_effort: true, reasoning_efforts: [{ value: "high" }] },
+      { id: "disabled", enabled: false },
     ] });
     const custom = { id: "kept", name: "My name", contextWindow: 500000, reasoning: false, thinkingLevelMap: { high: null }, compat: { supportsStore: false } };
     const original = `${JSON.stringify({ version: 7, extra: { keep: true }, providers: {
@@ -81,15 +99,14 @@ describe("opencodex proxy settings", () => {
       opencodex: { baseUrl: "http://localhost:9999/v1", apiKey: "existing-secret", custom: 9, compat: { supportsDeveloperRole: true }, modelOverrides: { kept: { maxTokens: 42 } }, models: [custom, { id: "user-model" }, { id: "openai/gpt-6.1-sol", contextWindow: 500000 }] },
     } }, null, 4)}\n`;
     await writeFile(f.file, original);
-    await expect(applyProxySettings(f.dir, { baseUrl: f.baseUrl, apiKey })).resolves.toEqual({ baseUrl: f.baseUrl, apiKeyConfigured: true, modelCount: 4 });
+    await expect(applyProxySettings(f.dir, { baseUrl: f.baseUrl, apiKey })).resolves.toEqual({ baseUrl: f.baseUrl, apiKeyConfigured: true, modelCount: 2 });
     const stored = await readModels(f.file);
     expect(stored["version"]).toBe(7);
     expect(stored["extra"]).toEqual({ keep: true });
     expect(stored.providers["other"]).toEqual(JSON.parse(original).providers.other);
     expect(stored.providers["opencodex"]).toMatchObject({ apiKey: "existing-secret", custom: 9, compat: { supportsDeveloperRole: true }, modelOverrides: { kept: { maxTokens: 42 } } });
     expect(stored.providers["opencodex"]?.models.find((model) => model["id"] === "kept")).toMatchObject({ ...custom, reasoning: true, thinkingLevelMap: { high: "high" } });
-    expect(stored.providers["opencodex"]?.models.find((model) => model["id"] === "user-model")).toEqual({ id: "user-model" });
-    expect(stored.providers["opencodex"]?.models.find((model) => model["id"] === "openai/gpt-6.1-sol")).toMatchObject({ contextWindow: 500000 });
+    expect(stored.providers["opencodex"]?.models.map(model => model["id"])).toEqual(["kept", "gpt-6.1-sol"]);
     expect(f.requests[0]?.authorization).toBe("Bearer existing-secret");
     expect(await readFile(`${f.file}.backup`, "utf8")).toBe(original);
     const firstSave = await readFile(f.file, "utf8");
@@ -109,7 +126,7 @@ describe("opencodex proxy settings", () => {
       { id: "gpt-6.1-sol", reasoning_efforts: ["high"] },
     ] });
     const result = await applyProxySettings(f.dir, { baseUrl: f.baseUrl });
-    expect(result.modelCount).toBe(8);
+    expect(result.modelCount).toBe(7);
     const models = (await readModels(f.file)).providers["opencodex"]!.models;
     expect(models[0]).toMatchObject({ id: "sparse", input: ["text", "image"], reasoning: true, defaultThinkingLevel: "high", contextWindow: 272000, maxTokens: 32000,
       thinkingLevelMap: { off: null, minimal: null, low: null, medium: null, high: "HIGH", xhigh: null, max: "max" } });
@@ -117,7 +134,7 @@ describe("opencodex proxy settings", () => {
     for (const model of models.slice(2, 5)) expect(model).toMatchObject({ reasoning: false, thinkingLevelMap: { off: null, minimal: null, low: null, medium: null, high: null, xhigh: null, max: null } });
     expect(models[2]?.["compat"]).toEqual({ supportsReasoningEffort: false });
     expect(models[5]).toMatchObject({ reasoning: true, maxTokens: 2048, thinkingLevelMap: { high: "high", low: null } });
-    expect(models[7]).toMatchObject({ id: "openai/gpt-6.1-sol", thinkingLevelMap: { high: "high" } });
+    expect(models[6]).toMatchObject({ id: "gpt-6.1-sol", thinkingLevelMap: { high: "high" } });
   });
 
   it.each(["ftp://example.com/v1", "https://user:secret@example.com/v1", "https://example.com/v1?key=secret", "https://example.com/v1#secret", "https://example.com/v1?", "not a url"])("rejects unsafe URL %s before networking", async (baseUrl) => {
@@ -127,7 +144,7 @@ describe("opencodex proxy settings", () => {
     expect(await readdir(f.dir)).toEqual([]);
   });
 
-  it.each([{}, { data: [] }, { data: [null] }, { data: [{ id: "" }] }, { data: [{ id: " spaces " }] }, { data: [{ id: "duplicate" }, { id: "duplicate" }] }, { data: [{ id: "bad", reasoning_efforts: [{}] }] }, "invalid-json"])("leaves files untouched on malformed /models response %j", async (body) => {
+  it.each([{}, { data: [null] }, { data: [{ id: "" }] }, { data: [{ id: " spaces " }] }, { data: [{ id: "duplicate" }, { id: "duplicate" }] }, { data: [{ id: "bad", reasoning_efforts: [{}] }] }, "invalid-json"])("leaves files untouched on malformed /models response %j", async (body) => {
     const f = await fixture(body);
     const original = '{"providers":{"opencodex":{"models":[{"id":"saved"}]}}}';
     await writeFile(f.file, original);

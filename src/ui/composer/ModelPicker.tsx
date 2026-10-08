@@ -70,7 +70,8 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
   const activeIndex = visibleModels.length === 0 ? -1 : Math.min(highlighted, visibleModels.length - 1);
 
   const effortLabel = currentEffort === null ? null : t(EFFORT_KEY[currentEffort]);
-  const modelLabel = profile ? `${t(profile.startsWith("daily") ? "composer.profile.daily" : "composer.profile.geeky")}${profile.endsWith("heavy") ? ` · ${t("composer.profile.heavy")}` : ""}` : current?.displayName ?? session?.model ?? t("composer.model.none");
+  const unavailableId = current === null ? modelId ?? (session ? `${session.modelProvider}/${session.model}` : null) : null;
+  const modelLabel = profile ? `${t(profile.startsWith("daily") ? "composer.profile.daily" : "composer.profile.geeky")}${profile.endsWith("heavy") ? ` · ${t("composer.profile.heavy")}` : ""}` : current?.displayName ?? (unavailableId ? t("composer.model.unavailable", { id: unavailableId }) : t("composer.model.none"));
   const tooltip = effortLabel === null
     ? t("composer.model.tooltipNoEffort", { model: modelLabel })
     : t("composer.model.tooltip", { model: modelLabel, effort: effortLabel });

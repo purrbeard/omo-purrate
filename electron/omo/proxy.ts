@@ -10,10 +10,6 @@ export interface ProxySettings {
 
 const LOOPBACK_KEY = "opencodex-loopback";
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
-const LEGACY_ALIASES: Record<string, string> = {
-  "openai/gpt-6.1-sol": "gpt-6.1-sol",
-  "openai/gpt-6.1-sol--fast": "gpt-6.1-sol--fast",
-};
 type RecordValue = Record<string, unknown>;
 
 function isRecord(value: unknown): value is RecordValue {
@@ -81,11 +77,11 @@ function positiveNumber(...values: unknown[]): number | undefined {
 }
 
 function convertModels(value: unknown): RecordValue[] {
-  if (!isRecord(value) || !Array.isArray(value["data"]) || value["data"].length === 0) {
-    throw new Error("Proxy /models response must contain a non-empty data array");
+  if (!isRecord(value) || !Array.isArray(value["data"])) {
+    throw new Error("Proxy /models response must contain a data array");
   }
   const ids = new Set<string>();
-  return value["data"].map((entry: unknown) => {
+  return value["data"].filter((entry: unknown) => !isRecord(entry) || (entry["enabled"] !== false && entry["disabled"] !== true)).map((entry: unknown) => {
     if (!isRecord(entry) || !validId(entry["id"]) || ids.has(entry["id"])) {
       throw new Error("Proxy /models response contains an invalid or duplicate model ID");
     }
@@ -116,7 +112,9 @@ function convertModels(value: unknown): RecordValue[] {
     const maxTokens = positiveNumber(capabilities["max_output_tokens"], capabilities["max_tokens"], entry["max_output_tokens"], entry["max_tokens"]);
     return {
       id,
-      ...(typeof entry["name"] === "string" && entry["name"] !== "" ? { name: entry["name"] } : {}),
+      ...(typeof entry["owned_by"] === "string" && entry["owned_by"] !== ""
+        ? { name: `${entry["owned_by"]} · ${typeof entry["name"] === "string" && entry["name"] !== "" ? entry["name"] : id}` }
+        : typeof entry["name"] === "string" && entry["name"] !== "" ? { name: entry["name"] } : {}),
       input: input.length > 0 ? [...new Set(input)] : ["text"],
       reasoning,
       thinkingLevelMap,
@@ -161,16 +159,12 @@ export async function applyProxySettings(agentDir: string, input: { baseUrl: str
     throw new Error("Proxy /models response is not valid JSON");
   }
   const discovered = convertModels(payload);
-  for (const [alias, canonical] of Object.entries(LEGACY_ALIASES)) {
-    const model = discovered.find((entry) => entry["id"] === canonical);
-    if (model && !discovered.some((entry) => entry["id"] === alias)) discovered.push({ ...model, id: alias });
-  }
   const models = new Map<string, RecordValue>();
-  for (const model of (existing.provider["models"] ?? []) as RecordValue[]) models.set(String(model["id"]), model);
+  const previousModels = new Map(((existing.provider["models"] ?? []) as RecordValue[]).map(model => [String(model["id"]), model]));
   for (const model of discovered) {
     const id = String(model["id"]);
-    const previous = models.get(id);
-    models.set(id, { ...model, ...previous, reasoning: model["reasoning"], thinkingLevelMap: model["thinkingLevelMap"],
+    const previous = previousModels.get(id);
+    models.set(id, { ...model, ...previous, ...(model["name"] !== undefined ? { name: model["name"] } : {}), reasoning: model["reasoning"], thinkingLevelMap: model["thinkingLevelMap"],
       ...(model["defaultThinkingLevel"] !== undefined ? { defaultThinkingLevel: model["defaultThinkingLevel"] } : {}) });
   }
   const hostname = new URL(baseUrl).hostname;

@@ -1,4 +1,4 @@
-import { rankByName } from "@deepseek-ai/dsh-client-ui-primitives";
+import { rankByName } from "../../dsh/primitives/rank-by-name";
 import type { Model, ReasoningEffort } from "../../../shared/protocol";
 
 export interface ModelGroup {
@@ -16,7 +16,13 @@ export function groupModels(models: readonly Model[]): ModelGroup[] {
   const groups = new Map<string, ModelGroup>();
   for (const model of models) {
     if (model.hidden) continue;
-    const provider = providerOf(model.id);
+    const wireProvider = providerOf(model.id);
+    const segments = model.id.split("/");
+    const owner = model.displayName.includes(" · ") ? model.displayName.split(" · ")[0] : "OpenCodex";
+    const routeGroup = segments.slice(1, -1).join("/");
+    const provider = wireProvider === "opencodex"
+      ? `OpenCodex / ${segments.length > 2 ? owner === "openai" && !routeGroup.startsWith("openai") ? `openai / ${routeGroup}` : routeGroup : owner}`
+      : wireProvider;
     const group = groups.get(provider);
     if (group === undefined) groups.set(provider, { provider, models: [model] });
     else group.models.push(model);

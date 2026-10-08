@@ -149,8 +149,7 @@ export function selectActiveSessionModel(state: AppState): SessionModel | null {
  */
 export function resolveComposerModel(models: readonly Model[], modelId: string | null, session: SessionModel | null): Model | null {
   if (modelId !== null) {
-    const selected = models.find((model) => model.id === modelId);
-    if (selected !== undefined) return selected;
+    return models.find((model) => model.id === modelId) ?? null;
   }
   if (session === null) return null;
   return (
