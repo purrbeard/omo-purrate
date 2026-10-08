@@ -41,7 +41,7 @@ export function ModelRoutingSection() {
     if (settings === null) return;
     setSaving(true); setError(null); setSaved(false);
     try {
-      await window.omo.saveModelRouting({ categories: settings.categories.filter((row) => row.models.length > 0), agents: settings.agents.filter((row) => row.models.length > 0), mappings: settings.mappings });
+      await window.omo.saveModelRouting({ categories: settings.categories.filter((row) => row.models.length > 0 || drafts[`categories:${row.name}`] !== undefined), agents: settings.agents.filter((row) => row.models.length > 0 || drafts[`agents:${row.name}`] !== undefined), mappings: settings.mappings });
       setSaved(true);
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setSaving(false); }
@@ -76,6 +76,11 @@ export function ModelRoutingSection() {
               <Button variant="outline" size="sm" disabled={saving} aria-label={t("shell.settings.mapping.remove", { model: ref })} onClick={() => update(group, row.name, row.models.filter((_, i) => i !== index).join("\n"))}>×</Button>
             </div>)}
             {group === "mappings" ? <input className={routeCss.input} list="omo-routing-models" aria-label={row.name} data-route-group={group} data-route-name={row.name} disabled={saving} value={drafts[`${group}:${row.name}`] ?? row.models.join("\n")} onChange={(event) => update(group, row.name, event.target.value)} /> : <textarea className={routeCss.input} rows={2} aria-label={row.name} data-route-group={group} data-route-name={row.name} disabled={saving} value={drafts[`${group}:${row.name}`] ?? row.models.join("\n")} placeholder="provider/model:high" onChange={(event) => update(group, row.name, event.target.value)} />}
+            {group === "mappings" && <Button variant="outline" size="sm" disabled={saving} data-route-remove={row.name} aria-label={t("shell.settings.mapping.remove", { model: row.name })} onClick={() => {
+              setSettings((previous) => previous === null ? null : ({ ...previous, mappings: previous.mappings.filter((mapping) => mapping.name !== row.name) }));
+              setDrafts((previous) => { const next = { ...previous }; delete next[`mappings:${row.name}`]; return next; });
+              setSaved(false);
+            }}>×</Button>}
           </div>
         </SettingRow>)}
       </div>)}

@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { IconBranchOutlineRegular, StateDot } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { DagActivity, DagNode, DagRun } from "../../../shared/protocol";
 import { useT, type MessageKey, type Translate } from "../../i18n";
-import { selectDagRuns, selectTasks, selectThreadLiveState } from "../../state";
-import { useAppSelector } from "../app-context";
+import { selectDagRuns, selectTasks, selectThreadLiveState, type ConversationTurn } from "../../state";
+import { useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
 import {
   currentTodo, groupNodesByDependency, isHistoricalTask, isSuspended, knownNodeState, knownRunStatus, knownTaskStatus,
@@ -14,7 +14,10 @@ import {
 import { formatDuration } from "./format";
 import { useTaskWork } from "./use-task-work";
 import { WorkflowGraph } from "./WorkflowGraph";
+import { turnSubagents } from "./work-log";
 import css from "./ActivityPanel.module.css";
+
+const EMPTY_TURNS: ConversationTurn[] = [];
 
 const NODE_LABELS = {
   pending: "activity.node.pending", blocked: "activity.node.blocked", scheduled: "activity.node.scheduled",
@@ -81,12 +84,15 @@ function WorkRow({ tree, node, activity, dependencies = [], live, now, depth = 0
   const t = useT();
   const task = tree?.task;
   const work = tree?.work;
+  const actions = useActions();
+  const childId = task !== undefined && !isHistoricalTask(task) ? task.child_session_id ?? work?.task.child_session_id : work?.task.child_session_id;
+  const child = useAppSelector(state => childId === undefined ? undefined : state.threads[childId]);
   const historical = task !== undefined && isHistoricalTask(task);
   const executing = live && !historical && (task === undefined || !isSuspended(task));
   const status = node?.state ?? task?.status ?? "pending";
   const label = node === undefined ? task === undefined ? "" : taskTitle(task) : node.label?.trim() || node.id;
   const route = task === undefined ? [] : taskRoute(task);
-  const duration = node === undefined ? task === undefined ? null : taskElapsedMs(task, now) :
+  const duration = node === undefined ? task === undefined ? null : taskElapsedMs(task, now, executing) :
     nodeElapsedMs(node, now, executing);
   const elapsed = duration ?? (task === undefined || historical ? null :
     task.status === "running" && executing ? Math.max(0, now - Date.parse(task.created_at)) : task.run_stats?.runtime_ms ?? null);
@@ -130,6 +136,7 @@ function WorkRow({ tree, node, activity, dependencies = [], live, now, depth = 0
           <span className={css.entityChevron} aria-hidden>›</span>
         </summary>
         <div className={css.entityBody}>
+          {child !== undefined && <button type="button" data-testid="task-open-conversation" onClick={() => void actions.openThread(child.id)}>{t("activity.openConversation")}</button>}
           <p className={css.meta}>{[statusText, fullRoute, historical ? t("activity.task.restored") : "",
             task !== undefined && isSuspended(task) ? t("activity.task.suspended") : ""].filter(Boolean).join(" · ")}</p>
           {node !== undefined && <p className={css.meta}>{node.prompt}</p>}
@@ -196,10 +203,11 @@ function RunCard({ run, live, activity, trees, now, view }: {
       </div>
       {view === "graph" ? <>
         <WorkflowGraph run={run} live={live} now={now} onSelect={setSelected} />
-        {selectedNode !== undefined && <ul className={css.list} key={selectedNode.id}>
-          <WorkRow node={selectedNode} tree={trees.find(tree => tree.task.task_id === selectedNode.task_id)} live={live} now={now}
-            activity={activity?.[selectedNode.id]} expanded dependencies={[...new Set([...selectedNode.depends_on, ...run.edges.filter(edge => edge.to === selectedNode.id).map(edge => edge.from)])]} />
-        </ul>}
+        {selectedNode !== undefined && <div className={css.entityBody} data-testid="workflow-node-detail">
+          <strong>{selectedNode.label?.trim() || selectedNode.id}</strong>
+          <p className={css.meta}>{nodeLabel(selectedNode.state, t)}</p>
+          {selectedNode.depends_on.length > 0 && <p className={css.meta}>{t("activity.depends", { nodes: selectedNode.depends_on.join(", ") })}</p>}
+        </div>}
       </> : <div className={css.waves}>
         {groups.map((group) => (
           <div key={group.index ?? "rest"} className={css.wave}>
@@ -223,26 +231,48 @@ export function ActivityPanel({ threadId, id, view = "list", docked = false }: {
   const live = useAppSelector((state) => selectThreadLiveState(state, threadId));
   const runs = useAppSelector((state) => selectDagRuns(state, threadId));
   const tasks = useAppSelector((state) => selectTasks(state, threadId));
+  const turns = useAppSelector(state => state.conversations[threadId]?.turns ?? EMPTY_TURNS);
   const isLive = live?.freshness === "live";
   const trees = useMemo(() => taskForest(tasks, live?.taskWork ?? []), [tasks, live?.taskWork]);
   const linked = new Set(runs.flatMap((run) => run.nodes.map((node) => node.task_id)));
   const standalone = trees.filter((tree) => !linked.has(tree.task.task_id));
-  const now = useNow(isLive && (tasks.some((task) => task.status === "running") ||
-    runs.some((run) => run.status === "running") || live.taskWork.some((work) => work.task.status === "running")));
+  const taskGroups = useMemo(() => {
+    const assigned = new Set<string>();
+    const groups = turns.flatMap((turn, index) => {
+      const owned = new Set(turnSubagents(turn, turns, tasks).map(task => task.task_id));
+      const receipts = new Map(live?.historicalTasks.map(task => [task.task_id, task.turn_id]) ?? []);
+      const members = standalone.filter(tree => {
+        const receiptTurn = receipts.get(tree.task.task_id);
+        return receiptTurn === undefined ? owned.has(tree.task.task_id) : receiptTurn === turn.id;
+      });
+      for (const tree of members) assigned.add(tree.task.task_id);
+      const message = turn.items.find(item => item.item.type === "userMessage")?.item;
+      const title = message?.type === "userMessage" ? message.content.flatMap(part => part.type === "text" ? [part.text] : []).join(" ") : "";
+      return members.length === 0 ? [] : [{ id: turn.id, index: index + 1, title, members }];
+    }).reverse();
+    const unknown = standalone.filter(tree => !assigned.has(tree.task.task_id));
+    if (unknown.length > 0) groups.push({ id: "unknown", index: 0, title: "", members: unknown });
+    return groups;
+  }, [turns, tasks, standalone, live?.historicalTasks]);
+  const now = useNow(isLive && (tasks.some((task) => task.status === "running" && !isHistoricalTask(task) && !isSuspended(task)) ||
+    runs.some((run) => run.status === "running") || live.taskWork.some((work) => work.task.status === "running" && !isSuspended(work.task))));
   if (live === null) return null;
-  const summary = workSummary(runs, tasks, isLive);
+  const summary = workSummary(runs, view === "graph" ? [] : tasks, isLive);
   return (
     <section id={id} className={css.panel} data-docked={docked || undefined} data-testid={TESTID.omoActivity} data-freshness={live.freshness} aria-label={t("activity.region")}>
       <div className={css.inner}>
         <div className={css.overview} data-testid="workflow-summary"><span>{t("activity.chipDone", summary)}</span><span>{t("activity.running", { count: summary.running })}</span><span>{t("activity.waiting", { count: waitingWork(runs, tasks) })}</span>{summary.failed > 0 && <span className={css.failureCount}>{t("activity.chipFailed", summary)}</span>}</div>
         {!isLive && <p className={css.freshness} role="status">{t(live.freshness === "stale" ? "activity.freshness.stale" : "activity.freshness.unattached")}</p>}
         {error !== null && <p className={css.error} role="status">{t("activity.children.error")} <span title={error}>{error}</span></p>}
-        {summary.total === 0 && <p className={css.empty}>{t("activity.empty")}</p>}
+        {summary.total === 0 && <p className={css.empty}>{t(view === "graph" ? "activity.graph.empty" : "activity.empty")}</p>}
         {view === "list" && <div className={css.legend} aria-hidden><span>{t("activity.column.work")}</span><span>{t("activity.column.agent")}</span><span>{t("activity.column.time")}</span><span>{t("activity.column.step")}</span></div>}
         {runs.map((run) => <RunCard key={run.run_id} run={run} live={isLive} activity={live.dagActivity[run.run_id]} trees={trees} now={now} view={view} />)}
-        {standalone.length > 0 && <section className={css.section}>
+        {view === "list" && standalone.length > 0 && <section className={css.section}>
           <h2 className={css.sectionTitle}>{t("activity.tasks")}</h2>
-          <ul className={css.list}>{standalone.map((tree) => <WorkRow key={tree.task.task_id} tree={tree} live={isLive} now={now} />)}</ul>
+          {taskGroups.map(group => <details key={group.id} data-testid="workflow-task-group" data-turn-id={group.id} open={group === taskGroups[0]}>
+            <summary title={group.title}>{group.index === 0 ? t("activity.group.unknown") : t("activity.group.turn", { index: group.index })} · {group.members.length}{group.title !== "" && ` · ${group.title.slice(0, 90)}`}</summary>
+            <ul className={css.list}>{group.members.map(tree => <WorkRow key={tree.task.task_id} tree={tree} live={isLive} now={now} />)}</ul>
+          </details>)}
         </section>}
         {live.truncatedRuns !== undefined && live.truncatedRuns > 0 && <p className={css.empty}>{t("activity.runs.truncated", { count: live.truncatedRuns })}</p>}
         {live.truncatedTasks !== undefined && live.truncatedTasks > 0 && <p className={css.empty}>{t("activity.tasks.truncated", { count: live.truncatedTasks })}</p>}

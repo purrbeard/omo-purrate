@@ -49,7 +49,7 @@ export function ModelSection() {
       <SectionHeading title={t("shell.settings.nav.model")} intro={t("shell.settings.model.intro")} />
       <div className={clsx(css.card, css.wrapRows)}>
         <SettingRow title={t("shell.settings.model.default")} hint={t("shell.settings.model.defaultHint")}>
-          <select className={css.select} data-testid="settings-model-default" value={preferences?.modelId ?? ""} disabled={saving || preferences === null} onChange={(event) => {
+          <select className={css.select} data-testid="settings-model-default" aria-label={t("shell.settings.model.default")} value={preferences?.modelId ?? ""} disabled={saving || preferences === null} onChange={(event) => {
             setSaving(true);
             updatePreferences({ modelId: event.target.value || null }).then(() => { setSaving(false); setError(null); }, (reason: unknown) => { setSaving(false); setError(errorMessage(reason)); });
           }}>

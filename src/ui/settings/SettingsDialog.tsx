@@ -1,6 +1,6 @@
 // Full-window settings: a nav rail (search, grouped sections, Back) beside a breadcrumb header and the section page.
 // Section cards and rows are ported from DSH ui-settings-general SettingsRoot.tsx (MIT, Copyright (c) 2026 DeepSeek).
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
@@ -25,6 +25,7 @@ import { useT } from "../../i18n";
 import type { MessageKey, Translate } from "../../i18n";
 import { TESTID } from "../testids";
 import { uiState, updatePreferences, useUiState } from "../ui-state";
+import type { SettingsSection } from "../ui-state";
 import { DEFAULT_PREFERENCES } from "../../../shared/ipc";
 import { useAppStore } from "../../state";
 import { AboutSection } from "./AboutSection";
@@ -41,7 +42,7 @@ import { OmoSection } from "./OmoSection";
 import { SkillsSection } from "./SkillsSection";
 import css from "./SettingsDialog.module.css";
 
-type SectionId = "general" | "appearance" | "keybindings" | "model" | "skills" | "omo" | "accounts" | "mcp" | "android" | "iphone" | "devices" | "about";
+type SectionId = SettingsSection;
 
 interface SectionEntry {
   id: SectionId;
@@ -235,6 +236,8 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
   const t = useT();
   const titleId = useId();
   const panel = useRef<HTMLDivElement>(null);
+  const nav = useRef<HTMLElement>(null);
+  const content = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const [query, setQuery] = useState("");
@@ -244,7 +247,11 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
   const store = useAppStore();
   const narrow = useNarrow();
   const drawerOpen = narrow && navOpen;
-  useModalLayer(panel, true, onClose);
+  useModalLayer(panel, !drawerOpen, onClose);
+  useModalLayer(nav, drawerOpen, () => setNavOpen(false));
+  useLayoutEffect(() => {
+    content.current?.toggleAttribute("inert", drawerOpen);
+  }, [drawerOpen]);
   useEffect(() => {
     const focusSearch = (event: globalThis.KeyboardEvent): void => {
       if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.key !== "/") return;
@@ -272,7 +279,7 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
   // The drawer takes focus when it opens and hands it back to the toggle when it closes.
   const wasDrawerOpen = useRef(false);
   useEffect(() => {
-    if (drawerOpen) (panel.current?.querySelector<HTMLElement>("[data-section][aria-current]") ?? search.current)?.focus();
+    if (drawerOpen) search.current?.focus();
     else if (wasDrawerOpen.current) toggle.current?.focus();
     wasDrawerOpen.current = drawerOpen;
   }, [drawerOpen]);
@@ -311,7 +318,7 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
       data-active-section={section}
       data-narrow={narrow || undefined}
     >
-      <nav className={css.nav} aria-label={t("shell.settings.sections")} hidden={narrow && !navOpen}>
+      <nav ref={nav} className={css.nav} aria-label={t("shell.settings.sections")} hidden={narrow && !navOpen}>
         <div className={css.dragStrip} data-window-drag />
         <div className={css.search} role="search">
           <IconSearchOutlineRegular size={14} className={css.searchIcon} />
@@ -377,7 +384,7 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
         </div>
       </nav>
       {drawerOpen && <div className={css.scrim} aria-hidden="true" onClick={() => setNavOpen(false)} />}
-      <div className={css.content}>
+      <div ref={content} className={css.content}>
         <header className={css.header} data-window-drag>
           <div className={css.headerInner}>
             {narrow && (
@@ -409,7 +416,7 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
         </header>
         <div className={css.options} key={section}>
           {current.render()}
-          <div className={css.card}>
+          <div className={clsx(css.card, css.restoreCard)}>
             <div className={css.cardBody}>
               {confirmingReset ? <div role="alertdialog" aria-label={t("shell.settings.restoreConfirm")}>
                 <p>{t("shell.settings.restoreConfirm")}</p>
@@ -430,8 +437,7 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
 }
 
 export function SettingsDialog() {
-  const { settingsOpen } = useUiState();
-  const [section, setSection] = useState<SectionId>("general");
+  const { settingsOpen, settingsSection } = useUiState();
   if (!settingsOpen) return null;
-  return <SettingsPanel section={section} onSelect={setSection} onClose={() => uiState.setSettingsOpen(false)} />;
+  return <SettingsPanel section={settingsSection} onSelect={uiState.setSettingsSection} onClose={() => uiState.setSettingsOpen(false)} />;
 }

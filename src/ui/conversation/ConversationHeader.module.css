@@ -9,6 +9,18 @@
   padding: 0 16px 0 calc(16px + var(--dsh-frame-leading-clearance, 0px));
 }
 
+:global([data-narrow='true']) .sidebarToggle {
+  display: inline-flex;
+}
+
+.narrowToggle {
+  display: none;
+}
+
+:global([data-narrow='true']) .narrowToggle {
+  display: inline-flex;
+}
+
 .sidebarToggle {
   flex: none;
   display: inline-flex;

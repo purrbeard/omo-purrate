@@ -17,7 +17,7 @@ export function contextMessage(text: string, context: readonly DraftContext[]): 
 }
 
 export function splitContext(text: string): { text: string; context: DraftContext[] } {
-  const index = text.indexOf(CONTEXT_HEADER);
+  const index = text.lastIndexOf(`${CONTEXT_HEADER}\n`);
   if (index < 0) return { text, context: [] };
   try {
     const value: unknown = JSON.parse(text.slice(index + CONTEXT_HEADER.length));

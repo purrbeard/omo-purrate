@@ -4,8 +4,13 @@
 }
 
 .content {
+  flex-shrink: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+.content > * {
+  flex-shrink: 0;
 }
 
 .sketch {

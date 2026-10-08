@@ -261,6 +261,7 @@ export function parseSessionJsonl(text: string): HistoryResult {
       if (message["role"] === "toolResult" && message["toolName"] === "task") {
         const task = historicalTask(message["details"], true);
         if (task !== null) {
+          if (turn !== null) task.turn_id = turn.id;
           taskOrder.add(task.task_id);
           tasks.set(task.task_id, task);
         }

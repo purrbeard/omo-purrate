@@ -24,14 +24,15 @@ async function load(home: string): Promise<{ file: string; text: string | null; 
 function rows(value: unknown, mapping = false): ModelRoute[] {
   if (value === undefined) return [];
   if (!record(value)) throw new Error("Invalid omo model routing section.");
-  return Object.entries(value).map(([name, entry]) => {
+  return Object.entries(value).flatMap(([name, entry]) => {
     if (!record(entry)) throw new Error("Invalid omo model routing entry.");
+    if (mapping && entry["model"] === undefined) return [];
     const refs = mapping ? [entry["model"]] : Array.isArray(entry["models"]) ? entry["models"] : entry["model"] === undefined ? [] : [entry["model"]];
-    return { name, models: refs.map((ref) => {
+    return [{ name, models: refs.map((ref) => {
       if (typeof ref === "string") return ref;
       if (record(ref) && typeof ref["model"] === "string") return typeof ref["reasoning"] === "string" ? `${ref["model"]}:${ref["reasoning"]}` : ref["model"];
       throw new Error("Invalid omo model reference.");
-    }) };
+    }) }];
   });
 }
 export async function readModelRouting(home: string): Promise<ModelRoutingSettings> {
@@ -68,16 +69,28 @@ function parseInput(value: unknown): ModelRoutingInput {
 export async function saveModelRouting(home: string, input: unknown): Promise<ModelRoutingSettings> {
   const settings = parseInput(input);
   const config = await load(home);
-  // Native overrides belong in the native block; other harnesses and root mappings remain untouched.
+  // Updates belong in the native block. Removed mappings must also clear root targets to prevent fallback.
   const previous = config.value["[senpi]"];
   if (previous !== undefined && !record(previous)) throw new Error("Invalid native model configuration.");
   const native: Record<string, unknown> = record(previous) ? { ...previous } : {};
+  const removedMappings: string[] = [];
   for (const group of ["categories", "agents", "mappings"] as const) {
     const key = group === "mappings" ? "models" : group;
     const rootSection = config.value[key];
     const nativeSection = native[key];
     if ((rootSection !== undefined && !record(rootSection)) || (nativeSection !== undefined && !record(nativeSection))) throw new Error("Invalid model configuration section.");
     const section = { ...(record(rootSection) ? rootSection : {}), ...(record(nativeSection) ? nativeSection : {}) };
+    if (group === "mappings") {
+      for (const [name, existing] of Object.entries(section)) {
+        if (!record(existing) || existing["model"] === undefined || settings.mappings.some((row) => row.name === name)) continue;
+        const entry = { ...existing };
+        delete entry["model"];
+        delete entry["reasoning"];
+        if (Object.keys(entry).length === 0) delete section[name];
+        else section[name] = entry;
+        removedMappings.push(name);
+      }
+    }
     for (const row of settings[group]) {
       const existing = section[row.name];
       const entry = record(existing) ? { ...existing } : {};
@@ -100,6 +113,16 @@ export async function saveModelRouting(home: string, input: unknown): Promise<Mo
     catch (error) { if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error; if (!(await stat(`${config.file}.models.bak`)).isFile()) throw error; }
   }
   let output = config.text ?? "{}\n";
+  for (const name of removedMappings) {
+    const rootModels = config.value["models"];
+    const entry = record(rootModels) ? rootModels[name] : undefined;
+    if (!record(entry)) continue;
+    if (Object.keys(entry).every((key) => key === "model" || key === "reasoning")) {
+      output = applyEdits(output, modify(output, ["models", name], undefined, {}));
+    } else {
+      for (const key of ["model", "reasoning"]) output = applyEdits(output, modify(output, ["models", name, key], undefined, {}));
+    }
+  }
   for (const key of ["categories", "agents", "models"] as const) {
     output = applyEdits(output, modify(output, ["[senpi]", key], native[key], {
       formattingOptions: { insertSpaces: true, tabSize: 2, eol: "\n" },

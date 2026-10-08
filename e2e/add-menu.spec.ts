@@ -50,6 +50,9 @@ test("plan menu invokes the installed skill; sketch produces a PNG and keyboard 
     const canvas = page.locator('canvas');
     const bounds = await canvas.boundingBox();
     if (bounds === null) throw new Error("Missing sketch canvas");
+    const paper = await page.locator('canvas').evaluate(element => element.parentElement?.getBoundingClientRect().toJSON());
+    if (paper === undefined) throw new Error("Missing sketch paper");
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(paper.bottom);
     await page.mouse.move(bounds.x + 30, bounds.y + 30);
     await page.mouse.down();
     await page.mouse.move(bounds.x + 100, bounds.y + 70);

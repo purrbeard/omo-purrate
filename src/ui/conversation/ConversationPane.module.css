@@ -1,4 +1,7 @@
 /* Shared width axis (DSH ConversationRoot): the transcript column is 32px narrower than the composer card. */
+.agentButton { border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-md); background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; padding: 5px 8px; cursor: pointer; }
+.agentButton:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.agentButton:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color); }
 .root {
   position: relative;
   flex: 1;

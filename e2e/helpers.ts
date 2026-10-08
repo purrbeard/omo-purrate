@@ -200,9 +200,17 @@ export async function shot(page: Page, name: string, options: { maxSettleMs?: nu
 }
 
 export async function setTheme(page: Page, theme: "light" | "dark"): Promise<void> {
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('[data-testid="app-frame"]');
+    return frame !== null && (frame.getAttribute("data-narrow") === "true") === (frame.clientWidth < 800);
+  });
+  if (await page.locator('[data-testid="app-frame"]').getAttribute("data-narrow") === "true") {
+    await byTestId(page, TESTID.headerSidebarToggle).click();
+  }
   await byTestId(page, TESTID.openSettings).click();
   const dialog = byTestId(page, TESTID.settingsDialog);
   await expect(dialog).toBeVisible();
+  if (await page.getByTestId("settings-nav-toggle").isVisible()) await page.getByTestId("settings-nav-toggle").click();
   await dialog.locator('[data-section="appearance"]').click();
   const choice = byTestId(page, theme === "dark" ? TESTID.settingsThemeDark : TESTID.settingsThemeLight);
   await choice.click();
@@ -215,6 +223,14 @@ export async function setTheme(page: Page, theme: "light" | "dark"): Promise<voi
 }
 
 export async function newSession(page: Page): Promise<string> {
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('[data-testid="app-frame"]');
+    return frame !== null && (frame.getAttribute("data-narrow") === "true") === (frame.clientWidth < 800);
+  });
+  const narrow = await page.locator('[data-testid="app-frame"]').getAttribute("data-narrow") === "true";
+  if (narrow && await page.locator('[role="dialog"] [data-testid="new-session"]').count() === 0) {
+    await byTestId(page, TESTID.headerSidebarToggle).click();
+  }
   const before = await byTestId(page, TESTID.threadRow).evaluateAll((rows) =>
     rows.map((row) => row.getAttribute("data-thread-id")),
   );
@@ -236,6 +252,7 @@ export async function newSession(page: Page): Promise<string> {
   );
   const threadId = await opened.jsonValue();
   if (typeof threadId !== "string") throw new Error("new session did not activate a new thread row");
+  await expect(byTestId(page, TESTID.composerInput)).toHaveAttribute("data-thread-id", threadId);
   await expect(byTestId(page, TESTID.composerInput)).toBeEnabled();
   return threadId;
 }

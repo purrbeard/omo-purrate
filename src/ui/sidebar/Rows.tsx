@@ -1,7 +1,6 @@
 // Ported from DSH ui-workspace rows/Rows.tsx (MIT, Copyright (c) 2026 DeepSeek).
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useActions, useAppSelector } from "../app-context";
-import { knownTaskStatus } from "../conversation/activity-model";
 import type { KeyboardEvent } from "react";
 import clsx from "clsx";
 import {
@@ -15,13 +14,14 @@ import {
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { MenuEntry } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { ThreadSummary, WorkspaceGroup } from "../../state";
+import { selectMainThreadId } from "../../state";
 import { useLocale, useT } from "../../i18n";
 import { formatWholeSeconds, threadTitle } from "../conversation/format";
 import { useElapsedMs } from "../elapsed";
 import { GripGlyph } from "../glyphs";
 import { TESTID } from "../testids";
 import { useUiState } from "../ui-state";
-import { isRunning } from "./thread-filter";
+import { containsThread, isLiveRunning } from "./thread-filter";
 import { formatThreadTime } from "./thread-time";
 import { WorkspaceBadge } from "./WorkspaceBadge";
 import css from "./Rows.module.css";
@@ -123,6 +123,7 @@ function RenameInput({ initial, label, onCommit, onCancel }: RenameInputProps) {
 interface ThreadRowProps {
   thread: ThreadSummary;
   active: boolean;
+  searching?: boolean;
   nowMs: number;
   onOpen(threadId: string): void;
   onRename(threadId: string, name: string): void;
@@ -149,25 +150,35 @@ function RunningStatus({ threadId }: { threadId: string }) {
   );
 }
 
-export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDelete, onReveal, settled = false, onSettle }: ThreadRowProps) {
+export function ThreadRow({ thread, active, searching = false, nowMs, onOpen, onRename, onRequestDelete, onReveal, settled = false, onSettle }: ThreadRowProps) {
   const t = useT();
   const actions = useActions();
-  const currentId = useAppSelector(state => state.activeThreadId);
+  const currentId = useAppSelector(selectMainThreadId);
+  const threadLinks = useAppSelector(state => state.threadLinks);
+  const agentChildIds = new Set(threadLinks.filter(link => link.taskId !== undefined || link.origin === "native").flatMap(link => link.childId === undefined ? [] : [link.childId]));
+  const children = (thread.children ?? []).filter(child => !agentChildIds.has(child.id));
+  const creator = useAppSelector(state => state.threadOrigins[thread.id] ?? "unknown");
+  const creatorLabel = t(creator === "user" ? "shell.creator.user" : creator === "dori" ? "shell.creator.dori" : creator === "agent" ? "shell.creator.agent" : "shell.creator.unknown");
   const [childrenOpen, setChildrenOpen] = useState(false);
+  const holdsActive = currentId !== null && (thread.children?.some(child => containsThread(child, currentId)) ?? false);
+  useEffect(() => {
+    if (holdsActive) setChildrenOpen(true);
+  }, [holdsActive, currentId]);
+  const childrenExpanded = childrenOpen || searching;
   const [linkError, setLinkError] = useState<string | null>(null);
-  const childCount = (thread.children?.length ?? 0) + (thread.tasks?.length ?? 0);
+  const childCount = children.length;
   const locale = useLocale();
   const { preferences } = useUiState();
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const title = threadTitle(thread, t("shell.newSession"));
-  const running = isRunning(thread);
+  const running = useAppSelector(state => isLiveRunning(thread, state));
 
   const rowProps = {
     "data-testid": TESTID.threadRow,
     "data-thread-id": thread.id,
     "data-title": title,
-    "aria-current": active ? ("page" as const) : undefined,
+    "aria-current": active || currentId === thread.id ? ("page" as const) : undefined,
   };
 
   if (renaming) {
@@ -194,6 +205,11 @@ export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDe
     { id: "rename", label: t("shell.sidebar.rename"), icon: <IconEditOutlineRegular /> },
     { id: "reveal", label: t("shell.sidebar.revealInFinder"), icon: <IconFolderOpenOutlineRegular /> },
     { id: "new-related", label: t("shell.newRelatedSession") },
+    { id: "unmanage", label: t("shell.managed.remove") },
+    { id: "creator-user", label: t("shell.creator.markUser") },
+    { id: "creator-dori", label: t("shell.creator.markDori") },
+    { id: "creator-agent", label: t("shell.creator.markAgent") },
+    { id: "creator-unknown", label: t("shell.creator.markUnknown") },
     ...(currentId !== null && currentId !== thread.id ? [{ id: "attach", label: t("shell.linkToCurrent") }] : []),
     ...(preferences?.threadParents[thread.id] !== undefined ? [{ id: "detach", label: t("shell.unlinkSession") }] : []),
     { type: "separator", id: "danger" },
@@ -203,8 +219,17 @@ export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDe
   const select = (id: string): void => {
     setMenuOpen(false);
     switch (id) {
+      case "unmanage":
+        void actions.manageThread(thread.id, false).catch((error: unknown) => setLinkError(error instanceof Error ? error.message : String(error)));
+        break;
       case "new-related":
         void actions.newThread(thread.cwd, thread.id);
+        break;
+      case "creator-user":
+      case "creator-dori":
+      case "creator-agent":
+      case "creator-unknown":
+        void actions.classifyThread(thread.id, id === "creator-user" ? "user" : id === "creator-dori" ? "dori" : id === "creator-agent" ? "agent" : "unknown").catch((error: unknown) => setLinkError(error instanceof Error ? error.message : String(error)));
         break;
       case "attach":
         if (currentId !== null) void actions.linkThread(thread.id, currentId).catch((error: unknown) => setLinkError(error instanceof Error ? error.message : String(error)));
@@ -229,10 +254,10 @@ export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDe
 
   return (
     <div>
-    <div className={clsx(css.sessionRow, active && css.selected, menuOpen && css.menuOpen)} {...rowProps}>
+    <div className={clsx(css.sessionRow, (active || currentId === thread.id) && css.selected, menuOpen && css.menuOpen)} {...rowProps} data-creator={creator}>
       <button type="button" className={css.rowMain} onClick={() => onOpen(thread.id)}>
         <WorkspaceBadge cwd={thread.cwd} className={css.rowBadge} />
-        <span className={css.title}>{title}</span>
+        <span className={css.title} title={`${title} · ${creatorLabel}`}>{title}<span className={css.creator} data-testid="thread-creator-label">{creatorLabel}</span></span>
         {running ? <RunningStatus threadId={thread.id} /> : (
           <span className={css.time}>{formatThreadTime(thread.updatedAt, nowMs, t, preferences?.timeFormat ?? "system", locale)}</span>
         )}
@@ -261,11 +286,10 @@ export function ThreadRow({ thread, active, nowMs, onOpen, onRename, onRequestDe
         />
       </span>
     </div>
-    {childCount > 0 && <button type="button" className={css.childrenToggle} data-testid="thread-children-toggle" aria-expanded={childrenOpen} onClick={() => setChildrenOpen(!childrenOpen)}>{t("shell.childWork", { count: childCount })}</button>}
+    {childCount > 0 && <button type="button" className={css.childrenToggle} data-testid="thread-children-toggle" aria-expanded={childrenExpanded} onClick={() => setChildrenOpen(!childrenOpen)}>{t("shell.childWork", { count: childCount })}</button>}
     {linkError !== null && <p role="alert" className={css.linkError}>{linkError}</p>}
-    {childrenOpen && <div className={css.childThreads} data-testid="thread-children">
-      {thread.children?.map(child => <ThreadRow key={child.id} thread={child} active={child.id === currentId} nowMs={nowMs} onOpen={onOpen} onRename={onRename} onRequestDelete={onRequestDelete} onReveal={onReveal} />)}
-      {thread.tasks?.map(task => <button type="button" key={task.taskId} className={css.childTask} data-testid="thread-child-task" title={task.taskId} onClick={() => onOpen(thread.id)}><span>{task.title || task.taskId}</span><small>{t(`activity.task.${knownTaskStatus(task.status ?? "pending") ?? "pending"}`)}</small></button>)}
+    {childCount > 0 && childrenExpanded && <div className={css.childThreads} data-testid="thread-children">
+      {children.map(child => <ThreadRow key={child.id} thread={child} active={child.id === currentId} searching={searching} nowMs={nowMs} onOpen={onOpen} onRename={onRename} onRequestDelete={onRequestDelete} onReveal={onReveal} />)}
     </div>}
     </div>
   );

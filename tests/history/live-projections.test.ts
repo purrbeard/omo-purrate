@@ -48,6 +48,12 @@ describe("history projections", () => {
       final_response: "done", final_response_truncated: true,
     }]);
   });
+  it("preserves the spawn turn when completion arrives after a later request", () => {
+    const user = (id: string, parentId: string | null) => ({ type: "message", id, parentId, message: { role: "user", content: [{ type: "text", text: "Work" }] } });
+    const text = jsonl(user("first", null), result("spawn", "first", receipt), user("followup", "spawn"),
+      completion("done", "followup", [{ task_id: "t", status: "completed", final_response: "done" }]));
+    expect(parseSessionJsonl(text).tasks[0]).toMatchObject({ task_id: "t", turn_id: "first", status: "completed" });
+  });
   it("projects completion-only records and ignores malformed entries", () => {
     const text = jsonl(result("a", null, { task_id: "bad", status: "running" }), completion("b", "a", [
       { task_id: "t", status: "error", name: "lane", agent_type: "explore", model: "model", error_message: "failed" },

@@ -94,9 +94,23 @@ export type ThreadNotificationPreference = "off" | "background" | "always";
 /** How every clock time renders; "system" follows the OS clock preference. */
 export type TimeFormatPreference = "system" | "12h" | "24h";
 
+export type ThreadOrigin = "user" | "agent" | "dori" | "unknown";
+
+/** Creator evidence captured by this app's explicit new-session action. */
+export interface ThreadCreatorEvidence {
+  origin: "user";
+  source: "ui-new-session";
+}
+
 export interface Preferences {
+  /** Thread ids explicitly managed by this app. */
+  managedThreadIds: string[];
   /** Explicit ownership for related sessions; session files and cwd stay unchanged. */
   threadParents: Record<string, string>;
+  /** Manual creator overrides keyed by thread ID, separate from creation evidence. */
+  threadOrigins?: Record<string, ThreadOrigin>;
+  /** Structured creation evidence keyed by thread ID; omitted in older preferences. */
+  threadCreators?: Record<string, ThreadCreatorEvidence>;
   /** Automatic native omo updates on app launch; omitted in older preferences means enabled. */
   omoAutoUpdate?: boolean;
   theme: ThemePreference;
@@ -130,7 +144,10 @@ export interface Preferences {
 
 /** Preferences every field resets to on "Restore device defaults" (Settings → General, top right). */
 export const DEFAULT_PREFERENCES: Preferences = {
+  managedThreadIds: [],
   threadParents: {},
+  threadOrigins: {},
+  threadCreators: {},
   omoAutoUpdate: true,
   theme: "system",
   locale: "system",
@@ -161,6 +178,8 @@ export interface HistoryTurn {
 }
 
 export interface HistoricalTask {
+  /** Active-branch turn containing the structured spawn receipt, not a completion wake. */
+  turn_id?: string;
   task_id: string;
   status: string;
   source: "history";
@@ -369,12 +388,17 @@ export interface ThreadLink {
   parentId: string;
   childId?: string;
   taskId?: string;
+  /** Native parentSession headers, distinct from user-created related-conversation links. */
+  origin?: "native";
   title: string;
   status?: import("./protocol").LiveTask["status"];
 }
 
 export interface OmoBridgeApi {
-  loadThreadLinks(cwds: string[]): Promise<ThreadLink[]>;
+  /** Optional JSONL paths add verified header links and their parent chain, using header IDs. */
+  loadThreadLinks(cwds: string[], paths?: string[]): Promise<ThreadLink[]>;
+  /** Keys are the requested JSONL paths, not thread IDs; unknown creation origins are omitted. */
+  loadThreadOrigins(paths: string[]): Promise<Record<string, "agent" | "dori">>;
   readModelRouting(): Promise<ModelRoutingSettings>;
   saveModelRouting(input: ModelRoutingInput): Promise<ModelRoutingSettings>;
   importExistingMcpConfigs(): Promise<{ imported: string[]; sources: number }>;
@@ -466,6 +490,7 @@ export interface OmoBridgeApi {
 /** IPC channel names. Invoke channels use ipcRenderer.invoke; event channels use webContents.send. */
 export const IPC = {
   loadThreadLinks: "history:thread-links",
+  loadThreadOrigins: "history:thread-origins",
   readModelRouting: "models:read-routing",
   saveModelRouting: "models:save-routing",
   importExistingMcpConfigs: "mcp:import-existing",

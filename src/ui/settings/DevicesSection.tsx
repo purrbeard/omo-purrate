@@ -13,8 +13,9 @@ export function DevicesSection() {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
-    void Promise.all([window.omo.getDeviceOverview(), window.omo.getAndroidStatus()]).then(([device, phone]) => { if (active) { setOverview(device); setAndroid(phone); } }, (reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
-    const unsubscribe = window.omo.onAndroidStatus((value) => { if (active) setAndroid(value); });
+    let updated = false;
+    const unsubscribe = window.omo.onAndroidStatus((value) => { updated = true; if (active) setAndroid(value); });
+    void Promise.all([window.omo.getDeviceOverview(), window.omo.getAndroidStatus()]).then(([device, phone]) => { if (active) { setOverview(device); if (!updated) setAndroid(phone); } }, (reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
     return () => { active = false; unsubscribe(); };
   }, []);
   return <section className={css.section} data-testid="settings-devices" aria-busy={overview === null && error === null}>

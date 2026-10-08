@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { t as translate } from "../../src/i18n";
 import type { ThreadSummary, WorkspaceGroup } from "../../src/state";
-import { filterGroups, threadMatches } from "../../src/ui/sidebar/thread-filter";
+import { containsThread, filterGroups, isLiveRunning, threadMatches } from "../../src/ui/sidebar/thread-filter";
+import { createInitialState } from "../../src/state";
+import { emptyConversation } from "../../src/state/conversation";
+import type { LiveTask } from "../../shared/protocol";
+import { OMO_INSTALL_COMMAND } from "../../shared/ipc";
 import type { ThreadFilter } from "../../src/ui/sidebar/thread-filter";
 import { formatThreadTime } from "../../src/ui/sidebar/thread-time";
 import { workspaceHue, workspaceInitials } from "../../src/ui/sidebar/workspace-badge";
@@ -135,5 +139,64 @@ describe("filterGroups running and period filters", () => {
   it("requires every part of the filter", () => {
     expect(kept({ runningOnly: true, period: "today" })).toEqual(["running"]);
     expect(kept({ period: "month", query: "days" })).toEqual(["ten-days"]);
+  });
+
+  it("requires task title matches to pass the running and period filters", () => {
+    const candidates: WorkspaceGroup[] = [{ cwd: "/w/server", label: "server", threads: [
+      thread("old", { updatedAt: now - 40 * DAY, tasks: [{ parentId: "old", taskId: "old-task", title: "Deploy database", status: "running" }] }),
+      thread("done", { updatedAt: now, tasks: [{ parentId: "done", taskId: "done-task", title: "Deploy database", status: "completed" }] }),
+      thread("live", { updatedAt: now, tasks: [{ parentId: "live", taskId: "live-task", title: "Deploy database", status: "running" }] }),
+    ] }];
+    const result = filterGroups(candidates, { query: " DEPLOY ", runningOnly: true, period: "today" }, now, () => "");
+    expect(result[0]?.threads.map(entry => entry.id)).toEqual(["live"]);
+  });
+
+  it("keeps ancestors of nested matches and finds active descendants across workspaces", () => {
+    const leaf = thread("leaf", { cwd: "/w/other", name: "Nested match", updatedAt: now });
+    const root = thread("root", { children: [thread("middle", { children: [leaf] })] });
+    expect(containsThread(root, "leaf")).toBe(true);
+    expect(containsThread(root, "unrelated")).toBe(false);
+    const result = filterGroups([{ cwd: root.cwd, label: "server", threads: [root] }], { ...NO_FILTER, query: "nested", period: "today" }, now, entry => entry.name ?? "");
+    expect(result[0]?.threads).toEqual([root]);
+  });
+});
+
+describe("sidebar running freshness", () => {
+  it("rejects persisted, disconnected and stale work, then resumes on a fresh roster", () => {
+    const state = createInitialState();
+    state.bridge = { state: "connected", omo: null, userAgent: null, message: null, stderrTail: null, exitCode: null, restartAttempt: 0, installCommand: OMO_INSTALL_COMMAND };
+    const conversation = emptyConversation("parent");
+    state.conversations.parent = conversation;
+    const parent = thread("parent", { tasks: [{ parentId: "parent", taskId: "task", title: "Work", status: "running" }] });
+    expect(isLiveRunning(parent, state)).toBe(false);
+    conversation.live.freshness = "live";
+    conversation.live.tasks.task = { task_id: "task", status: "running", description: "Work" } as LiveTask;
+    expect(isLiveRunning(parent, state)).toBe(true);
+    conversation.live.tasks.task.residency_state = "persisted_only";
+    expect(isLiveRunning(parent, state)).toBe(false);
+    conversation.live.tasks.task.residency_state = "resident";
+    conversation.live.freshness = "stale";
+    expect(isLiveRunning(parent, state)).toBe(false);
+    state.bridge.state = "restarting";
+    expect(isLiveRunning(thread("active", { status: { type: "active", activeFlags: [] } }), state)).toBe(false);
+    state.bridge.state = "connected";
+    expect(isLiveRunning(parent, state)).toBe(false);
+    conversation.live.freshness = "live";
+    expect(isLiveRunning(parent, state)).toBe(true);
+    conversation.live.tasks.task.status = "completed";
+    expect(isLiveRunning(parent, state)).toBe(false);
+  });
+
+  it("uses descendant live state for ancestor counts and filtering", () => {
+    const state = createInitialState();
+    state.bridge = { state: "connected", omo: null, userAgent: null, message: null, stderrTail: null, exitCode: null, restartAttempt: 0, installCommand: OMO_INSTALL_COMMAND };
+    const child = thread("child", { status: { type: "active", activeFlags: [] } });
+    state.conversations.child = emptyConversation("child");
+    state.conversations.child.live.freshness = "live";
+    const root = thread("root", { children: [child] });
+    expect(isLiveRunning(root, state)).toBe(true);
+    state.conversations.child.live.freshness = "stale";
+    expect(isLiveRunning(root, state)).toBe(false);
+    expect(filterGroups([{ cwd: root.cwd, label: "server", threads: [root] }], { ...NO_FILTER, runningOnly: true }, 0, () => "", entry => isLiveRunning(entry, state))).toEqual([]);
   });
 });

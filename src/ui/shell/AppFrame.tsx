@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { TESTID } from "../testids";
+import { useModalLayer } from "../../dsh/primitives/useModalLayer";
+import { useT } from "../../i18n";
 import { computeColumns } from "./columns";
 import css from "./AppFrame.module.css";
 
@@ -139,7 +141,44 @@ export function AppFrame({
     };
   }, []);
 
-  const cols = computeColumns(viewport, sidebarVisible ? sidebarWidth : 0, rightPanel === null ? 0 : rightPanelWidth);
+  const t = useT();
+  const narrow = viewport > 0 && viewport < 800;
+  const [sidebarDrawerOpen, setSidebarDrawerOpen] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement | null>(null);
+  const drawerTrigger = useRef<HTMLElement | null>(null);
+  const wasDrawerOpen = useRef(false);
+  const drawerOpen = narrow && sidebarDrawerOpen;
+  useLayoutEffect(() => {
+    sidebarRef.current?.toggleAttribute("inert", narrow ? !drawerOpen : !sidebarVisible);
+  }, [narrow, drawerOpen, sidebarVisible]);
+  useModalLayer(sidebarRef, drawerOpen, () => setSidebarDrawerOpen(false));
+  useEffect(() => {
+    if (wasDrawerOpen.current && !drawerOpen && narrow) drawerTrigger.current?.focus();
+    wasDrawerOpen.current = drawerOpen;
+  }, [drawerOpen, narrow]);
+  useEffect(() => {
+    if (!narrow) setSidebarDrawerOpen(false);
+  }, [narrow]);
+  useEffect(() => {
+    if (!narrow) return;
+    const open = (event: MouseEvent): void => {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest(`[data-testid="${TESTID.headerSidebarToggle}"]`)) {
+        drawerTrigger.current = event.target.closest<HTMLElement>(`[data-testid="${TESTID.headerSidebarToggle}"]`);
+        event.preventDefault();
+        event.stopPropagation();
+        setSidebarDrawerOpen(true);
+      } else if (event.target.closest(`[data-testid="${TESTID.sidebarToggle}"]`)) {
+        event.preventDefault();
+        event.stopPropagation();
+        setSidebarDrawerOpen(false);
+      } else if (event.target.closest(`[data-testid="${TESTID.threadRow}"], [data-testid="${TESTID.newSession}"], [data-testid="${TESTID.openSettings}"], [data-testid="${TESTID.openAccounts}"]`)) setSidebarDrawerOpen(false);
+    };
+    const frame = frameRef.current;
+    frame?.addEventListener("click", open, true);
+    return () => frame?.removeEventListener("click", open, true);
+  }, [narrow]);
+  const cols = computeColumns(viewport, sidebarVisible && !narrow ? sidebarWidth : 0, rightPanel === null || narrow ? 0 : rightPanelWidth);
   if (rightPanelWidth >= 580 && cols.rightbar > 0 && cols.center < 520) {
     const available = viewport - cols.sidebar - 520;
     cols.rightbar = available >= 300 ? Math.min(cols.rightbar, available) : 0;
@@ -191,26 +230,27 @@ export function AppFrame({
       className={css.frame}
       style={{ gridTemplateColumns: `${cols.sidebar}px minmax(0px, 1fr)${docked ? ` ${cols.rightbar}px` : ""}` }}
       data-testid={TESTID.appFrame}
-      data-sidebar-collapsed={!sidebarVisible || undefined}
+      data-sidebar-collapsed={narrow || !sidebarVisible || undefined}
+      data-narrow={narrow || undefined}
       data-dragging={dragging || undefined}
       data-animating={animating > 0 || undefined}
     >
-      <div className={css.sidebarCol}>
+      {drawerOpen && <button className={css.sidebarScrim} tabIndex={-1} aria-hidden="true" onClick={() => setSidebarDrawerOpen(false)} />}
+      <div ref={sidebarRef} className={drawerOpen ? css.sidebarDrawer : css.sidebarCol} aria-hidden={narrow ? !drawerOpen : !sidebarVisible} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen || undefined} aria-label={drawerOpen ? t("shell.showSidebar") : undefined}>
         <div className={css.dragStrip} data-window-drag />
         {sidebar}
       </div>
       <div className={css.centerCol}>
         <div className={css.dragStrip} data-window-drag />
         {main}
-        {rightPanel !== null && !docked && <div className={css.rightOverlay}>{rightPanel("overlay")}</div>}
       </div>
-      {docked && (
-        <div className={css.rightCol}>
+      {rightPanel !== null && (
+        <div className={docked ? css.rightCol : css.rightOverlay} style={docked ? undefined : { width: Math.min(rightPanelWidth, viewport - 16) }}>
           <div className={css.dragStrip} data-window-drag />
-          {rightPanel("docked")}
+          {rightPanel(docked ? "docked" : "overlay")}
         </div>
       )}
-      {sidebarVisible && <DragHandle left={cols.sidebar} onStart={onDragStart} onDrag={onDrag} onEnd={onDragEnd} />}
+      {sidebarVisible && !narrow && <DragHandle left={cols.sidebar} onStart={onDragStart} onDrag={onDrag} onEnd={onDragEnd} />}
     </div>
   );
 }

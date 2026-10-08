@@ -1,5 +1,15 @@
 /* Ported from DSH ui-workspace rows/Rows.module.css (MIT, Copyright (c) 2026 DeepSeek). */
 
+.creator {
+  display: block;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  font-weight: normal;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .childrenToggle {
   margin: 0 12px 4px 28px;
   padding: 4px 8px;

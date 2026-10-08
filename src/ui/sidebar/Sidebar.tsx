@@ -15,7 +15,7 @@ import {
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { StateDotState } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { BridgeState, BridgeStatus } from "../../../shared/ipc";
-import { selectThreadsByWorkspace } from "../../state";
+import { selectManagedThreadsByWorkspace } from "../../state";
 import type { ThreadSummary, WorkspaceGroup } from "../../state";
 import { useT } from "../../i18n";
 import { StoreContext, useActions, useAppSelector } from "../app-context";
@@ -26,9 +26,10 @@ import { useNewSessionFlow } from "../new-session";
 import { TESTID } from "../testids";
 import { uiState, updatePreferences, useUiState } from "../ui-state";
 import { DeleteThreadDialog } from "./DeleteThreadDialog";
+import { NativeSessionsDialog } from "./NativeSessionsDialog";
 import type { DeleteTarget } from "./DeleteThreadDialog";
 import { ThreadRow, WorkspaceRow } from "./Rows";
-import { filterGroups, isRunning } from "./thread-filter";
+import { containsThread, filterGroups, isLiveRunning } from "./thread-filter";
 import type { ThreadPeriod } from "./thread-filter";
 import { partitionSettled, type SettleConfig } from "./settle";
 import css from "./Sidebar.module.css";
@@ -115,12 +116,15 @@ export function Sidebar() {
   const actions = useActions();
   const store = useContext(StoreContext);
   const newSession = useNewSessionFlow();
-  const groups = useAppSelector(selectThreadsByWorkspace);
+  const { preferences } = useUiState();
+  const state = useAppSelector(s => s);
+  const groups = useMemo(() => selectManagedThreadsByWorkspace(state, preferences?.managedThreadIds ?? []), [state.threads, state.threadOrder, state.threadLinks, preferences?.managedThreadIds]);
+  const [nativeOpen, setNativeOpen] = useState(false);
   const activeThreadId = useAppSelector((state) => state.activeThreadId);
   const threadsLoaded = useAppSelector((state) => state.threadsLoaded);
   const hasMore = useAppSelector((state) => state.threadsCursor !== null);
   const bridge = useAppSelector((state) => state.bridge);
-  const { preferences } = useUiState();
+  const conversations = useAppSelector((state) => state.conversations);
   const connected = bridge?.state === "connected";
   const disconnectedHint = connected ? undefined : t("shell.newSessionDisconnected");
   const nowMs = useNowMs();
@@ -151,15 +155,16 @@ export function Sidebar() {
   const settledGroup = useMemo<WorkspaceGroup>(() => ({ cwd: "settled", label: "", threads: split.settled }), [split]);
 
   const fallbackTitle = t("shell.newSession");
+  const runningOf = useMemo(() => (thread: ThreadSummary) => isLiveRunning(thread, { bridge, conversations }), [bridge, conversations]);
   const visibleGroups = useMemo(
-    () => filterGroups(split.groups, { query, runningOnly, period }, nowMs, (thread: ThreadSummary) => threadTitle(thread, fallbackTitle)),
-    [split, query, runningOnly, period, nowMs, fallbackTitle],
+    () => filterGroups(split.groups, { query, runningOnly, period }, nowMs, (thread: ThreadSummary) => threadTitle(thread, fallbackTitle), runningOf),
+    [split, query, runningOnly, period, nowMs, fallbackTitle, runningOf],
   );
   const visibleSettled = useMemo(
-    () => filterGroups([settledGroup], { query, runningOnly, period }, nowMs, (thread: ThreadSummary) => threadTitle(thread, fallbackTitle))[0]?.threads ?? [],
-    [settledGroup, query, runningOnly, period, nowMs, fallbackTitle],
+    () => filterGroups([settledGroup], { query, runningOnly, period }, nowMs, (thread: ThreadSummary) => threadTitle(thread, fallbackTitle), runningOf)[0]?.threads ?? [],
+    [settledGroup, query, runningOnly, period, nowMs, fallbackTitle, runningOf],
   );
-  const runningCount = useMemo(() => split.groups.reduce((count, group) => count + group.threads.filter(isRunning).length, 0), [split]);
+  const runningCount = useMemo(() => split.groups.reduce((count, group) => count + group.threads.filter(runningOf).length, 0), [split, runningOf]);
   const searching = query.trim() !== "";
   const filtering = runningOnly || period !== "any";
   const settledExpanded = settledOpen || searching;
@@ -183,10 +188,10 @@ export function Sidebar() {
 
   useEffect(() => {
     if (activeThreadId === null) return;
-    const owner = groupsRef.current.find((group) => group.threads.some((thread) => thread.id === activeThreadId));
+    const owner = groupsRef.current.find((group) => group.threads.some((thread) => containsThread(thread, activeThreadId)));
     if (owner !== undefined) expand(owner.cwd);
-    if (settledRef.current.some((thread) => thread.id === activeThreadId)) setSettledOpen(true);
-  }, [activeThreadId]);
+    if (settledRef.current.some((thread) => containsThread(thread, activeThreadId))) setSettledOpen(true);
+  }, [activeThreadId, groups, split.settled]);
 
   const setSettled = (threadId: string, settled: boolean): void => {
     const preferences = uiState.get().preferences;
@@ -241,7 +246,7 @@ export function Sidebar() {
   };
 
   const onSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
-    if (event.key === "Escape" && !event.nativeEvent.isComposing) {
+    if (event.key === "Escape" && query !== "" && !event.nativeEvent.isComposing) {
       event.preventDefault();
       clearSearch();
     }
@@ -278,6 +283,7 @@ export function Sidebar() {
           type="text"
           className={css.searchInput}
           data-testid={TESTID.sidebarSearch}
+          data-modal-autofocus=""
           aria-label={t("shell.search.label")}
           placeholder={t("shell.search.placeholder")}
           value={query}
@@ -340,9 +346,12 @@ export function Sidebar() {
               )}
             </div>
           )}
+          <h2 className={css.creatorHeading} data-testid="sidebar-managed-sessions">{t("shell.managed.section")}</h2>
+          <button type="button" className={css.nativeAdd} data-testid="native-sessions-open" onClick={() => setNativeOpen(true)}>{t("shell.managed.inventory")}</button>
+          {groups.length === 0 && <p className={css.creatorHeading}>{t("shell.managed.empty")}</p>}
           {visibleGroups.map((group) => {
             const expanded = searching || filtering || !collapsed.has(group.cwd);
-            const holdsActive = group.threads.some((thread) => thread.id === activeThreadId);
+            const holdsActive = activeThreadId !== null && group.threads.some((thread) => containsThread(thread, activeThreadId));
             return (
               <div
                 key={group.cwd}
@@ -367,7 +376,8 @@ export function Sidebar() {
                     <ThreadRow
                       key={thread.id}
                       thread={thread}
-                      active={thread.id === activeThreadId}
+                    active={thread.id === activeThreadId}
+                      searching={searching}
                       nowMs={nowMs}
                       onOpen={(threadId) => void actions.openThread(threadId)}
                       onRename={(threadId, name) => void actions.renameThread(threadId, name)}
@@ -417,6 +427,7 @@ export function Sidebar() {
                   key={thread.id}
                   thread={thread}
                   active={thread.id === activeThreadId}
+                  searching={searching}
                   nowMs={nowMs}
                   settled
                   onOpen={(threadId) => void actions.openThread(threadId)}
@@ -446,13 +457,14 @@ export function Sidebar() {
             className={css.headerButton}
             data-testid={TESTID.openAccounts}
             aria-label={t("shell.openAccounts")}
-            onClick={() => uiState.setSettingsOpen(true)}
+            onClick={() => uiState.setSettingsOpen(true, "accounts")}
           >
             <IconDataOutlineMedium size={16} />
           </button>
         </Tooltip>
         <ConnectionDot bridge={bridge} />
       </div>
+      {nativeOpen && <NativeSessionsDialog onClose={() => setNativeOpen(false)} />}
       <DeleteThreadDialog target={deleteTarget} onClose={() => setDeleteTarget(null)} />
     </nav>
   );

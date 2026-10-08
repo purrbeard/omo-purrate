@@ -54,7 +54,7 @@ export function WorkflowGraph({ run, live, now, onSelect }: {
     observer.observe(viewport);
     return () => observer.disconnect();
   }, []);
-  const scale = manualScale ?? Math.max(0.75, fitScale(layout, { width: viewportWidth }));
+  const scale = manualScale ?? fitScale(layout, { width: viewportWidth });
   const fitted = manualScale === null;
   const focusNode = useCallback((id: string | null): void => {
     if (id !== null) cardRefs.current.get(id)?.focus();

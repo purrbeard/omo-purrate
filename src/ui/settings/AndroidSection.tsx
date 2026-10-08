@@ -18,8 +18,9 @@ export function AndroidSection() {
   };
   useEffect(() => {
     let active = true;
-    const unsubscribe = window.omo.onAndroidStatus((value) => { if (active) setStatus(value); });
-    void window.omo.getAndroidStatus().then((value) => { if (active) setStatus(value); }, (reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
+    let updated = false;
+    const unsubscribe = window.omo.onAndroidStatus((value) => { updated = true; if (active) setStatus(value); });
+    void window.omo.getAndroidStatus().then((value) => { if (active && !updated) setStatus(value); }, (reason: unknown) => { if (active && !updated) setError(reason instanceof Error ? reason.message : String(reason)); });
     return () => { active = false; unsubscribe(); };
   }, []);
   return <section className={css.section} data-testid="settings-android" aria-busy={busy}>

@@ -46,7 +46,7 @@ export const ConversationHeader = memo(function ConversationHeader({
 }) {
   const t = useT();
   const { sidebarVisible, workspacePanelOpen } = useUiState();
-  const toggle = sidebarVisible ? null : <SidebarToggle />;
+  const toggle = <span className={sidebarVisible ? css.narrowToggle : undefined}><SidebarToggle /></span>;
   if (!active) {
     return (
       <header className={css.header} data-blank="" data-testid={TESTID.conversationHeader} data-window-drag>
@@ -83,7 +83,7 @@ export const ConversationHeader = memo(function ConversationHeader({
             <TextShimmer active>{t("conversation.header.running")}</TextShimmer>
           </span>
         )}
-        {cwd !== "" && <CommitPushButton cwd={cwd} />}
+        {cwd !== "" && <CommitPushButton key={cwd} cwd={cwd} />}
         {cwd !== "" && <OpenButton cwd={cwd} />}
         {cwd !== "" && <button type="button" className={css.sidebarToggle} data-testid="workspace-toggle" aria-pressed={workspacePanelOpen} aria-label={t("shell.workspace.files")} onClick={() => uiState.setWorkspacePanelOpen(!workspacePanelOpen)}>{t("shell.workspace.files")}</button>}
         {panels}

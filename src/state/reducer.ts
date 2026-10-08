@@ -18,6 +18,7 @@ import { parseNotification, parseServerRequest } from "./wire";
 
 export function createInitialState(): AppState {
   return {
+    threadOrigins: {},
     threadLinks: [],
     mcp: { servers: [], loading: false, error: null, loadedAt: null },
     bridge: null,
@@ -144,6 +145,8 @@ export function reduce(state: AppState, event: AppEvent): AppState {
       return reduceSkillCatalog(state, event);
     case "threads/listed":
       return applyThreadsListed(state, event);
+    case "threads/origins":
+      return { ...state, threadOrigins: event.origins };
     case "thread/opened": {
       const opened = upsertThread(
         event.resumed ? { ...state, loadedSkillCwds: { ...state.loadedSkillCwds, [event.thread.cwd]: true } } : state,

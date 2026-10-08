@@ -17,6 +17,15 @@ async function repository() {
 }
 
 describe("workspace files", () => {
+  it("lists and reads a plain workspace without requiring Git", async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), "omo-workspace-plain-"));
+    await mkdir(path.join(cwd, "folder"));
+    await mkdir(path.join(cwd, "node_modules"));
+    await writeFile(path.join(cwd, "folder", "note.txt"), "plain-workspace");
+    await writeFile(path.join(cwd, "node_modules", "excluded.txt"), "dependency");
+    expect(await listWorkspaceFiles(cwd)).toEqual([{ path: "folder/note.txt", status: "" }]);
+    expect((await readWorkspaceFile(cwd, "folder/note.txt")).text).toBe("plain-workspace");
+  });
   it("lists actual tracked and untracked files, status first, without ignored or dependency files", async () => {
     const { cwd, git } = await repository();
     await writeFile(path.join(cwd, ".gitignore"), "ignored.txt\n");

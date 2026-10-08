@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { open, realpath, stat } from "node:fs/promises";
+import { open, readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { WorkspaceDocument, WorkspaceFile } from "../shared/workspace";
@@ -58,6 +58,26 @@ function visible(file: string): boolean {
 
 export async function listWorkspaceFiles(cwd: string): Promise<WorkspaceFile[]> {
   const root = await workspaceRoot(cwd);
+  try {
+    await git(root, ["rev-parse", "--is-inside-work-tree"]);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("not a git repository")) throw error;
+    const files: WorkspaceFile[] = [];
+    const directories = [""];
+    while (directories.length > 0 && files.length < MAX_FILES) {
+      const directory = directories.pop()!;
+      const entries = await readdir(path.join(root, directory), { withFileTypes: true });
+      entries.sort((a, b) => a.name.localeCompare(b.name));
+      for (const entry of entries) {
+        const relative = directory === "" ? entry.name : `${directory}/${entry.name}`;
+        if (!visible(relative) || entry.isSymbolicLink()) continue;
+        if (entry.isDirectory()) directories.push(relative);
+        else if (entry.isFile()) files.push({ path: relative, status: "" });
+        if (files.length === MAX_FILES) break;
+      }
+    }
+    return files.sort((a, b) => a.path.localeCompare(b.path));
+  }
   const [prefix, porcelain, files] = await Promise.all([
     git(root, ["rev-parse", "--show-prefix"]),
     git(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", "."]),

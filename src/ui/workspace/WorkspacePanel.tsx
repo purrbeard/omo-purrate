@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { WorkspaceFile } from "../../../shared/workspace";
 import { useLocale } from "../../i18n";
 import { useAppSelector } from "../app-context";
+import { GIT_REFRESH_EVENT, selectCompletedTurnCount } from "../git/use-git-info";
 import css from "./WorkspacePanel.module.css";
 
 const LABELS = {
@@ -21,6 +22,7 @@ export function WorkspacePanel({ placement, onClose }: WorkspacePanelProps) {
 
 function WorkspaceContents({ cwd, placement, onClose }: WorkspacePanelProps & { cwd: string | null }) {
   const labels = LABELS[useLocale()];
+  const completedTurns = useAppSelector(selectCompletedTurnCount);
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
   const [tabs, setTabs] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -33,6 +35,21 @@ function WorkspaceContents({ cwd, placement, onClose }: WorkspacePanelProps & { 
   const [preview, setPreview] = useState<{ text: string; language: string } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const refresh = (): void => setRevision((value) => value + 1);
+    window.addEventListener(GIT_REFRESH_EVENT, refresh);
+    return () => window.removeEventListener(GIT_REFRESH_EVENT, refresh);
+  }, []);
+
+  useEffect(() => {
+    if (placement !== "overlay") return;
+    const previous = document.activeElement;
+    closeRef.current?.focus();
+    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true }); };
+  }, [placement]);
 
   useEffect(() => {
     if (cwd === null) return;
@@ -48,7 +65,7 @@ function WorkspaceContents({ cwd, placement, onClose }: WorkspacePanelProps & { 
       if (!cancelled) setListLoading(false);
     });
     return () => { cancelled = true; };
-  }, [cwd, revision]);
+  }, [cwd, revision, completedTurns]);
 
   useEffect(() => {
     setPreview(null);
@@ -68,7 +85,7 @@ function WorkspaceContents({ cwd, placement, onClose }: WorkspacePanelProps & { 
       if (!cancelled) setPreviewLoading(false);
     });
     return () => { cancelled = true; };
-  }, [cwd, selected, mode, revision]);
+  }, [cwd, selected, mode, revision, completedTurns]);
 
   const changed = files.filter((file) => file.status !== "").length;
   const filtered = useMemo(() => files.filter((file) => (!changesOnly || file.status !== "") && file.path.toLowerCase().includes(filter.toLowerCase())), [files, changesOnly, filter]);
@@ -85,14 +102,35 @@ function WorkspaceContents({ cwd, placement, onClose }: WorkspacePanelProps & { 
   };
 
   return (
-    <aside className={css.panel} data-placement={placement} data-testid="workspace-panel" aria-label={labels.title} onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
+    <aside ref={panelRef} className={css.panel} data-placement={placement} data-testid="workspace-panel" aria-label={labels.title}
+      role={placement === "overlay" ? "dialog" : "complementary"} aria-modal={placement === "overlay" ? true : undefined} tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
+        if (placement === "overlay" && event.key === "Tab") {
+          const controls = [...(panelRef.current?.querySelectorAll<HTMLElement>('button, summary, [tabindex], input, select, textarea, a[href]') ?? [])].filter(control => {
+            if (control.tabIndex < 0 || control.matches(":disabled") || control.closest("[hidden], [inert]") !== null || control.getClientRects().length === 0) return false;
+            const visibility = getComputedStyle(control).visibility;
+            if (visibility === "hidden" || visibility === "collapse") return false;
+            for (let ancestor = control.parentElement; ancestor !== null && ancestor !== panelRef.current; ancestor = ancestor.parentElement) {
+              if (ancestor instanceof HTMLDetailsElement && !ancestor.open && !ancestor.querySelector(":scope > summary")?.contains(control)) return false;
+            }
+            return true;
+          });
+          const first = controls[0];
+          const last = controls[controls.length - 1];
+          if (first === undefined) { event.preventDefault(); panelRef.current?.focus(); return; }
+          if (!controls.includes(document.activeElement as HTMLElement)) { event.preventDefault(); (event.shiftKey ? last : first)?.focus(); return; }
+          if (event.shiftKey && document.activeElement === first && last !== undefined) { event.preventDefault(); last.focus(); }
+          if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }
+      }}>
       <header className={css.header} data-window-drag>
         <span className={css.title}>{labels.title}</span>
         {cwd !== null && <span className={css.workspace} title={cwd}>{cwd.split(/[\\/]/).filter(Boolean).at(-1)}</span>}
         <button className={css.iconButton} type="button" aria-label={labels.refresh} title={labels.refresh} disabled={cwd === null || listLoading} onClick={() => setRevision((value) => value + 1)}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 6a5 5 0 1 0 .1 3M13 2.5V6H9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
-        <button className={css.iconButton} type="button" aria-label={labels.close} onClick={onClose}>
+        <button ref={closeRef} className={css.iconButton} type="button" aria-label={labels.close} onClick={onClose}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
         </button>
       </header>

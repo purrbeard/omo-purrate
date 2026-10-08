@@ -1020,8 +1020,10 @@ function listThreads(params) {
     .filter((record) => `${record.thread.name ?? ""} ${record.thread.preview}`.toLowerCase().includes(term))
     .map((record) => threadView(record, false))
     .sort((a, b) => b.updatedAt - a.updatedAt);
-  if (typeof params.limit === "number") data = data.slice(0, params.limit);
-  return { data, nextCursor: null };
+  const offset = typeof params.cursor === "string" ? Number(params.cursor) : 0;
+  const limit = typeof params.limit === "number" ? params.limit : data.length;
+  const nextOffset = offset + limit;
+  return { data: data.slice(offset, nextOffset), nextCursor: nextOffset < data.length ? String(nextOffset) : null };
 }
 
 function startTurn(id, params) {

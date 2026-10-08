@@ -153,6 +153,7 @@ test("relaunch restores phased todo and task receipts without live spinners or a
   await expect(page.locator(`[data-testid="${TESTID.todoItem}"][data-status="abandoned"]`)).toContainText("Verify B");
   await expect(byTestId(page, TESTID.omoActivityToggle)).toBeVisible();
   await byTestId(page, TESTID.omoActivityToggle).click();
+  await page.getByTestId("workflow-list").click();
   await expect(byTestId(page, TESTID.omoTask)).toHaveCount(2);
   for (const [id, status] of [["A", "completed"], ["B", "error"]] as const) {
     await expect(task(page, id)).toHaveAttribute("data-source", "history");

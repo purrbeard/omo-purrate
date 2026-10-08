@@ -17,6 +17,7 @@ export type {
   ThreadLiveState,
 } from "./types";
 export { createInitialState, reduce } from "./reducer";
+export { selectManagedThreadsByWorkspace } from "./selectors";
 export { createAppStore, StoreContext, useAppSelector, useAppStore } from "./store";
 export type { AppStore } from "./store";
 export { createActions } from "./actions";
@@ -51,5 +52,9 @@ export {
   selectSkillCatalog,
   selectPendingRequestsForThread,
   selectThreadsByWorkspace,
+  selectAgentThreadsByWorkspace,
+  selectUnknownThreadsByWorkspace,
+  selectMainThreadId,
+  selectAgentChildren,
 } from "./selectors";
 export type { WorkspaceGroup } from "./selectors";

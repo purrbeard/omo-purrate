@@ -173,6 +173,7 @@ export interface SkillCatalog {
 }
 
 export interface AppState {
+  threadOrigins: Record<string, "agent" | "user" | "dori" | "unknown">;
   threadLinks: import("../../shared/ipc").ThreadLink[];
   mcp: { servers: import("./mcp").McpServer[]; loading: boolean; error: string | null; loadedAt: number | null };
   bridge: BridgeStatus | null;
@@ -208,6 +209,7 @@ export type AppEvent =
   | { type: "skills/loaded"; cwd: string; generation: number; skills: SkillMetadata[]; errors: SkillErrorInfo[] }
   | { type: "skills/failed"; cwd: string; generation: number; message: string }
   | { type: "threads/listed"; threads: Thread[]; nextCursor: string | null; append: boolean }
+  | { type: "threads/origins"; origins: Record<string, "agent" | "user" | "dori" | "unknown"> }
   | { type: "thread/opened"; thread: Thread; resumed: boolean; session?: SessionModel }
   | { type: "thread/activated"; threadId: string | null }
   | { type: "history/loading"; threadId: string }

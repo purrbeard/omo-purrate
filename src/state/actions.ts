@@ -85,14 +85,16 @@ export interface AppActions {
   connect(): () => void;
   refreshModels(): Promise<void>;
   refreshThreads(append?: boolean): Promise<void>;
-  /** Requests a cwd catalog only after a thread for that cwd is loaded; force reloads the server's session loader. */
+  classifyThread(threadId: string, origin: "agent" | "user" | "dori" | "unknown"): Promise<void>;
+  /** Reads the workspace catalog; force reloads the server's session loader. */
   loadSkills(cwd: string, options?: { force?: boolean }): Promise<void>;
-  /** Loads an idle or invalidated catalog, never creating/resuming a thread or requesting a pre-thread fallback catalog. */
+  /** Loads an idle or invalidated catalog without creating or resuming a thread. */
   ensureSkills(cwd: string): Promise<void>;
   /** Activates the thread and loads its session history when not yet loaded; never resumes it. */
   openThread(threadId: string): Promise<void>;
   /** Starts and activates a thread in `cwd`; resolves its id, or null on failure. */
   newThread(cwd: string, parentId?: string): Promise<string | null>;
+  manageThread(threadId: string, managed: boolean): Promise<void>;
   linkThread(childId: string, parentId: string | null): Promise<void>;
   /** Sends to the active thread: steers the running turn, otherwise resumes the thread if needed and starts a turn; resolves true when omo accepted the message. */
   sendMessage(text: string, images?: readonly ImageInput[]): Promise<boolean>;
@@ -272,14 +274,22 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       if (!Array.isArray(result.data)) throw new Error("omo returned a malformed thread/list result");
       const nextCursor = typeof result.nextCursor === "string" ? result.nextCursor : null;
       store.dispatch({ type: "threads/listed", threads: result.data.filter(isThread), nextCursor, append });
-      const links = await bridge.loadThreadLinks([...new Set(Object.values(store.getState().threads).map(thread => thread.cwd))]);
       const preferences = await bridge.getPreferences();
+      if (!append) for (const threadId of preferences.managedThreadIds) {
+        if (store.getState().threads[threadId] !== undefined) continue;
+        const { thread } = await bridge.request("thread/read", { threadId, includeTurns: false });
+        store.dispatch({ type: "threads/listed", threads: [thread], nextCursor, append: true });
+      }
+      const paths = Object.values(store.getState().threads).flatMap(thread => thread.path === null ? [] : [thread.path]);
+      const links = await bridge.loadThreadLinks([...new Set(Object.values(store.getState().threads).map(thread => thread.cwd))], paths);
       const related = Object.entries(preferences.threadParents).map(([childId, parentId]) => ({ childId, parentId, title: "" }));
       store.dispatch({ type: "threads/links", links: [...links, ...related] });
+      const origins = await bridge.loadThreadOrigins(paths);
+      store.dispatch({ type: "threads/origins", origins: Object.fromEntries(Object.values(store.getState().threads)
+        .map(thread => [thread.id, preferences.threadOrigins?.[thread.id] ?? preferences.threadCreators?.[thread.id]?.origin ?? (thread.path === null ? undefined : origins[thread.path]) ?? "unknown"])) });
     });
 
   const loadSkills = async (cwd: string, { force = false }: { force?: boolean } = {}): Promise<void> => {
-    if (store.getState().loadedSkillCwds[cwd] !== true) return;
     store.dispatch({ type: "skills/loading", cwd });
     const generation = selectSkillCatalog(store.getState(), cwd).generation;
     try {
@@ -345,7 +355,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         if (!isThread(resumed.thread)) throw new Error("omo returned a malformed thread/resume result");
         store.dispatch({ type: "thread/opened", thread: resumed.thread, resumed: true, session: sessionOf(resumed) });
         await readGoal(threadId);
-        await ensureSkills(resumed.thread.cwd);
+        await loadSkills(resumed.thread.cwd, { force: true });
       }
       store.dispatch({ type: "user/messageSent", threadId, clientId, text, ...(images.length === 0 ? {} : { images }), sentAtMs: now() });
       const { modelId, effort } = selection ?? store.getState().composer;
@@ -390,6 +400,9 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         return null;
       }
       const side: SideChat = { id: result.thread.id, parentId, question, createdAtMs: now(), context };
+      const preferences = await bridge.getPreferences();
+      uiState.setPreferences(await bridge.setPreferences({ threadCreators: { ...preferences.threadCreators, [side.id]: { origin: "user", source: "ui-new-session" } } }));
+      store.dispatch({ type: "threads/origins", origins: { ...store.getState().threadOrigins, [side.id]: "user" } });
       store.dispatch({ type: "btw/started", cwd, side });
       store.dispatch({ type: "thread/opened", thread: result.thread, resumed: true, session: sessionOf(result) });
       store.dispatch({ type: "history/loaded", threadId: side.id, turns: [] });
@@ -568,24 +581,34 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       uiState.setPreferences(await bridge.setPreferences({ threadParents }));
       await refreshThreads();
     },
+    async classifyThread(threadId, origin) {
+      const preferences = await bridge.getPreferences();
+      uiState.setPreferences(await bridge.setPreferences({ threadOrigins: { ...preferences.threadOrigins, [threadId]: origin } }));
+      await refreshThreads();
+    },
+    async manageThread(threadId, managed) {
+      const preferences = await bridge.getPreferences();
+      uiState.setPreferences(await bridge.setPreferences({ managedThreadIds: managed ? [...new Set([...preferences.managedThreadIds, threadId])] : preferences.managedThreadIds.filter(id => id !== threadId) }));
+    },
     async newThread(cwd, parentId) {
       const { modelId } = store.getState().composer;
       try {
         const result = await bridge.request("thread/start", modelId === null ? { cwd } : { cwd, model: modelId });
         if (!isThread(result.thread)) throw new Error("omo returned a malformed thread/start result");
         const threadId = result.thread.id;
+        const preferences = await bridge.getPreferences();
+        uiState.setPreferences(await bridge.setPreferences({ threadCreators: { ...preferences.threadCreators, [threadId]: { origin: "user", source: "ui-new-session" } }, ...(parentId === undefined ? { managedThreadIds: [...new Set([...preferences.managedThreadIds, threadId])] } : { threadParents: { ...preferences.threadParents, [threadId]: parentId } }) }));
+        store.dispatch({ type: "threads/origins", origins: { ...store.getState().threadOrigins, [threadId]: "user" } });
         if (parentId !== undefined) {
-          const preferences = await bridge.getPreferences();
-          const threadParents = { ...preferences.threadParents, [threadId]: parentId };
-          uiState.setPreferences(await bridge.setPreferences({ threadParents }));
           store.dispatch({ type: "threads/links", links: [...store.getState().threadLinks, { parentId, childId: threadId, title: "" }] });
         }
         store.dispatch({ type: "thread/opened", thread: result.thread, resumed: true, session: sessionOf(result) });
         store.dispatch({ type: "thread/activated", threadId });
         store.dispatch({ type: "history/loaded", threadId, turns: [] });
         await readGoal(threadId);
-        await ensureSkills(result.thread.cwd);
+        await loadSkills(result.thread.cwd, { force: true });
         await rememberWorkspace(cwd);
+        if (parentId !== undefined) await refreshThreads();
         return threadId;
       } catch (error) {
         fail(error);

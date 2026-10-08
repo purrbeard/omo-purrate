@@ -9,6 +9,7 @@ import {
   selectPanelNotices,
   selectSidesOf,
   selectThreadsByWorkspace,
+  selectUnknownThreadsByWorkspace,
   selectToastNotice,
   sideDraftKey,
   sideName,
@@ -38,7 +39,7 @@ function withMain(): AppState {
 }
 
 function listedIds(state: AppState): string[] {
-  return selectThreadsByWorkspace(state).flatMap((group) => group.threads.map((thread) => thread.id));
+  return [...selectThreadsByWorkspace(state), ...selectUnknownThreadsByWorkspace(state)].flatMap((group) => group.threads.map((thread) => thread.id));
 }
 
 function registered(state: AppState, chat: SideChat = side()): AppState {

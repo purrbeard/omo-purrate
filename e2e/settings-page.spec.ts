@@ -41,6 +41,8 @@ test("opens as a full page, walks every section through the breadcrumb, searches
       await expect(byTestId(page, TESTID.settingsBreadcrumb)).toHaveText(`Settings/${entry.label}`);
     }
 
+    await expect(dialog.getByTestId(TESTID.settingsRestoreDefaults).locator("../..")).toHaveCSS("max-width", "720px");
+
     const navItems = dialog.locator(`[data-testid="${TESTID.settingsNavItem}"]`);
     await expect(navItems).toHaveCount(SECTIONS.length);
     await page.getByTestId("settings-search").fill("mcp");
@@ -62,6 +64,27 @@ test("opens as a full page, walks every section through the breadcrumb, searches
     await expect(dialog).toBeVisible();
     await byTestId(page, TESTID.settingsBack).click();
     await expect(dialog).toBeHidden();
+  } finally {
+    await launched.close();
+  }
+});
+
+test("the sidebar account shortcut always opens Providers after other settings sections", async () => {
+  const launched = await launchApp({ omo: "fake" });
+  try {
+    const { page } = launched;
+    const dialog = byTestId(page, TESTID.settingsDialog);
+    await byTestId(page, TESTID.openAccounts).click();
+    await expect(byTestId(page, TESTID.settingsBreadcrumb)).toHaveText("Settings/Providers");
+    await dialog.locator('[data-section="general"]').click();
+    await byTestId(page, TESTID.settingsBack).click();
+    await byTestId(page, TESTID.openAccounts).click();
+    await expect(byTestId(page, TESTID.settingsBreadcrumb)).toHaveText("Settings/Providers");
+    await dialog.locator('[data-section="about"]').click();
+    await byTestId(page, TESTID.settingsBack).click();
+    await byTestId(page, TESTID.openAccounts).click();
+    await expect(byTestId(page, TESTID.settingsBreadcrumb)).toHaveText("Settings/Providers");
+    await byTestId(page, TESTID.settingsBack).click();
   } finally {
     await launched.close();
   }
@@ -130,4 +153,30 @@ test("the default model picker writes the preference and restore resets it", asy
   } finally {
     await launched.close();
   }
+});
+
+test("narrow settings navigation traps focus in the drawer and Escape returns to content", async () => {
+  const launched = await launchApp({ omo: "fake", size: { width: 640, height: 850 } });
+  try {
+    const { page } = launched;
+    await byTestId(page, TESTID.headerSidebarToggle).click();
+    await byTestId(page, TESTID.openSettings).click();
+    const dialog = byTestId(page, TESTID.settingsDialog);
+    const toggle = page.getByTestId("settings-nav-toggle");
+    const notificationRow = page.getByTestId(TESTID.settingsThreadNotifications).locator("../..");
+    expect(await notificationRow.locator(":scope > div").first().evaluate(node => node.getBoundingClientRect().width)).toBeGreaterThanOrEqual(200);
+    await toggle.click();
+    const search = page.getByTestId("settings-search");
+    await expect(search).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByTestId("settings-back")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(search).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    await expect(toggle).toBeFocused();
+    await expect(dialog.locator("nav")).toBeHidden();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  } finally { await launched.close(); }
 });

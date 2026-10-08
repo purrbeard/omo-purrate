@@ -75,6 +75,7 @@ export function Toast({ text, icon, tone, anchor, holdMs = HOLD_MS, actions, onD
   return createPortal(
     <div
       className={css.toast}
+      data-modal-toast=""
       role="alert"
       style={{
         ...left === null ? {} : { left },

@@ -21,6 +21,7 @@ import {
   selectPanelNotices,
   selectSkillCatalog,
   selectThreadsByWorkspace,
+  selectUnknownThreadsByWorkspace,
   selectToastNotice,
   sideDraftKey,
 } from "../../src/state";
@@ -93,6 +94,7 @@ class FakeBridge implements OmoBridgeApi {
   applyProxySettings(): ReturnType<OmoBridgeApi["applyProxySettings"]> { return Promise.resolve({ baseUrl: "", apiKeyConfigured: false, modelCount: 0 }); }
   loadTaskWork(): ReturnType<OmoBridgeApi["loadTaskWork"]> { return Promise.resolve([]); }
   loadThreadLinks(): ReturnType<OmoBridgeApi["loadThreadLinks"]> { return Promise.resolve([]); }
+  loadThreadOrigins(): ReturnType<OmoBridgeApi["loadThreadOrigins"]> { return Promise.resolve({}); }
   getIphoneStatus(): ReturnType<OmoBridgeApi["getIphoneStatus"]> { return Promise.resolve({ enabled: false, state: "searching", devices: [] }); }
   onIphoneStatus(): () => void { return () => {}; }
   readonly platform = "darwin";
@@ -301,17 +303,43 @@ describe("createActions", () => {
   });
   it("drops malformed thread/list entries and keeps the valid ones", async () => {
     const context = setup();
+    const readOrigins = vi.spyOn(context.bridge, "loadThreadOrigins").mockResolvedValue({ [SESSION_PATH]: "agent" });
     context.bridge.threadList = () => ({ data: [null, { id: 7 }, makeThread(THREAD_ID, { path: SESSION_PATH })], nextCursor: 5 });
     await context.actions.refreshThreads();
     expect(Object.keys(context.store.getState().threads)).toEqual([THREAD_ID]);
     expect(context.store.getState().threadsCursor).toBeNull();
+    expect(readOrigins).toHaveBeenCalledWith([SESSION_PATH]);
+    expect(context.store.getState().threadOrigins).toEqual({ [THREAD_ID]: "agent" });
+    expect(selectThreadsByWorkspace(context.store.getState())).toEqual([]);
+    await context.actions.classifyThread(THREAD_ID, "user");
+    expect(context.bridge.preferences.threadOrigins).toEqual({ [THREAD_ID]: "user" });
+    expect(selectThreadsByWorkspace(context.store.getState())[0]?.threads[0]?.id).toBe(THREAD_ID);
+    await context.actions.classifyThread(THREAD_ID, "agent");
+    expect(selectThreadsByWorkspace(context.store.getState())).toEqual([]);
   });
   it("drops a listed thread whose name is not a string so every sidebar title renders", async () => {
     const context = setup();
     context.bridge.threadList = () => ({ data: [{ ...makeThread("bad"), name: 42 }, makeThread("good", { name: "Fix login" })], nextCursor: null });
     await context.actions.refreshThreads();
-    const listed = selectThreadsByWorkspace(context.store.getState()).flatMap((group) => group.threads);
+    const listed = selectUnknownThreadsByWorkspace(context.store.getState()).flatMap((group) => group.threads);
     expect(listed.map((thread) => projectTitleText(thread.name ?? ""))).toEqual(["Fix login"]);
+  });
+
+  it("keeps managing an existing ID separate from creator and restores it outside the inventory page", async () => {
+    const context = setup();
+    context.bridge.preferences = { ...context.bridge.preferences, threadOrigins: { existing: "dori" } };
+    await context.actions.manageThread("existing", true);
+    await context.actions.manageThread("existing", true);
+    expect(context.bridge.preferences.managedThreadIds).toEqual(["existing"]);
+    expect(context.bridge.preferences.threadOrigins).toEqual({ existing: "dori" });
+    await context.actions.refreshThreads();
+    expect(context.store.getState().threads.existing?.id).toBe("existing");
+    expect(context.bridge.calls).toContainEqual({ method: "thread/read", params: { threadId: "existing", includeTurns: false } });
+    expect(context.bridge.calls.some(call => call.method === "thread/start" || call.method === "thread/delete")).toBe(false);
+    await context.actions.manageThread("existing", false);
+    expect(context.bridge.preferences.managedThreadIds).toEqual([]);
+    expect(context.store.getState().threads.existing?.id).toBe("existing");
+    expect(context.bridge.preferences.threadOrigins).toEqual({ existing: "dori" });
   });
   it("reports a malformed thread/start result instead of storing the thread", async () => {
     const context = setup();
@@ -552,8 +580,8 @@ describe("createActions", () => {
     await listThread(context);
     await context.actions.openThread(THREAD_ID);
     expect(await context.actions.sendMessage("hello")).toBe(true);
-    expect(context.bridge.methods()).toEqual(["thread/resume", "thread/goal/get", "skills/list", "turn/start"]);
-    expect(context.bridge.calls[3]?.params).toEqual({
+    expect(context.bridge.methods()).toEqual(["skills/list", "thread/resume", "thread/goal/get", "skills/list", "turn/start"]);
+    expect(context.bridge.calls.at(-1)?.params).toEqual({
       threadId: THREAD_ID,
       input: [{ type: "text", text: "hello", text_elements: [] }],
       clientUserMessageId: "id-1",
@@ -571,6 +599,7 @@ describe("createActions", () => {
     context.store.dispatch(notification("turn/started", { threadId: THREAD_ID, turn: runningTurn }));
     expect(await context.actions.sendMessage("also this")).toBe(true);
     expect(context.bridge.calls).toEqual([
+      { method: "skills/list", params: { cwds: ["/tmp/work/project"] } },
       {
         method: "turn/steer",
         params: { threadId: THREAD_ID, expectedTurnId: "turn-9", input: [{ type: "text", text: "also this", text_elements: [] }] },
@@ -704,14 +733,15 @@ describe("createActions", () => {
 describe("skill catalog actions", () => {
   const cwd = "/tmp/work/project";
 
-  it("never requests a fallback catalog before a thread is loaded", async () => {
+  it("loads the workspace catalog for recorded threads without resuming them", async () => {
     const context = setup();
     await listThread(context);
     await context.actions.openThread(THREAD_ID);
     await context.actions.ensureSkills(cwd);
     await context.actions.loadSkills(cwd, { force: true });
-    expect(context.bridge.methods()).not.toContain("skills/list");
-    expect(selectSkillCatalog(context.store.getState(), cwd).status).toBe("idle");
+    expect(context.bridge.methods()).toContain("skills/list");
+    expect(context.bridge.methods()).not.toContain("thread/resume");
+    expect(selectSkillCatalog(context.store.getState(), cwd)).toMatchObject({ status: "ready", skills: [{ name: "ulw-loop" }] });
   });
 
   it("loads once after thread start and keeps subsequent ensures idempotent", async () => {
@@ -720,7 +750,7 @@ describe("skill catalog actions", () => {
     await context.actions.ensureSkills(cwd);
     await context.actions.openThread(THREAD_ID);
     expect(context.bridge.methods()).toEqual(["thread/start", "thread/goal/get", "skills/list"]);
-    expect(context.bridge.calls[2]?.params).toEqual({ cwds: [cwd] });
+    expect(context.bridge.calls[2]?.params).toEqual({ cwds: [cwd], forceReload: true });
     expect(selectSkillCatalog(context.store.getState(), cwd)).toMatchObject({ status: "ready", skills: [{ name: "ulw-loop" }] });
   });
 
@@ -729,8 +759,8 @@ describe("skill catalog actions", () => {
     await listThread(context);
     await context.actions.openThread(THREAD_ID);
     expect(await context.actions.sendMessage("/skill:ulw-loop /skill:plan do work")).toBe(true);
-    expect(context.bridge.methods()).toEqual(["thread/resume", "thread/goal/get", "skills/list", "turn/start"]);
-    expect(context.bridge.calls[3]?.params).toMatchObject({
+    expect(context.bridge.methods()).toEqual(["skills/list", "thread/resume", "thread/goal/get", "skills/list", "turn/start"]);
+    expect(context.bridge.calls.at(-1)?.params).toMatchObject({
       input: [{ type: "text", text: "/skill:ulw-loop /skill:plan do work", text_elements: [] }],
     });
   });
@@ -825,11 +855,13 @@ describe("skill catalog actions", () => {
     context.bridge.emitStatus(bridgeStatus("connected"));
     pending.resolve({ data: [{ cwd, skills: [], errors: [] }] });
     await old;
-    await context.actions.ensureSkills(cwd);
     expect(context.store.getState().skillCatalogs).toEqual({});
+    context.bridge.skills = async () => ({ data: [{ cwd, skills: [{ name: "ulw-loop", description: "Run a loop.", path: "/skills/ulw-loop/SKILL.md", scope: "user", enabled: true }], errors: [] }] });
+    await context.actions.ensureSkills(cwd);
+    expect(selectSkillCatalog(context.store.getState(), cwd)).toMatchObject({ status: "ready", skills: [{ name: "ulw-loop" }] });
     expect(context.store.getState().loadedSkillCwds).toEqual({});
     expect(context.store.getState().conversations[THREAD_ID]?.resumed).toBe(false);
-    expect(context.bridge.methods().filter((method) => method === "skills/list")).toHaveLength(2);
+    expect(context.bridge.methods().filter((method) => method === "skills/list")).toHaveLength(3);
     disconnect();
   });
 });

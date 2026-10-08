@@ -264,9 +264,9 @@ function joinParts(parts: (string | undefined)[]): string | null {
 }
 
 /** Live elapsed time for running tasks with progress, else the recorded runtime; null when neither is known. */
-export function taskElapsedMs(task: ActivityTask, nowMs: number): number | null {
+export function taskElapsedMs(task: ActivityTask, nowMs: number, live = true): number | null {
   if (isHistoricalTask(task)) return null;
-  if (task.status === "running" && task.live_progress !== undefined) return Math.max(0, nowMs - task.live_progress.started_at);
+  if (live && !isSuspended(task) && task.status === "running" && task.live_progress !== undefined) return Math.max(0, nowMs - task.live_progress.started_at);
   return task.run_stats?.runtime_ms ?? null;
 }
 

@@ -7,7 +7,7 @@ import type { AppState } from "../../state";
 export const GIT_REFRESH_EVENT = "omo:git-refresh";
 
 /** Bumps whenever any thread's turn finishes; git facts refresh after each completed turn. */
-function selectCompletedTurnCount(state: AppState): number {
+export function selectCompletedTurnCount(state: AppState): number {
   let count = 0;
   for (const conversation of Object.values(state.conversations)) {
     for (const turn of conversation.turns) if (turn.status === "completed") count += 1;

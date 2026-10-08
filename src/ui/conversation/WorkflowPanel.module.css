@@ -17,9 +17,11 @@
 .heading strong { font-size: 13px; }
 .heading span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary); }
 .header button, .views button { border: 0; border-radius: var(--dsw-radius-md); background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; padding: 6px 8px; cursor: pointer; }
-.header button:hover, .views button:hover, .views button[aria-pressed="true"] { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.header button:hover, .views button:hover, .views button[aria-pressed="true"], .views button[aria-selected="true"] { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .header button:focus-visible, .views button:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color); }
 .views { flex: none; display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--dsw-alias-border-l2); }
+.views [role="tablist"] { display: flex; gap: 4px; }
+.body > [hidden] { display: none; }
 .spacer { flex: 1; }
 .body { min-height: 0; min-width: 0; flex: 1; overflow: auto; }
 .empty { padding: 16px; color: var(--dsw-alias-label-tertiary); }

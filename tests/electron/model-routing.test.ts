@@ -44,4 +44,64 @@ describe("native model routing", () => {
     await expect(saveModelRouting(home, { categories: [], agents: [], mappings: [{ name: "unsafe", models: ["a\nb"] }] })).rejects.toThrow();
     expect(await readFile(file, "utf8")).toBe('{"model_profile":"daily-normal"}');
   });
+  it("persists empty chains over root defaults without losing route metadata or unrelated configuration", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "omo-routes-clear-"));
+    await mkdir(path.join(home, ".omo"));
+    const file = path.join(home, ".omo", "omo.json");
+    const original = {
+      categories: { quick: { models: ["root-model"], description: "root metadata" } },
+      "[codex]": { categories: { quick: { models: ["other-harness"] } } },
+      "[senpi]": {
+        tools: { enabled: true },
+        agents: { librarian: { model: "native-model", prompt_append: "keep prompt" } },
+        categories: { quick: { models: ["native-model"], description: "native metadata" } },
+      },
+    };
+    await writeFile(file, JSON.stringify(original));
+    const current = await readModelRouting(home);
+    expect(current.categories).toEqual([{ name: "quick", models: ["native-model"] }]);
+    const saved = await saveModelRouting(home, { ...current, categories: [{ name: "quick", models: [] }], agents: [{ name: "librarian", models: [] }] });
+    expect(await readModelRouting(home)).toEqual(saved);
+    const result = JSON5.parse(await readFile(file, "utf8"));
+    expect(result.categories).toEqual(original.categories);
+    expect(result["[codex]"]).toEqual(original["[codex]"]);
+    expect(result["[senpi]"].tools).toEqual({ enabled: true });
+    expect(result["[senpi]"].categories.quick).toEqual({ models: [], description: "native metadata" });
+    expect(result["[senpi]"].agents.librarian).toEqual({ models: [], prompt_append: "keep prompt" });
+    await saveModelRouting(home, saved);
+    expect(await readModelRouting(home)).toEqual(saved);
+  });
+  it("deletes mappings from both scopes without resurrecting root targets or removing metadata", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "omo-routes-remove-mapping-"));
+    await mkdir(path.join(home, ".omo"));
+    const file = path.join(home, ".omo", "omo.jsonc");
+    const original = {
+      model_profile: "daily-normal",
+      models: {
+        removed: { model: "root-model", reasoning: "high", description: "keep root metadata" },
+        "root-only": { model: "root-only-model" },
+        kept: { model: "root-kept" },
+      },
+      "[codex]": { models: { removed: { model: "other-harness" } } },
+      "[senpi]": {
+        models: {
+          removed: { model: "native-model", reasoning: "low", description: "keep native metadata" },
+          "native-only": { model: "native-only-model" },
+          kept: { model: "native-kept", description: "keep mapping metadata" },
+        },
+      },
+    };
+    await writeFile(file, JSON.stringify(original));
+    const current = await readModelRouting(home);
+    expect(current.mappings.find((row) => row.name === "kept")?.models).toEqual(["native-kept"]);
+    const saved = await saveModelRouting(home, { ...current, mappings: current.mappings.filter((row) => row.name === "kept") });
+    expect(await readModelRouting(home)).toEqual(saved);
+    const result = JSON5.parse(await readFile(file, "utf8"));
+    expect(result.model_profile).toBe(original.model_profile);
+    expect(result["[codex]"]).toEqual(original["[codex]"]);
+    expect(result.models).toEqual({ removed: { description: "keep root metadata" }, kept: { model: "root-kept" } });
+    expect(result["[senpi]"].models).toEqual({ removed: { description: "keep native metadata" }, kept: { model: "native-kept", description: "keep mapping metadata" } });
+    await saveModelRouting(home, { ...saved, mappings: [] });
+    expect((await readModelRouting(home)).mappings).toEqual([]);
+  });
 });

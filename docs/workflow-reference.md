@@ -1,5 +1,11 @@
 # Windows workflow reference integration
 
+## Graph / agent / activity separation
+
+The inspector provides exclusive Graph, Agents, and Activity views. Graph renders actual native DAG runs only; standalone tasks never imply dependency edges. Node selection shows compact identity, state, and dependency metadata without switching the main conversation. Agents contains task results, todo checkpoints, and native ownership trees. Ordinary tasks are grouped by the spawning request, preferring the active-branch structured spawn receipt's turn ID and otherwise requiring one recorded timestamp window. Missing or ambiguous provenance is shown as unassigned history rather than guessed.
+
+Only existing child conversations appear in the sidebar's child-conversation count. Task-only records remain in Agents and status/search data. View conversation only opens a known child thread; it never creates one or starts generation. Activity observes standalone native tasks as well as DAG nodes; initial snapshots and reconnects establish baselines. The observer remains mounted across inspector view switches to retain captured transitions.
+
 Approved reference: `C:/Users/truek/Downloads/Programs/workflow-reveal-dark-1440.mp4`, 13 seconds, 1440x900, 25fps. The video contains mock tool execution, so visual behavior is implemented using actual native runtime state instead of copying its mock counts or timings.
 
 The six approved elements are a right workflow inspector, graph/list views, state/wave/time summaries, a persistent background-task strip above the composer, mass-ulw input guidance and a collapsed per-turn Work Log. Existing theme tokens including SBD, session trees and explicit parent relationships remain authoritative.

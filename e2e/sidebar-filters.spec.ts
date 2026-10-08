@@ -22,7 +22,7 @@ test.beforeAll(async () => {
   pickDir = tempDir("workspace");
   // These seeds are three days old and older; auto-settle would move them into the Settled section.
   userData = tempDir("user-data");
-  writeFileSync(path.join(userData, "preferences.json"), JSON.stringify({ autoSettle: false }));
+  writeFileSync(path.join(userData, "preferences.json"), JSON.stringify({ autoSettle: false, managedThreadIds: ["three-days", "ten-days", "forty-days"] }));
   const now = Date.now() / 1000;
   const seedFile = path.join(fakeHome, "seed.json");
   writeFileSync(

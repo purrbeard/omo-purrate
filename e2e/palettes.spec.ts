@@ -45,8 +45,9 @@ test("palettes apply globally, retain the color scheme, persist and reset", asyn
     page = launched.page;
     await expect(page.locator("body")).toHaveAttribute("data-palette", "sbd");
     await expect(page.locator("body")).toHaveAttribute("data-ds-dark-theme", "");
+    await byTestId(page, TESTID.headerSidebarToggle).click();
     await byTestId(page, TESTID.openSettings).click();
-    await page.getByRole("button", { name: "Show sidebar", exact: true }).click();
+    await page.getByTestId("settings-nav-toggle").click();
     await page.getByRole("button", { name: "Appearance", exact: true }).click();
     await expect(page.getByTestId("settings-palette-sbd")).toHaveAttribute("aria-pressed", "true");
     await shot(page, "palette-sbd-narrow");

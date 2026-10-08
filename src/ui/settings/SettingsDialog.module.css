@@ -424,6 +424,12 @@
   padding: 18px 0;
 }
 
+.restoreCard {
+  max-width: 720px;
+  box-sizing: border-box;
+  margin: 20px auto 0;
+}
+
 .cardFooter {
   padding: 0 0 18px;
 }

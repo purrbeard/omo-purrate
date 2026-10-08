@@ -72,12 +72,15 @@ function workspaceLabel(cwd: string): string {
 }
 
 interface GroupCache {
+  origins: AppState["threadOrigins"];
   links: AppState["threadLinks"];
   threads: AppState["threads"];
   order: string[];
   sides: AppState["btw"]["sides"];
   unclaimed: AppState["btw"]["unclaimed"];
   groups: WorkspaceGroup[];
+  agentGroups: WorkspaceGroup[];
+  unknownGroups: WorkspaceGroup[];
 }
 
 let groupCache: GroupCache | null = null;
@@ -86,16 +89,18 @@ let groupCache: GroupCache | null = null;
  * Groups main threads by cwd, groups ordered by their newest thread; side chat threads are left out. Memoized so the
  * result is stable for unchanged threads and side chats.
  */
-export function selectThreadsByWorkspace(state: AppState): WorkspaceGroup[] {
+export function selectThreadsByWorkspace(state: AppState, agentCreated: boolean | "unknown" = false): WorkspaceGroup[] {
   const { sides, unclaimed } = state.btw;
   if (
     groupCache !== null && groupCache.threads === state.threads && groupCache.order === state.threadOrder &&
-    groupCache.links === state.threadLinks &&
+    groupCache.links === state.threadLinks && groupCache.origins === state.threadOrigins &&
     groupCache.sides === sides && groupCache.unclaimed === unclaimed
   ) {
-    return groupCache.groups;
+    return agentCreated === "unknown" ? groupCache.unknownGroups : agentCreated ? groupCache.agentGroups : groupCache.groups;
   }
   const groups = new Map<string, WorkspaceGroup>();
+  const agentGroups = new Map<string, WorkspaceGroup>();
+  const unknownGroups = new Map<string, WorkspaceGroup>();
   const nodes = new Map(state.threadOrder.flatMap(id => {
     const thread = state.threads[id];
     return thread === undefined || isSideThread(state, thread) ? [] : [[id, { ...thread, children: [], tasks: [] } as ThreadSummary] as const];
@@ -119,12 +124,73 @@ export function selectThreadsByWorkspace(state: AppState): WorkspaceGroup[] {
   for (const id of state.threadOrder) {
     const summary = nodes.get(id);
     if (summary === undefined || parents.has(id)) continue;
-    const group = groups.get(summary.cwd);
-    if (group === undefined) groups.set(summary.cwd, { cwd: summary.cwd, label: workspaceLabel(summary.cwd), threads: [summary] });
+    const origin = state.threadOrigins[id];
+    const target = origin === "user" ? groups : origin === "agent" || origin === "dori" ? agentGroups : unknownGroups;
+    const group = target.get(summary.cwd);
+    if (group === undefined) target.set(summary.cwd, { cwd: summary.cwd, label: workspaceLabel(summary.cwd), threads: [summary] });
     else group.threads.push(summary);
   }
-  groupCache = { threads: state.threads, order: state.threadOrder, links: state.threadLinks, sides, unclaimed, groups: [...groups.values()] };
-  return groupCache.groups;
+  groupCache = { origins: state.threadOrigins, threads: state.threads, order: state.threadOrder, links: state.threadLinks, sides, unclaimed, groups: [...groups.values()], agentGroups: [...agentGroups.values()], unknownGroups: [...unknownGroups.values()] };
+  return agentCreated === "unknown" ? groupCache.unknownGroups : agentCreated ? groupCache.agentGroups : groupCache.groups;
+}
+
+export function selectAgentThreadsByWorkspace(state: AppState): WorkspaceGroup[] {
+  return selectThreadsByWorkspace(state, true);
+}
+
+export function selectUnknownThreadsByWorkspace(state: AppState): WorkspaceGroup[] {
+  return selectThreadsByWorkspace(state, "unknown");
+}
+
+export function selectManagedThreadsByWorkspace(state: AppState, managedIds: readonly string[]): WorkspaceGroup[] {
+  const managed = new Set(managedIds);
+  const groups = new Map<string, WorkspaceGroup>();
+  const summary = (thread: ThreadSummary, seen = new Set<string>()): ThreadSummary => {
+    seen.add(thread.id);
+    const children = state.threadLinks.flatMap(link => {
+      const child = link.childId === undefined ? undefined : state.threads[link.childId];
+      return link.parentId !== thread.id || link.origin === "native" || link.taskId !== undefined || child === undefined || seen.has(child.id) || managed.has(child.id) ? [] : [summary(child, seen)];
+    });
+    return { ...thread, children, tasks: state.threadLinks.filter(link => link.parentId === thread.id && link.taskId !== undefined) };
+  };
+  for (const id of state.threadOrder) {
+    const thread = state.threads[id];
+    if (thread === undefined || !managed.has(id)) continue;
+    let group = groups.get(thread.cwd);
+    if (group === undefined) { group = { cwd: thread.cwd, label: workspaceLabel(thread.cwd), threads: [] }; groups.set(thread.cwd, group); }
+    group.threads.push(summary(thread));
+  }
+  return [...groups.values()];
+}
+
+export function selectMainThreadId(state: AppState): string | null {
+  let id = state.activeThreadId;
+  const seen = new Set<string>();
+  while (id !== null && !seen.has(id)) {
+    seen.add(id);
+    const parent = state.threadLinks.find(link => link.childId === id && (link.taskId !== undefined || link.origin === "native") && state.threads[link.parentId] !== undefined);
+    if (parent === undefined || seen.has(parent.parentId)) break;
+    id = parent.parentId;
+  }
+  return id;
+}
+
+export function selectAgentChildren(state: AppState, mainId: string | null): ThreadSummary[] {
+  if (mainId === null) return [];
+  const owners = new Set([mainId]);
+  const children: ThreadSummary[] = [];
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const link of state.threadLinks) {
+      if (link.childId === undefined || owners.has(link.childId) || !owners.has(link.parentId) ||
+        (link.taskId === undefined && link.origin !== "native")) continue;
+      owners.add(link.childId);
+      const child = state.threads[link.childId];
+      if (child !== undefined) children.push(child);
+      changed = true;
+    }
+  }
+  return children;
 }
 
 const pendingCache = new Map<string, { source: PendingRequest[]; result: PendingRequest[] }>();

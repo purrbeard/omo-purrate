@@ -17,6 +17,8 @@ import { runSessionTree, readSessionTree } from "./omo/session-tree";
 import type { ModelRung } from "../shared/ipc";
 import { parseSessionJsonl } from "./history/session-jsonl";
 import { loadTaskWork, readTaskLinks } from "./history/task-work";
+import { loadHeaderLinks } from "./history/thread-links";
+import { loadThreadOrigins } from "./history/thread-origins";
 import { RpcRequestError } from "./omo/app-server-client";
 import { runInstaller } from "./omo/installer";
 import { applyProxySettings, getProxySettings } from "./omo/proxy";
@@ -256,15 +258,21 @@ export function registerIpc(deps: IpcDeps): () => void {
     },
     [IPC.loadHistory]: async (_event, sessionPath): Promise<HistoryResult> =>
       parseSessionJsonl(await readFile(await sessionFile(sessionPath), "utf8")),
+    [IPC.loadThreadOrigins]: (_event, paths) => {
+      if (!Array.isArray(paths) || paths.some(file => typeof file !== "string" || !path.isAbsolute(file))) throw new Error("Invalid session paths");
+      return loadThreadOrigins(paths as string[], sessionFile);
+    },
     [IPC.loadTaskWork]: (_event, cwd, parentSessionId) => loadTaskWork(
       supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent"),
       requireString(cwd, "cwd"), requireString(parentSessionId, "parentSessionId"),
     ),
     [IPC.readAccountUsage]: () => readAccountUsage({ agentDir: supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent") }),
-    [IPC.loadThreadLinks]: async (_event, cwds) => {
+    [IPC.loadThreadLinks]: async (_event, cwds, paths = []) => {
       if (!Array.isArray(cwds) || cwds.some(cwd => typeof cwd !== "string" || !path.isAbsolute(cwd))) throw new Error("Invalid workspace paths");
+      if (!Array.isArray(paths) || paths.some(file => typeof file !== "string" || !path.isAbsolute(file))) throw new Error("Invalid session paths");
       const agentDir = supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent");
-      return (await Promise.all([...new Set(cwds as string[])].map(cwd => readTaskLinks({ cwd, agentDir })))).flat();
+      const tasks = (await Promise.all([...new Set(cwds as string[])].map(cwd => readTaskLinks({ cwd, agentDir })))).flat();
+      return [...tasks, ...await loadHeaderLinks(paths as string[], sessionFile)];
     },
     [IPC.openAccountLogin]: async (_event, provider) => {
       if (typeof provider !== "string" || !/^[a-z0-9-]{1,64}$/.test(provider)) throw new TypeError("provider must be a provider id");

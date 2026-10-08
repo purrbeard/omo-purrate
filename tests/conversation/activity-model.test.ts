@@ -145,6 +145,22 @@ describe("task rows", () => {
     expect(taskCounters(historical())).toEqual({ turns: null, toolCalls: null });
   });
 
+  it("keeps suspended and disconnected progress on recorded runtime while resident work advances", () => {
+    const live_progress = { activity: "working", started_at: 1_000, turns: 2, tool_calls: 5 };
+    const run_stats = { runtime_ms: 2_000, turns: 2, tool_calls: 5 };
+    for (const residency_state of ["rpc_detached", "persisted_only"] as const) {
+      const suspended = liveTask({ residency_state, live_progress, run_stats });
+      expect(taskElapsedMs(suspended, 4_500)).toBe(2_000);
+      expect(taskElapsedMs(suspended, 90_000)).toBe(2_000);
+      expect(taskElapsedMs(liveTask({ residency_state, live_progress }), 90_000)).toBeNull();
+    }
+    const resident = liveTask({ live_progress, run_stats });
+    expect(taskElapsedMs(resident, 4_500, false)).toBe(2_000);
+    expect(taskElapsedMs(resident, 90_000, false)).toBe(2_000);
+    expect(taskElapsedMs(resident, 4_500)).toBe(3_500);
+    expect(taskElapsedMs(resident, 5_500)).toBe(4_500);
+  });
+
   it("prefers the error excerpt and flattens and truncates long text", () => {
     expect(taskExcerpt(liveTask({ final_response: "done", error_message: "402: Insufficient Balance" }))).toEqual({ kind: "error", text: "402: Insufficient Balance" });
     expect(taskExcerpt(historical({ final_response: "line one\n\nline two" }))).toEqual({ kind: "result", text: "line one line two" });

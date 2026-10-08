@@ -4,7 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, newSession, send, setTheme, shot, tempDir } from "./helpers.ts";
+import { byTestId, launchApp, newSession, send, setTheme, shot, tempDir, threadRow } from "./helpers.ts";
 
 const execFile = promisify(execFileCallback);
 const BRANCH = "feature/very-long-branch-name-for-truncation";
@@ -121,4 +121,39 @@ test("a non-git workspace shows only the folder", async () => {
     await launched.close();
     rmSync(plain, { recursive: true, force: true });
   }
+});
+
+test("commit dialog drafts and changes belong to the selected workspace", async () => {
+  const first = tempDir("commit-first");
+  const second = tempDir("commit-second");
+  await execFile("git", ["init", first]);
+  await execFile("git", ["init", second]);
+  writeFileSync(path.join(first, "first.txt"), "first workspace\n");
+  writeFileSync(path.join(second, "second.txt"), "second workspace\n");
+  const launched = await launchApp({ omo: "fake", pickDir: first });
+  try {
+    const page = launched.page;
+    const firstId = await newSession(page);
+    const secondId = await page.evaluate(async cwd => {
+      const result = await window.omo.request("thread/start", { cwd }) as { thread: { id: string } };
+      return result.thread.id;
+    }, second);
+    await expect(threadRow(page, secondId)).toBeVisible();
+    await byTestId(page, TESTID.commitButton).locator("button").first().click();
+    await expect(byTestId(page, TESTID.commitChanges)).toContainText("first.txt");
+    await byTestId(page, TESTID.commitMessage).fill("first workspace draft");
+    await threadRow(page, secondId).getByRole("button").first().evaluate(button => {
+      if (!(button instanceof HTMLElement)) throw new Error("Thread selector must be an HTML button");
+      button.click();
+    });
+    await expect(byTestId(page, TESTID.commitDialog)).toHaveCount(0);
+    await byTestId(page, TESTID.commitButton).locator("button").first().click();
+    await expect(byTestId(page, TESTID.commitMessage)).toHaveValue("");
+    await expect(byTestId(page, TESTID.commitChanges)).toContainText("second.txt");
+    await expect(byTestId(page, TESTID.commitChanges)).not.toContainText("first.txt");
+    await byTestId(page, TESTID.commitCancel).click();
+    await threadRow(page, firstId).getByRole("button").first().click();
+    await byTestId(page, TESTID.commitButton).locator("button").first().click();
+    await expect(byTestId(page, TESTID.commitMessage)).toHaveValue("");
+  } finally { await launched.close(); }
 });

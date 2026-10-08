@@ -56,7 +56,25 @@
   top: 8px;
   right: 8px;
   bottom: 8px;
-  width: min(380px, calc(100% - 16px));
+  max-width: calc(100% - 16px);
+}
+
+.sidebarScrim {
+  position: absolute;
+  inset: 0;
+  z-index: 39;
+  border: 0;
+  background: rgb(0 0 0 / 45%);
+}
+
+.sidebarDrawer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 40;
+  width: min(280px, calc(100% - 48px));
+  background: var(--dsw-specific-sidebar-fill);
+  border-right: 1px solid var(--dsw-alias-border-l3);
+  overflow: hidden;
 }
 
 /* Window-drag strip: the top 52px of each column drags the window on macOS; interactive

@@ -49,6 +49,7 @@ export function removeThread(state: AppState, threadId: string): AppState {
   if (!known && state.activeThreadId !== threadId) return state;
   return {
     ...withThreads(state, without(state.threads, threadId)),
+    threadOrigins: without(state.threadOrigins, threadId),
     conversations: without(state.conversations, threadId),
     pendingRequests: hasPending
       ? state.pendingRequests.filter((request) => request.threadId !== threadId)

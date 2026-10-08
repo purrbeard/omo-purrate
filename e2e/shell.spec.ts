@@ -76,7 +76,7 @@ test("the collapse toggle hides the sidebar and the header toggle restores it", 
   const { page } = current();
   const frame = byTestId(page, TESTID.appFrame);
   await expect(frame).not.toHaveAttribute("data-sidebar-collapsed");
-  await expect(byTestId(page, TESTID.headerSidebarToggle)).toHaveCount(0);
+  await expect(byTestId(page, TESTID.headerSidebarToggle)).toBeHidden();
 
   await byTestId(page, TESTID.sidebarToggle).click();
   await expect(frame).toHaveAttribute("data-sidebar-collapsed", "true");
@@ -88,7 +88,7 @@ test("the collapse toggle hides the sidebar and the header toggle restores it", 
   await restore.click();
   await expect(frame).not.toHaveAttribute("data-sidebar-collapsed");
   await expect(byTestId(page, TESTID.sidebarSearch)).toBeInViewport();
-  await expect(restore).toHaveCount(0);
+  await expect(restore).toBeHidden();
 });
 
 test("New project picks a folder and starts a thread there", async () => {
@@ -300,4 +300,21 @@ test("Keybindings lists every custom menu accelerator", async () => {
   await dialog.locator('[data-section="general"]').click();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
+});
+
+test("a narrow window preserves conversation controls and opens the sidebar as a keyboard drawer", async () => {
+  const { app, page } = current();
+  await page.keyboard.press("Escape");
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(520, 850));
+  const toggle = byTestId(page, TESTID.headerSidebarToggle);
+  await expect(toggle).toBeVisible();
+  const conversation = byTestId(page, TESTID.conversation);
+  expect((await conversation.boundingBox())?.width).toBeGreaterThanOrEqual(500);
+  await toggle.click();
+  await expect(byTestId(page, TESTID.sidebarSearch)).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(toggle).toBeFocused();
+  await expect(byTestId(page, TESTID.sidebarSearch)).toBeHidden();
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1280, 850));
+  await expect(byTestId(page, TESTID.sidebarSearch)).toBeVisible();
 });

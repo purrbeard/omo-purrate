@@ -74,7 +74,8 @@ export function Composer() {
   const workspace = pickedWorkspace ?? lastWorkspace;
 
   const activeCwd = useAppSelector(selectActiveCwd);
-  const cwdLoaded = useAppSelector((state) => activeCwd !== null && state.loadedSkillCwds[activeCwd] === true);
+  const cwdLoaded = useAppSelector((state) => activeCwd !== null &&
+    (state.loadedSkillCwds[activeCwd] === true || selectSkillCatalog(state, activeCwd).status === "ready"));
   const catalogCwd = activeCwd ?? workspace;
   const catalog = useAppSelector((state) => (catalogCwd === null ? null : selectSkillCatalog(state, catalogCwd)));
 
@@ -172,6 +173,7 @@ export function Composer() {
     draftThread.current = activeThreadId;
     const next = drafts.current.get(activeThreadId ?? NO_THREAD_DRAFT) ?? EMPTY_DRAFT;
     setDraft(next);
+    pendingCaret.current = null;
     setCaret(next.text.length);
     setDismissedStart(null);
     setLimitReached(false);
@@ -207,7 +209,7 @@ export function Composer() {
 
   const catalogStatus = catalog?.status;
   useEffect(() => {
-    if (menuOpen && cwdLoaded && activeCwd !== null) void actions.ensureSkills(activeCwd);
+    if (menuOpen && activeCwd !== null) void actions.ensureSkills(activeCwd);
   }, [actions, menuOpen, cwdLoaded, activeCwd, catalogStatus]);
 
   const keepDismissal = (nextText: string, selection: number): void => {
@@ -217,6 +219,8 @@ export function Composer() {
   };
 
   const edit = (nextText: string, selection: number): void => {
+    pendingCaret.current = null;
+    if (detectSkillTrigger(nextText, selection) === null) setHighlight({ key: "", index: 0 });
     setDraft((current) => ({ text: nextText, selected: pruneSelected(nextText, current.selected) }));
     setCaret(selection);
     setLimitReached(false);
@@ -472,6 +476,7 @@ export function Composer() {
             ref={inputRef}
             className={css.input}
             data-testid={TESTID.composerInput}
+            data-thread-id={activeThreadId ?? ""}
             aria-label={t("composer.inputLabel")}
             role="combobox"
             aria-multiline

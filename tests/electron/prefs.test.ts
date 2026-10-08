@@ -15,10 +15,58 @@ afterEach(async () => {
 });
 
 describe("PreferencesStore", () => {
+  it("backfills managed thread ids and persists unique nonempty ids without changing other preferences", async () => {
+    await writeFile(path.join(dir, "preferences.json"), JSON.stringify({ theme: "dark", threadParents: { child: "main" } }));
+    const prefs = new PreferencesStore(dir);
+    expect(prefs.get().managedThreadIds).toEqual([]);
+    const managedThreadIds = Array.from({ length: 201 }, (_, index) => `thread-${index}`);
+    expect(prefs.set({ managedThreadIds: ["", null, 42, managedThreadIds[0], ...managedThreadIds] }).managedThreadIds).toEqual(managedThreadIds);
+    expect(prefs.set({ locale: "ko", managedThreadIds: null })).toMatchObject({
+      managedThreadIds, theme: "dark", threadParents: { child: "main" }, locale: "ko",
+    });
+    expect(new PreferencesStore(dir).get()).toMatchObject({
+      managedThreadIds, theme: "dark", threadParents: { child: "main" }, locale: "ko",
+    });
+    expect(prefs.set({ managedThreadIds: [] }).managedThreadIds).toEqual([]);
+  });
   it("persists explicit related-session ownership without changing other preferences", () => {
     const prefs = new PreferencesStore(dir);
     prefs.set({ threadParents: { child: "main", self: "self", invalid: 2 }, settledThreads: ["old"] });
     expect(new PreferencesStore(dir).get()).toMatchObject({ threadParents: { child: "main" }, settledThreads: ["old"] });
+  });
+  it("persists explicit session origins and discards invalid classifications", () => {
+    const prefs = new PreferencesStore(dir);
+    const threadOrigins = { probe: "agent", main: "user", discord: "dori", unproven: "unknown" };
+    prefs.set({ threadOrigins: { ...threadOrigins, invalid: "other" }, theme: "dark" });
+    expect(new PreferencesStore(dir).get()).toMatchObject({ threadOrigins, theme: "dark" });
+    expect(prefs.set({ threadOrigins: null }).threadOrigins).toEqual(threadOrigins);
+  });
+  it("persists UI creator evidence by thread ID separately from manual origins", () => {
+    const prefs = new PreferencesStore(dir);
+    const threadCreators = { main: { origin: "user", source: "ui-new-session" } };
+    prefs.set({ threadCreators, threadOrigins: { main: "unknown" }, threadParents: { child: "main" }, theme: "dark" });
+    expect(prefs.set({ locale: "ko" })).toMatchObject({ threadCreators, threadOrigins: { main: "unknown" } });
+    expect(new PreferencesStore(dir).get()).toMatchObject({
+      threadCreators, threadOrigins: { main: "unknown" }, threadParents: { child: "main" }, theme: "dark", locale: "ko",
+    });
+  });
+  it("validates creator evidence at the IPC boundary and stores only its typed fields", () => {
+    const prefs = new PreferencesStore(dir);
+    const evidence = { origin: "user", source: "ui-new-session" };
+    expect(prefs.set({ threadCreators: {
+      main: { ...evidence, extra: "ignored" },
+      "": evidence, invalid: null, missingSource: { origin: "user" }, missingOrigin: { source: "ui-new-session" },
+      agent: { origin: "agent", source: "ui-new-session" }, dori: { origin: "dori", source: "ui-new-session" },
+      unknown: { origin: "unknown", source: "ui-new-session" }, unsupported: { origin: "user", source: "title" },
+    } }).threadCreators).toEqual({ main: evidence });
+    for (const threadCreators of [null, [], "invalid", 42]) {
+      expect(prefs.set({ threadCreators }).threadCreators).toEqual({ main: evidence });
+    }
+    expect(new PreferencesStore(dir).get().threadCreators).toEqual({ main: evidence });
+  });
+  it("backfills no creator evidence for old preferences and preserves existing manual origins", async () => {
+    await writeFile(path.join(dir, "preferences.json"), JSON.stringify({ threadOrigins: { main: "user", probe: "agent" } }));
+    expect(new PreferencesStore(dir).get()).toMatchObject({ threadOrigins: { main: "user", probe: "agent" }, threadCreators: {} });
   });
   it("persists palette independently of color scheme and rejects unknown palettes", () => {
     const prefs = new PreferencesStore(dir);

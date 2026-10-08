@@ -18,4 +18,6 @@ it("keeps context as parseable JSON including newlines and special characters", 
   expect(splitContext(contextMessage("inspect", terminalHeader))).toEqual({ text: "inspect", context: terminalHeader });
   const ordinary = `${CONTEXT_HEADER}\nnot JSON`;
   expect(splitContext(ordinary)).toEqual({ text: ordinary, context: [] });
+  const mentioningHeader = `${CONTEXT_HEADER}\nThis is ordinary prose.`;
+  expect(splitContext(contextMessage(mentioningHeader, context))).toEqual({ text: mentioningHeader, context });
 });

@@ -1,6 +1,18 @@
 # Platform port design contract
 
+## OpenCodex active catalog
+
+Import replaces only OpenCodex's discovered model list with the actual `/v1/models` active catalog, including an empty catalog. It does not retain stale/disabled entries or synthesize routing aliases. Original IDs and advertised reasoning wire values stay unchanged. `owned_by` is retained in the native display name; namespaced routes group by routing provider, and OpenAI account namespaces form separate `openai / account` groups. An unavailable explicit choice stays selected and is labeled unavailable rather than silently displaying the active thread's different model.
+
+## Managed native conversations
+
+Left navigation contains explicitly managed main sessions, independent of creator evidence. Existing native sessions are searched by title, exact ID, or workspace in the inventory dialog. A nonempty search automatically loads remaining inventory pages and shows search progress; no-match is only shown after full coverage. Empty search retains manual load-more browsing. A failed page stops automatic loading and allows an explicit load-more retry. Adding/removing stores only managedThreadIds, never copies or deletes a conversation. New UI main sessions are included automatically. Creator badges and manual origin classification remain independent. The center opens the original conversation; the right panel retains confirmed native agent links, task records, and return-to-main behavior. Unknown historic creators remain unknown. This replaces the prior standalone automation/unknown sidebar sections: those sessions are available in inventory and appear on the left only when explicitly managed.
+
 ## Parent-owned sidebar work
+
+Verified native child sessions and task work belong in the selected main session's right agent panel. Left navigation highlights the main session while a child conversation is open. Selecting a saved agent opens its existing conversation and native turn execution logs in the center; an explicit return-to-main action retains the right roster. Task-only agents show recorded result and execution log in the panel without starting a session. Only task IDs or native parent-header links establish agent ownership; manual related conversations are not reclassified as agents. The existing AppFrame dock/overlay breakpoint and panel style tokens own narrow layout. The panel can close and reopen from the conversation header. Unparented automation sessions remain available in native inventory.
+
+Creator classification uses structured native provenance or recorded automation client IDs, never a title guess. It is displayed in inventory and managed rows, independently of management. Session menus offer explicit user/Dori/agent/unknown classification for missing provenance or a correction; overrides persist in preferences, not session content. Unknown sessions stay accessible in native inventory. Existing row, focus, and settled-section primitives remain in use.
 
 Confirmed native parent/child task links and explicitly related sessions appear beneath their main session in a collapsible group. Child tasks with no standalone session remain visible as status rows; saved child sessions open their original conversation. Session files, IDs and cwd are never rewritten. Ordinary sessions are not assigned by title or path guesses; their menu can create a related session or explicitly attach/detach one. Existing settle preferences remain intact. Child search/running filters keep the parent reachable.
 
@@ -13,6 +25,12 @@ This Windows port preserves the upstream design system documented in `src/ui/REA
 The supplied Codex screenshot defines the interaction and grouping: a round plus trigger, an elevated menu above the composer, an Add heading, file/folder context, explicit terminal text attachment, goal, plan, sketch, then installed skills. Reuse existing Menu keyboard navigation, theme surfaces and focus tokens rather than copying Codex branding. The menu owns scrolling and fits desktop and 640px widths. Context chips remain removable and scoped to each conversation draft. Files and folders are references, not uploaded or eagerly read. Terminal content is explicitly pasted by the user, never scraped from another running process. Sketches become ordinary PNG attachments. Show actual installed skill names and descriptions; do not advertise uninstalled Exa/GitHub/Documents/PDF plugins. Goal and plan controls must connect to supported native behavior, not cosmetic toggles. The installed user app is never used for verification.
 
 ## Workflow reference additions
+
+### Workflow / agent conversation separation
+
+The workflow inspector has three exclusive views: Graph, Agents, and Activity. Graph contains only native DAG runs and dependency nodes; ordinary task ownership never implies dependency edges. Selecting a node keeps the main conversation unchanged and shows compact status/dependency metadata only. Agents contains the actual task roster, native ownership hierarchy, result and todo details, with explicit conversation navigation only when an existing child session is available. Activity contains observed transitions independently of the other views and stays mounted while hidden so switching tabs does not discard captured events.
+
+The left sidebar's related-conversation count and rows contain existing child conversations only, never task-only records. Native task links remain available for status, search, ownership and the Agents view. No inspection action creates or resumes a child session. Existing theme controls and tokens define tabs, focus, empty and stale states; the inspector body owns vertical scroll at desktop and narrow overlay widths. Actual native workflow provenance, not title similarity, determines any execution grouping.
 
 ### Selected macOS 0.1.5 additions
 

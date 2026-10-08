@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { StateDot } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useLocale, useT, type MessageKey } from "../../i18n";
-import { selectDagRuns, selectThreadLiveState } from "../../state";
+import { selectDagRuns, selectTasks, selectThreadLiveState } from "../../state";
 import { useAppSelector } from "../app-context";
 import { useUiState } from "../ui-state";
 import { knownNodeState, nodeDot, type NodeState } from "./activity-model";
@@ -20,19 +20,20 @@ export function WorkflowActivity({ threadId }: { threadId: string }) {
   const locale = useLocale();
   const timeFormat = useUiState().preferences?.timeFormat ?? "system";
   const runs = useAppSelector(state => selectDagRuns(state, threadId));
+  const tasks = useAppSelector(state => selectTasks(state, threadId));
   const live = useAppSelector(state => selectThreadLiveState(state, threadId)?.freshness === "live");
   const previous = useRef(new Map<string, string>());
   const attached = useRef(false);
   const [entries, setEntries] = useState<WorkflowTransition[]>([]);
   useEffect(() => {
-    const observation = observeWorkflow(runs, attached.current && live ? previous.current : new Map(), Date.now());
+    const observation = observeWorkflow(runs, attached.current && live ? previous.current : new Map(), Date.now(), tasks);
     previous.current = observation.states;
     attached.current = live;
     if (observation.transitions.length > 0) {
       setEntries(current => [...observation.transitions.reverse(), ...current].slice(0, 50));
     }
-  }, [runs, live]);
-  return <details className={css.activity} data-testid="workflow-activity-log">
+  }, [runs, tasks, live]);
+  return <details open className={css.activity} data-testid="workflow-activity-log">
     <summary>{t("activity.log.title")} <span>{entries.length}</span></summary>
     {entries.length === 0 ? <p className={css.empty}>{t("activity.log.empty")}</p> : <ul className={css.activityList}>
       {entries.map((entry, index) => {

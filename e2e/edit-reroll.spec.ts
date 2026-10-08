@@ -114,7 +114,10 @@ test("edit and repeated regeneration preserve one native session, images, origin
     await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(640, 760));
     await expect(branches).toBeInViewport();
     await shot(page, "regenerate-branch-narrow-dark");
+    await byTestId(page, TESTID.headerSidebarToggle).click();
     await byTestId(page, TESTID.openSettings).click();
+    await page.getByTestId("settings-nav-toggle").click();
+    await page.locator('[data-section="appearance"]').click();
     await byTestId(page, TESTID.settingsThemeLight).click();
     await expect(page.locator("body")).not.toHaveAttribute("data-ds-dark-theme");
     await page.keyboard.press("Escape");

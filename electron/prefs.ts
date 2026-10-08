@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_PREFERENCES } from "../shared/ipc";
-import type { LocalePreference, ModelProfile, PalettePreference, Preferences, ThemePreference, ThreadNotificationPreference, TimeFormatPreference } from "../shared/ipc";
+import type { LocalePreference, ModelProfile, PalettePreference, Preferences, ThemePreference, ThreadCreatorEvidence, ThreadNotificationPreference, ThreadOrigin, TimeFormatPreference } from "../shared/ipc";
 
 export { DEFAULT_PREFERENCES };
 
@@ -83,9 +83,20 @@ function merge(current: Preferences, patch: unknown): Preferences {
   if (!isRecord(patch)) return current;
   const has = (key: keyof Preferences): boolean => key in patch;
   return {
+    managedThreadIds: Array.isArray(patch["managedThreadIds"])
+      ? [...new Set(patch["managedThreadIds"].filter((id): id is string => typeof id === "string" && id !== ""))]
+      : current.managedThreadIds,
     threadParents: isRecord(patch["threadParents"])
       ? Object.fromEntries(Object.entries(patch["threadParents"]).filter(([child, parent]) => typeof parent === "string" && child !== parent)) as Record<string, string>
       : current.threadParents,
+    threadOrigins: isRecord(patch["threadOrigins"])
+      ? Object.fromEntries(Object.entries(patch["threadOrigins"]).filter(([, origin]) => origin === "agent" || origin === "user" || origin === "dori" || origin === "unknown")) as Record<string, ThreadOrigin>
+      : current.threadOrigins ?? {},
+    threadCreators: isRecord(patch["threadCreators"])
+      ? Object.fromEntries(Object.entries(patch["threadCreators"]).flatMap(([id, evidence]) =>
+        id !== "" && isRecord(evidence) && evidence["origin"] === "user" && evidence["source"] === "ui-new-session"
+          ? [[id, { origin: "user", source: "ui-new-session" }]] : [])) as Record<string, ThreadCreatorEvidence>
+      : current.threadCreators ?? {},
     omoAutoUpdate: typeof patch["omoAutoUpdate"] === "boolean" ? patch["omoAutoUpdate"] : current.omoAutoUpdate ?? true,
     theme: has("theme") ? pick(THEMES, patch["theme"], current.theme) : current.theme,
     palette: has("palette") ? pick(PALETTES, patch["palette"], current.palette ?? "omo") : current.palette ?? "omo",

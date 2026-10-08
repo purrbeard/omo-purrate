@@ -7,12 +7,15 @@ export const SIDEBAR_DEFAULT_WIDTH = 280;
 
 export const WORKFLOW_PANEL_WIDTHS = { normal: 580, wide: 720, maximized: 840 } as const;
 export type WorkflowPanelSize = keyof typeof WORKFLOW_PANEL_WIDTHS;
+export type SettingsSection = "general" | "appearance" | "keybindings" | "model" | "skills" | "omo" | "accounts" | "mcp" | "android" | "iphone" | "devices" | "about";
 
 export interface UiState {
   workspacePanelOpen: boolean;
   workflowPanelOpen: boolean;
+  agentPanelOpen: boolean;
   workflowPanelSize: WorkflowPanelSize;
   settingsOpen: boolean;
+  settingsSection: SettingsSection;
   /** First-run wizard visibility; opens on launch until the onboardingCompleted preference is true. */
   onboardingOpen: boolean;
   sidebarVisible: boolean;
@@ -24,8 +27,10 @@ export interface UiState {
 let state: UiState = {
   workspacePanelOpen: false,
   workflowPanelOpen: false,
+  agentPanelOpen: true,
   workflowPanelSize: "normal",
   settingsOpen: false,
+  settingsSection: "general",
   onboardingOpen: false,
   sidebarVisible: true,
   sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
@@ -52,10 +57,12 @@ export function clampSidebarWidth(width: number): number {
 export const uiState = {
   setWorkspacePanelOpen: (workspacePanelOpen: boolean): void => update({ workspacePanelOpen, ...(workspacePanelOpen ? { workflowPanelOpen: false } : {}) }),
   setWorkflowPanelOpen: (workflowPanelOpen: boolean): void => update({ workflowPanelOpen, ...(workflowPanelOpen ? { workspacePanelOpen: false } : {}) }),
+  setAgentPanelOpen: (agentPanelOpen: boolean): void => update({ agentPanelOpen, ...(agentPanelOpen ? { workspacePanelOpen: false, workflowPanelOpen: false } : {}) }),
   setWorkflowPanelSize: (workflowPanelSize: WorkflowPanelSize): void => update({ workflowPanelSize }),
   get: (): UiState => state,
   subscribe,
-  setSettingsOpen: (settingsOpen: boolean): void => update({ settingsOpen }),
+  setSettingsOpen: (settingsOpen: boolean, settingsSection?: SettingsSection): void => update({ settingsOpen, ...(settingsSection === undefined ? {} : { settingsSection }) }),
+  setSettingsSection: (settingsSection: SettingsSection): void => update({ settingsSection }),
   setOnboardingOpen: (onboardingOpen: boolean): void => update({ onboardingOpen }),
   setSidebarVisible: (sidebarVisible: boolean): void => update({ sidebarVisible }),
   toggleSidebar: (): void => update({ sidebarVisible: !state.sidebarVisible }),

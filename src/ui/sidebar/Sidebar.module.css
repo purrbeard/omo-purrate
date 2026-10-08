@@ -1,6 +1,13 @@
 /* Ported from DSH ui-sidebar SidebarRoot.module.css, ui-workspace WorkspaceBrowser.module.css and
    the ui-settings-general trigger row (MIT, Copyright (c) 2026 DeepSeek). */
 
+.creatorHeading { margin: 8px 10px; color: var(--dsw-alias-label-secondary); font-size: 12px; font-weight: 600; }
+.nativeAdd { margin: 0 10px 8px; padding: 8px 10px; border: 1px solid var(--dsw-alias-outline-2); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
+.nativeSearch { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--dsw-alias-outline-2); border-radius: 8px; background: transparent; color: inherit; }
+.nativeList { max-height: min(52vh, 440px); overflow: auto; }
+.nativeRow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--dsw-alias-outline-2); }
+.nativeInfo { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.nativeInfo span { color: var(--dsw-alias-label-secondary); font-size: 11px; overflow-wrap: anywhere; }
 .root {
   --dsh-sidebar-inline-padding: 10px;
   display: flex;

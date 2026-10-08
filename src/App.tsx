@@ -1,6 +1,6 @@
 import { resolveProfile } from "./ui/composer/model-profiles";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
-import { createActions, createAppStore, localSideStorage } from "./state";
+import { createActions, createAppStore, localSideStorage, selectAgentChildren, selectMainThreadId, selectTasks } from "./state";
 import { I18nProvider, resolveLocale } from "./i18n";
 import { ActionsContext, StoreContext, useAppSelector } from "./ui/app-context";
 import { SIDE_PANEL_WIDTH, SidePanel } from "./ui/btw/SidePanel";
@@ -19,6 +19,7 @@ import { applyThemePreference } from "./ui/theme";
 import { uiState, useUiState, WORKFLOW_PANEL_WIDTHS } from "./ui/ui-state";
 import { WorkspacePanel } from "./ui/workspace/WorkspacePanel";
 import { WorkflowPanel } from "./ui/conversation/WorkflowPanel";
+import { AgentPanel } from "./ui/conversation/AgentPanel";
 import { ProjectPickerHost } from "./ui/projects/ProjectPickerHost";
 import { SetupWizard } from "./ui/wizard/SetupWizard";
 
@@ -35,13 +36,25 @@ function MainPane() {
 const renderSidePanel = (placement: "docked" | "overlay") => <SidePanel placement={placement} />;
 const renderWorkspacePanel = (placement: "docked" | "overlay") => <WorkspacePanel placement={placement} onClose={() => uiState.setWorkspacePanelOpen(false)} />;
 const renderWorkflowPanel = (placement: "docked" | "overlay") => <WorkflowPanel placement={placement} />;
+const renderAgentPanel = (placement: "docked" | "overlay") => <AgentPanel placement={placement} />;
 
 function Shell() {
   const bridgeState = useAppSelector((state) => state.bridge?.state ?? null);
   const sidePanelOpen = useAppSelector((state) => state.btw.open);
   useSidePanelShortcut();
-  const { sidebarVisible, sidebarWidth, workspacePanelOpen, workflowPanelOpen, workflowPanelSize, onboardingOpen } = useUiState();
+  const { sidebarVisible, sidebarWidth, workspacePanelOpen, workflowPanelOpen, workflowPanelSize, onboardingOpen, agentPanelOpen } = useUiState();
+  const hasAgents = useAppSelector(state => {
+    const main = selectMainThreadId(state);
+    return main !== null && (selectAgentChildren(state, main).length > 0 || selectTasks(state, main).length > 0 || state.threadLinks.some(link => link.parentId === main && link.taskId !== undefined));
+  });
   const newSession = useNewSessionFlow();
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 799px)");
+    const close = () => { if (media.matches) uiState.setAgentPanelOpen(false); };
+    close();
+    media.addEventListener("change", close);
+    return () => media.removeEventListener("change", close);
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -83,8 +96,8 @@ function Shell() {
         sidebarVisible={sidebarVisible}
         sidebarWidth={sidebarWidth}
         onSidebarWidthChange={uiState.setSidebarWidth}
-        rightPanel={workspacePanelOpen ? renderWorkspacePanel : workflowPanelOpen ? renderWorkflowPanel : sidePanelOpen ? renderSidePanel : null}
-        rightPanelWidth={workspacePanelOpen ? 440 : workflowPanelOpen ? WORKFLOW_PANEL_WIDTHS[workflowPanelSize] : SIDE_PANEL_WIDTH}
+        rightPanel={workspacePanelOpen ? renderWorkspacePanel : workflowPanelOpen ? renderWorkflowPanel : sidePanelOpen ? renderSidePanel : agentPanelOpen && hasAgents ? renderAgentPanel : null}
+        rightPanelWidth={workspacePanelOpen ? 440 : workflowPanelOpen ? WORKFLOW_PANEL_WIDTHS[workflowPanelSize] : sidePanelOpen ? SIDE_PANEL_WIDTH : 340}
       />
       <SettingsDialog />
       <ProjectPickerHost />

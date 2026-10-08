@@ -70,15 +70,24 @@ export function useModalLayer(dialog: RefObject<HTMLElement | null>, open: boole
       if (event.key !== 'Tab') return
       // Portaled menus own their traversal while they contain focus.
       if (document.activeElement?.closest('[role="menu"]')) return
-      const items = [...element.querySelectorAll<HTMLElement>(focusable)]
-        .filter(item => !item.closest('[inert], [hidden]'))
+      const toasts = [...document.querySelectorAll<HTMLElement>('[data-modal-toast]')]
+      const items = [element, ...toasts].flatMap(root => [...root.querySelectorAll<HTMLElement>(focusable)])
+        .filter(item => !item.closest('[inert], [hidden]') && item.getClientRects().length > 0)
       const first = items[0] ?? element
       const last = items.at(-1) ?? element
       const atEdge = event.shiftKey ? document.activeElement === first : document.activeElement === last
-      if (document.activeElement === element || !element.contains(document.activeElement) || atEdge) {
+      const inside = element.contains(document.activeElement) || toasts.some(toast => toast.contains(document.activeElement))
+      if (document.activeElement === element || !inside || atEdge) {
         event.preventDefault()
         const target = event.shiftKey ? last : first
         target.focus()
+      } else {
+        const current = items.findIndex(item => item === document.activeElement)
+        const next = items[current + (event.shiftKey ? -1 : 1)]
+        if (next && (element.contains(next) !== element.contains(document.activeElement))) {
+          event.preventDefault()
+          next.focus()
+        }
       }
     }
     document.addEventListener('keydown', keydown)

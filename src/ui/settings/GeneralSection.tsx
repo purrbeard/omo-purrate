@@ -55,6 +55,7 @@ export function GeneralSection() {
           <select
             className={css.select}
             data-testid={TESTID.settingsWorkspaceDefault}
+            aria-label={t("shell.settings.general.workspace")}
             disabled={preferences === null}
             value={lastWorkspace ?? ""}
             onChange={(event) => save({ lastWorkspace: event.target.value === "" ? null : event.target.value })}

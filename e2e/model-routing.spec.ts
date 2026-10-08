@@ -30,5 +30,23 @@ test("available models append unique research fallbacks and replace a mapping ta
     expect(saved["[senpi]"].agents.librarian.models).toEqual([values[0], values[1]]);
     expect(saved["[senpi]"].models["research-main"].model).toBe(values[1]);
     await shot(running.page, "model-routing-list");
+    await editor.fill("");
+    await running.page.locator('[data-route-remove="research-main"]').click();
+    await running.page.getByTestId("mapping-name").fill("cancelled-mapping");
+    await running.page.getByRole("button", { name: "Add mapping", exact: true }).click();
+    await expect(running.page.getByTestId("routing-save")).toBeDisabled();
+    await running.page.locator('[data-route-remove="cancelled-mapping"]').click();
+    await running.page.getByTestId("routing-save").click();
+    await expect(running.page.getByTestId("routing-saved")).toBeVisible();
+    const cleared = JSON.parse(readFileSync(path.join(home, ".omo", "omo.json"), "utf8"));
+    expect(cleared["[senpi]"].agents.librarian.models).toEqual([]);
+    expect(cleared["[senpi]"].models["research-main"]).toBeUndefined();
+    expect(cleared["[senpi]"].models["cancelled-mapping"]).toBeUndefined();
+    await running.page.locator('[data-section="general"]').click();
+    await expect(running.page.getByTestId("settings-workspace-default")).toHaveAccessibleName("Start new threads in");
+    await running.page.locator('[data-section="model"]').click();
+    await expect(editor).toHaveValue("");
+    await expect(running.page.locator('[data-route-group="mappings"]')).toHaveCount(0);
+    await expect(running.page.getByTestId("settings-model-default")).toHaveAccessibleName("Default model");
   } finally { await running.close(); }
 });
