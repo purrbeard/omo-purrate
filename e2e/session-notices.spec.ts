@@ -37,7 +37,7 @@ test("a memory write shows omo's Remembered card, and special messages show as e
   const fakeHome = tempDir("notices-home");
   const pickDir = tempDir("notices-workspace");
   writeSession(fakeHome, pickDir);
-  const launched = await launchApp({ omo: "fake", fakeHome, pickDir });
+  const launched = await launchApp({ omo: "fake", fakeHome, pickDir, managed: ["notice-thread"] });
   try {
     const { page } = launched;
     await threadRow(page, "notice-thread").getByRole("button").first().click();

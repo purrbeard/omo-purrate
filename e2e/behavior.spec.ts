@@ -139,7 +139,7 @@ test("a session idle for over three days settles, and new activity moves it back
   const fakeHome = tempDir("settle-fake-home");
   const pickDir = tempDir("settle-workspace");
   writeStaleSession(fakeHome, "stale-thread", pickDir, "Ship the old feature", 4);
-  const launched = await launchApp({ omo: "fake", userData, fakeHome, pickDir });
+  const launched = await launchApp({ omo: "fake", userData, fakeHome, pickDir, managed: ["stale-thread"] });
   try {
     const { page } = launched;
     await expect(settledToggle(page)).toContainText("1");
@@ -177,7 +177,7 @@ test("manual Settle and Unsettle survive an app relaunch", async () => {
     await page.getByRole("menuitem", { name: action }).click();
   };
   try {
-    launched = await launchApp({ omo: "fake", userData, fakeHome, pickDir });
+    launched = await launchApp({ omo: "fake", userData, fakeHome, pickDir, managed: ["stale-thread"] });
     {
       const { page } = launched;
       await settledToggle(page).click();

@@ -4,7 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, newSession, send, setTheme, shot, tempDir, threadRow } from "./helpers.ts";
+import { byTestId, launchApp, manageThread, newSession, send, setTheme, shot, tempDir, threadRow } from "./helpers.ts";
 
 const execFile = promisify(execFileCallback);
 const BRANCH = "feature/very-long-branch-name-for-truncation";
@@ -79,6 +79,10 @@ test("checkout bar shows branch and counts; reasoning writes turn/start effort; 
     writeFileSync(path.join(repo, "local.txt"), "committed outside the app\n");
     await git(repo, "add", "-A");
     await git(repo, "commit", "-m", "outside the app");
+    // The session ran on Fake Beta; the profile picks another model, so the first send is held once with the cache warning.
+    await byTestId(page, TESTID.composerInput).fill("SCENARIO:echo refresh the bar");
+    await byTestId(page, TESTID.composerSend).click();
+    await expect(byTestId(page, TESTID.noticeToast)).toContainText("Fake Beta");
     await send(page, "SCENARIO:echo refresh the bar");
     await expect(byTestId(page, TESTID.turn).last()).toHaveAttribute("data-status", "completed");
     await expect(bar).toHaveAttribute("data-ahead", "1");
@@ -138,6 +142,7 @@ test("commit dialog drafts and changes belong to the selected workspace", async 
       const result = await window.omo.request("thread/start", { cwd }) as { thread: { id: string } };
       return result.thread.id;
     }, second);
+    await manageThread(page, secondId);
     await expect(threadRow(page, secondId)).toBeVisible();
     await byTestId(page, TESTID.commitButton).locator("button").first().click();
     await expect(byTestId(page, TESTID.commitChanges)).toContainText("first.txt");

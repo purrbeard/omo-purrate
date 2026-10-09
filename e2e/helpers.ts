@@ -24,6 +24,8 @@ export interface LaunchOptions {
   waitForConnected?: boolean;
   /** Leave the first-run wizard enabled; by default a fresh userData is seeded so the wizard stays hidden. */
   onboarding?: boolean;
+  /** Seeded session ids to list in the sidebar, which shows managed sessions only. */
+  managed?: string[];
 }
 
 export interface LaunchDirs {
@@ -103,6 +105,12 @@ export async function launchApp(options: LaunchOptions): Promise<LaunchedApp> {
   const userData = options.userData ?? own("user-data");
   const preferences = path.join(userData, "preferences.json");
   if (!existsSync(preferences)) writeFileSync(preferences, JSON.stringify({ locale: "en" }));
+  if (options.managed !== undefined) {
+    const current: unknown = JSON.parse(readFileSync(preferences, "utf8"));
+    const existing = isRecord(current) ? current : {};
+    const ids = Array.isArray(existing["managedThreadIds"]) ? existing["managedThreadIds"] : [];
+    writeFileSync(preferences, JSON.stringify({ ...existing, managedThreadIds: [...new Set([...ids, ...options.managed])] }));
+  }
   env[ENV.userData] = userData;
   if (options.onboarding !== true) seedSkipOnboarding(userData);
   const pickDir = options.pickDir ?? null;
@@ -267,6 +275,15 @@ export async function send(page: Page, text: string): Promise<void> {
 
 export function lastTurn(page: Page): Locator {
   return byTestId(page, TESTID.turn).last();
+}
+
+/** Adds a session to the sidebar through the native sessions dialog, as a user would; the sidebar lists managed sessions only. */
+export async function manageThread(page: Page, threadId: string): Promise<void> {
+  await page.getByTestId("native-sessions-open").click();
+  const manage = page.locator(`[data-testid="native-session-row"][data-thread-id="${threadId}"]`).getByTestId("native-session-manage");
+  await manage.click();
+  await expect(manage).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("native-sessions-close").click();
 }
 
 export function threadRow(page: Page, threadId: string): Locator {

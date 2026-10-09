@@ -117,7 +117,7 @@ test("restored memory receipts stay outside the fold and unknown answer clocks r
     { type: "message", id: "final", parentId: "r", message: { role: "assistant", content: [{ type: "text", text: "Saved fixture" }], stopReason: "stop" } },
   ];
   writeFileSync(path.join(fakeHome, "sessions", "memory-turn.jsonl"), lines.map(line => JSON.stringify(line)).join("\n") + "\n");
-  const launched = await launchApp({ omo: "fake", fakeHome, pickDir: workspace });
+  const launched = await launchApp({ omo: "fake", fakeHome, pickDir: workspace, managed: ["memory-turn"] });
   try {
     const { page } = launched;
     await threadRow(page, "memory-turn").getByRole("button").first().click();

@@ -37,6 +37,7 @@ test.beforeAll(async () => {
   launched = await launchApp({
     omo: "fake",
     pickDir,
+    managed: [LONG_ID],
     extraEnv: { FAKE_OMO_LONG_SESSION: JSON.stringify({ id: LONG_ID, cwd: pickDir, turns: 30, toolCalls: 80 }) },
   });
 });

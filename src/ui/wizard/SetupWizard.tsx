@@ -12,7 +12,7 @@ import {
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { Model } from "../../../shared/protocol";
 import type { Preferences } from "../../../shared/ipc";
-import { selectThreadsByWorkspace } from "../../state";
+import { selectThreadsByWorkspace, selectUnknownThreadsByWorkspace } from "../../state";
 import { useLocale, useT } from "../../i18n";
 import type { MessageKey } from "../../i18n";
 import { StoreContext, useActions, useAppSelector } from "../app-context";
@@ -71,7 +71,10 @@ export function SetupWizard() {
   const catalog = useAppSelector((state) => state.models);
   const models = useMemo(() => catalog.filter((model) => !model.hidden), [catalog]);
   const threadsLoaded = useAppSelector((state) => state.threadsLoaded);
-  const groups = useAppSelector(selectThreadsByWorkspace);
+  // Sessions imported from native carry no creator record, so they count as projects alongside the ones made here.
+  const userGroups = useAppSelector(selectThreadsByWorkspace);
+  const unknownGroups = useAppSelector(selectUnknownThreadsByWorkspace);
+  const groups = useMemo(() => [...userGroups, ...unknownGroups], [userGroups, unknownGroups]);
   const modelId = useAppSelector((state) => state.composer.modelId);
   const profile = useAppSelector((state) => state.composer.profile ?? null);
   const [step, setStep] = useState<Step>("welcome");
@@ -93,12 +96,17 @@ export function SetupWizard() {
   const projects = useMemo(() => {
     const rows = new Map<string, ProjectRow>();
     for (const group of groups) {
+      const known = rows.get(group.cwd);
       rows.set(group.cwd, {
         cwd: group.cwd,
         label: group.label,
-        count: group.threads.length,
-        lastActivity: group.threads.reduce((max, thread) => Math.max(max, thread.updatedAt), 0),
+        count: (known?.count ?? 0) + group.threads.length,
+        lastActivity: group.threads.reduce((max, thread) => Math.max(max, thread.updatedAt), known?.lastActivity ?? 0),
       });
+    }
+    for (const [cwd, row] of [...rows].sort(([, left], [, right]) => (right.lastActivity ?? 0) - (left.lastActivity ?? 0))) {
+      rows.delete(cwd);
+      rows.set(cwd, row);
     }
     for (const cwd of added) {
       if (!rows.has(cwd)) rows.set(cwd, { cwd, label: folderBasename(cwd), count: 0, lastActivity: null });
@@ -123,6 +131,9 @@ export function SetupWizard() {
       const existing = uiState.get().preferences?.recentWorkspaces ?? [];
       patch.lastWorkspace = chosen[0] ?? null;
       patch.recentWorkspaces = [...chosen, ...existing.filter((path) => !selected.has(path))].slice(0, 10);
+      // The sidebar lists managed sessions only, so keeping a project at hand means managing its sessions.
+      const sessions = groups.filter((group) => selected.has(group.cwd)).flatMap((group) => group.threads.map((thread) => thread.id));
+      patch.managedThreadIds = [...new Set([...(uiState.get().preferences?.managedThreadIds ?? []), ...sessions])];
     }
     void updatePreferences(patch);
   };

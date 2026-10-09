@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { IPC } from "../shared/ipc.ts";
 import type { RpcNotification } from "../shared/protocol.ts";
-import { byTestId, launchApp, threadRow, type LaunchedApp } from "./helpers.ts";
+import { byTestId, launchApp, manageThread, threadRow, type LaunchedApp } from "./helpers.ts";
 import { TESTID } from "../src/ui/testids.ts";
 
 /** Subscribe before sending; the final name event fences all preceding notification listeners. */
@@ -27,10 +27,12 @@ async function emit(launched: LaunchedApp, threadId: string, notifications: RpcN
 }
 
 async function createThread(launched: LaunchedApp): Promise<string> {
-  return launched.page.evaluate(async cwd => {
+  const threadId = await launched.page.evaluate(async cwd => {
     const result = await window.omo.request("thread/start", { cwd });
     return result.thread.id;
   }, launched.dirs.fakeHome!);
+  await manageThread(launched.page, threadId);
+  return threadId;
 }
 
 test("sidebar elapsed uses the active turn, resets for a new turn, and omits unknown starts", async () => {
