@@ -45,9 +45,35 @@ export function filterGroups(groups: readonly ModelGroup[], query: string): Mode
     .filter((group) => group.models.length > 0);
 }
 
-/** The effort a model runs with: the composer's choice when the model supports it, else the model's default. */
+const EFFORT_ORDER: readonly ReasoningEffort[] = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/**
+ * A catalog entry reduced to what the model really offers: known levels only, each once, weakest first, with a default
+ * taken from that list. omo sends "medium" as every model's default, including models that do not offer it or do not
+ * reason at all, so nothing downstream may trust the raw value.
+ */
+export function normalizeModel(model: Model): Model {
+  const supportedReasoningEfforts = EFFORT_ORDER.flatMap((level) => {
+    const entry = model.supportedReasoningEfforts.find((candidate) => candidate.reasoningEffort === level);
+    return entry === undefined ? [] : [entry];
+  });
+  const offered = { ...model, supportedReasoningEfforts };
+  return { ...offered, defaultReasoningEffort: resolveEffort(offered, null) };
+}
+
+/**
+ * The effort a model runs with: the composer's choice when the model supports it, else the model's default. omo can
+ * report a default the model does not offer (a level its own map leaves out); the next stronger offered level stands in,
+ * so the value shown and sent is always one omo accepts.
+ */
 export function resolveEffort(model: Model | null, effort: ReasoningEffort | null): ReasoningEffort | null {
   if (model === null) return effort;
-  if (effort !== null && model.supportedReasoningEfforts.some((entry) => entry.reasoningEffort === effort)) return effort;
-  return model.defaultReasoningEffort;
+  const offered = model.supportedReasoningEfforts.map((entry) => entry.reasoningEffort);
+  if (offered.length === 0) return null;
+  if (effort !== null && offered.includes(effort)) return effort;
+  const fallback = model.defaultReasoningEffort;
+  if (fallback === null || offered.length === 0 || offered.includes(fallback)) return fallback;
+  const wanted = EFFORT_ORDER.indexOf(fallback);
+  const ranked = [...offered].sort((left, right) => EFFORT_ORDER.indexOf(left) - EFFORT_ORDER.indexOf(right));
+  return ranked.find((entry) => EFFORT_ORDER.indexOf(entry) >= wanted) ?? ranked.at(-1) ?? null;
 }

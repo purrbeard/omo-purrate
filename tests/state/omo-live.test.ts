@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DagRun, LiveTask, WireGoal } from "../../shared/protocol";
-import { createInitialState, reduce, selectDagRuns, selectTasks, selectGoal, selectTodo } from "../../src/state";
+import { createAppStore, createInitialState, reduce, selectDagRuns, selectTasks, selectGoal, selectTodo } from "../../src/state";
 import { parseDagActivity, parseDagHeartbeat, parseDagUpdated, parseGoal, parseLiveExtension, parseTasksUpdated, parseTodo } from "../../src/state/live-wire";
 import { parseNotification } from "../../src/state/wire";
 import { makeThread } from "./helpers";
@@ -19,8 +19,8 @@ const goal: WireGoal = {
   threadId: "T", objective: "ship", status: "active", tokenBudget: null, tokensUsed: 0, timeUsedSeconds: 1, createdAt: 1, updatedAt: 2,
 };
 const activity = { schemaVersion: 1, runId: "r", nodeId: "A", taskId: "t", at: "now", activity: "working", turns: 1 };
-function extension(state: ReturnType<typeof createInitialState>, name: string, data: unknown, threadId = "T") {
-  return reduce(state, { type: "rpc/notification", notification: { method: "extension_event", params: { threadId, name, data } }, receivedAtMs: 1 });
+function extension(state: ReturnType<typeof createInitialState>, name: string, data: unknown, threadId = "T", receivedAtMs = 1) {
+  return reduce(state, { type: "rpc/notification", notification: { method: "extension_event", params: { threadId, name, data } }, receivedAtMs });
 }
 function opened() {
   return reduce(createInitialState(), { type: "thread/activated", threadId: "T" });
@@ -64,6 +64,51 @@ describe("live wire parsing", () => {
 });
 
 describe("thread live state", () => {
+  it("observes transitions in inactive threads without mixing baselines or logs", () => {
+    let state = extension(opened(), "omo.dag.updated", { parent_session_id: "T", runs: [run] });
+    state = extension(state, "omo.task.updated", { parent_session_id: "child", tasks: [task] }, "child");
+    expect(state.conversations["T"]?.live.activityLog).toEqual([]);
+    expect(state.conversations["child"]?.live.activityLog).toEqual([]);
+    state = extension(state, "omo.dag.updated", { parent_session_id: "T", runs: [{ ...run, nodes: [{ ...run.nodes[0], state: "completed" }] }] }, "T", 20);
+    state = extension(state, "omo.task.updated", { parent_session_id: "child", tasks: [{ ...task, status: "completed" }] }, "child", 30);
+    expect(state.conversations["T"]?.live.activityLog).toEqual([{ runId: "r", nodeId: "A", label: "A", state: "completed", atMs: 20 }]);
+    expect(state.conversations["child"]?.live.activityLog).toEqual([{ runId: "task", nodeId: "t", label: "t", state: "completed", atMs: 30 }]);
+  });
+  it("retains observations after a panel subscriber unmounts and bounds each thread to 50 entries", () => {
+    const store = createAppStore();
+    const sendTask = (status: string, atMs: number) => store.dispatch({ type: "rpc/notification", receivedAtMs: atMs,
+      notification: { method: "extension_event", params: { threadId: "T", name: "omo.task.updated", data: { parent_session_id: "T", tasks: [{ ...task, status }] } } } });
+    const unmountPanel = store.subscribe(() => {});
+    sendTask("running", 0);
+    unmountPanel();
+    for (let index = 1; index <= 60; index++) sendTask(index % 2 === 0 ? "running" : "completed", index);
+    store.dispatch({ type: "thread/activated", threadId: "child" });
+    const remountPanel = store.subscribe(() => {});
+    store.dispatch({ type: "thread/activated", threadId: "T" });
+    const entries = store.getState().conversations["T"]?.live.activityLog;
+    expect(entries).toHaveLength(50);
+    expect(entries?.[0]?.atMs).toBe(60);
+    expect(entries?.[49]?.atMs).toBe(11);
+    expect(store.getState().conversations["child"]?.live.activityLog).toEqual([]);
+    remountPanel();
+  });
+  it("excludes DAG-owned task transitions and does not log activity-only updates", () => {
+    let state = extension(opened(), "omo.dag.updated", { parent_session_id: "T", runs: [{ ...run, nodes: [{ ...run.nodes[0], task_id: "t" }] }] });
+    state = extension(state, "omo.task.updated", { parent_session_id: "T", tasks: [task] });
+    state = extension(state, "omo.task.updated", { parent_session_id: "T", tasks: [{ ...task, status: "completed" }] });
+    state = extension(state, "omo.dag.activity", activity);
+    expect(state.conversations["T"]?.live.activityLog).toEqual([]);
+  });
+  it("reconnect snapshots independently baseline DAGs and tasks while retaining captured entries", () => {
+    let state = extension(opened(), "omo.dag.updated", { parent_session_id: "T", runs: [run] });
+    state = extension(state, "omo.task.updated", { parent_session_id: "T", tasks: [task] });
+    state = extension(state, "omo.task.updated", { parent_session_id: "T", tasks: [{ ...task, status: "completed" }] });
+    const captured = state.conversations["T"]?.live.activityLog;
+    state = reduce(state, { type: "bridge/status", status: { state: "restarting", omo: null, userAgent: null, message: null, stderrTail: null, exitCode: null, restartAttempt: 1, installCommand: OMO_INSTALL_COMMAND } });
+    state = extension(state, "omo.dag.updated", { parent_session_id: "T", runs: [{ ...run, nodes: [{ ...run.nodes[0], state: "completed" }] }] });
+    state = extension(state, "omo.task.updated", { parent_session_id: "T", tasks: [task] });
+    expect(state.conversations["T"]?.live.activityLog).toBe(captured);
+  });
   it("retains bind-time snapshots through thread opening and exposes stable selections", () => {
     let state = extension(createInitialState(), "omo.dag.updated", { parent_session_id: "T", runs: [run] });
     state = extension(state, "omo.task.updated", { parent_session_id: "T", tasks: [task] });

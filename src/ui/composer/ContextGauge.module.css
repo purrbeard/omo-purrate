@@ -1,0 +1,7 @@
+.gauge { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; color: var(--dsw-alias-label-secondary); font-size: 12px; font-variant-numeric: tabular-nums; border-radius: var(--dsw-radius-sm); }
+.gauge:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color); outline-offset: 2px; }
+.gauge[data-level="warning"] { color: var(--dsw-alias-state-warn-primary); }
+.gauge[data-level="critical"] { color: var(--dsw-alias-state-error-primary); }
+.track, .fill { fill: none; stroke-width: 2; }
+.track { stroke: var(--dsw-alias-border-l3); }
+.fill { stroke: currentColor; }

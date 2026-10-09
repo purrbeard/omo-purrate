@@ -14,11 +14,13 @@ import { updatePreferences, useUiState } from "../ui-state";
 import { BackgroundWorkStrip } from "./BackgroundWorkStrip";
 import { CheckoutBar } from "./CheckoutBar";
 import { ModelPicker } from "./ModelPicker";
+import { ContextGauge } from "./ContextGauge";
 import { PermissionPicker } from "./PermissionPicker";
 import { ReasoningPicker } from "./ReasoningPicker";
 import { SkillMenu } from "./SkillMenu";
 import type { SkillMenuStatus } from "./SkillMenu";
-import { acceptCommand, matchCommands, menuOptions } from "./commands";
+import { acceptCommand, matchCommands, menuOptions, nativeSkills } from "./commands";
+import { useNativeCatalog } from "./use-native-catalog";
 import type { MenuOption } from "./commands";
 import { detectMagicKeyword, segmentDraft } from "./magic-keyword";
 import { acceptSkill, detectSkillTrigger, pruneSelected, rankSkills, serializeSkillDraft } from "./skill-draft";
@@ -190,17 +192,19 @@ export function Composer() {
 
   const trigger = connected && !composing ? detectSkillTrigger(text, caret) : null;
   const menuOpen = trigger !== null && trigger.start !== dismissedStart;
+  const nativeCatalog = useNativeCatalog(activeCwd, menuOpen && activeThreadId !== null);
   const triggerKey = trigger === null ? "" : `${trigger.start}:${trigger.query}`;
   const status = menuStatus(activeThreadId !== null, cwdLoaded, catalog);
   const query = trigger?.query ?? "";
-  const catalogSkills = catalog?.skills;
+  const catalogSkills = useMemo(() => catalog?.skills !== undefined && catalog.skills.length > 0 ? catalog.skills :
+    nativeCatalog === null ? catalog?.skills : nativeSkills(nativeCatalog.commands), [catalog?.skills, nativeCatalog]);
   const rows = useMemo(
     () => (menuOpen && cwdLoaded && catalogSkills !== undefined ? rankSkills(catalogSkills, query) : []),
     [menuOpen, cwdLoaded, catalogSkills, query],
   );
   const options = useMemo(
-    () => (menuOpen ? menuOptions(matchCommands(query), rows, query) : NO_OPTIONS),
-    [menuOpen, rows, query],
+    () => (menuOpen ? menuOptions(matchCommands(query, nativeCatalog?.commands), rows, query) : NO_OPTIONS),
+    [menuOpen, rows, query, nativeCatalog],
   );
   const activeIndex =
     options.length === 0 ? -1 : highlight.key === triggerKey ? Math.min(highlight.index, options.length - 1) : 0;
@@ -238,10 +242,39 @@ export function Composer() {
     setLimitReached(false);
   }, []);
 
+  const localCommand = async (name: string, argument = ""): Promise<void> => {
+    setDismissedStart(null);
+    setHighlight({ key: "", index: 0 });
+    setLimitReached(false);
+    try {
+      switch (name) {
+        case "compact":
+          if (activeThreadId !== null) await window.omo.request("thread/compact/start", { threadId: activeThreadId });
+          break;
+        case "goal":
+          if (argument === "") setAddDialog("goal");
+          else if (activeThreadId !== null) await window.omo.request("thread/goal/set", { threadId: activeThreadId, objective: argument });
+          else setGoalDraft(argument);
+          break;
+        case "model": document.querySelector<HTMLButtonElement>(`[data-testid="${TESTID.modelPicker}"]`)?.click(); break;
+        case "plan": setPlanMode(current => !current); break;
+      }
+    } catch (error) {
+      setImageNotice(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const pickOption = (index: number): void => {
     const option = options[index];
     if (option === undefined || trigger === null) return;
     if (option.kind === "command") {
+      if (trigger.start === 0 && option.command.source === undefined && ["compact", "goal", "model", "plan"].includes(option.command.name)) {
+        const remaining = draft.text.slice(trigger.end).trim();
+        setDraft({ text: option.command.name === "goal" ? "" : remaining, selected: pruneSelected(remaining, draft.selected) });
+        setCaret(remaining.length);
+        void localCommand(option.command.name, option.command.name === "goal" ? remaining : "");
+        return;
+      }
       const accepted = acceptCommand(draft.text, trigger, option.command.name);
       pendingCaret.current = accepted.caret;
       setDraft({ text: accepted.text, selected: pruneSelected(accepted.text, draft.selected) });
@@ -304,8 +337,16 @@ export function Composer() {
   };
 
   const submit = async (): Promise<void> => {
-    const message = text.trim();
+    let message = text.trim();
     if (!canSend) return;
+    const local = /^\/(compact|goal|model|plan)(?:\s+(.*))?$/s.exec(message);
+    const slashPlan = local?.[1] === "plan" && (local[2]?.trim() ?? "") !== "";
+    if (slashPlan) message = local?.[2]?.trim() ?? "";
+    else if (local !== null) {
+      setDraft(EMPTY_DRAFT);
+      await localCommand(local[1]!, local[2]?.trim() ?? "");
+      return;
+    }
     const command = parseBtwCommand(message);
     if (command !== null && images.length === 0 && context.length === 0 && goalDraft === "" && !planMode) {
       routeSideCommand(command.question);
@@ -314,7 +355,7 @@ export function Composer() {
     const selected = draft.selected;
     const contextual = contextMessage(message || goalDraft, context);
     const serialized = serializeSkillDraft({ text: contextual, selected });
-    const transport = planMode && !selected.includes("ulw-plan") ? `/skill:ulw-plan ${serialized}` : serialized;
+    const transport = (planMode || slashPlan) && !selected.includes("ulw-plan") ? `/skill:ulw-plan ${serialized}` : serialized;
     setBusy(true);
     let targetThreadId = activeThreadId;
     let accepted = false;
@@ -552,6 +593,7 @@ export function Composer() {
                 {t("composer.steering")}
               </span>
             )}
+            <ContextGauge />
             <ModelPicker disabled={!connected} />
             <ReasoningPicker disabled={!connected} />
             {turnActive && (

@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { TESTID } from "../testids";
 import { useModalLayer } from "../../dsh/primitives/useModalLayer";
 import { useT } from "../../i18n";
-import { computeColumns } from "./columns";
+import { CENTER_MIN, RIGHTBAR_MIN, computeColumns } from "./columns";
 import css from "./AppFrame.module.css";
 
 export interface AppFrameProps {
@@ -16,6 +16,8 @@ export interface AppFrameProps {
   rightPanel?: ((placement: "docked" | "overlay") => ReactNode) | null;
   /** Requested docked width of the right panel in px; columns.ts clamps it. */
   rightPanelWidth?: number;
+  /** Reports whether the frame currently has room for a docked right column. */
+  onCanDockChange?(canDock: boolean): void;
 }
 
 interface DragHandleProps {
@@ -108,6 +110,7 @@ export function AppFrame({
   onSidebarWidthChange,
   rightPanel = null,
   rightPanelWidth = 0,
+  onCanDockChange,
 }: AppFrameProps) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState(0);
@@ -185,6 +188,10 @@ export function AppFrame({
     cols.center = viewport - cols.sidebar - cols.rightbar;
   }
   const docked = rightPanel !== null && cols.rightbar > 0;
+  const canDock = viewport === 0 || (!narrow && viewport - cols.sidebar - CENTER_MIN >= RIGHTBAR_MIN);
+  useEffect(() => { onCanDockChange?.(canDock); }, [canDock, onCanDockChange]);
+  // A floating panel that would leave only a sliver of the conversation visible takes the whole width instead.
+  const overlayWidth = viewport - rightPanelWidth - 16 < 240 ? viewport - 16 : rightPanelWidth;
   const colsRef = useRef(cols);
   colsRef.current = cols;
   const dragBase = useRef(0);
@@ -193,14 +200,16 @@ export function AppFrame({
   const [animating, setAnimating] = useState(0);
   const previousVisible = useRef(sidebarVisible);
   const previousViewport = useRef(viewport);
+  const previousDocked = useRef(docked);
   useLayoutEffect(() => {
     const viewportChanged = previousViewport.current !== viewport;
     previousViewport.current = viewport;
-    if (previousVisible.current === sidebarVisible) return;
+    const visibleChanged = previousVisible.current !== sidebarVisible;
     previousVisible.current = sidebarVisible;
-    if (viewportChanged) return;
-    setAnimating((token) => token + 1);
-  }, [sidebarVisible, viewport]);
+    const dockChanged = previousDocked.current !== docked;
+    previousDocked.current = docked;
+    if (dockChanged || (visibleChanged && !viewportChanged)) setAnimating((token) => token + 1);
+  }, [sidebarVisible, viewport, docked]);
   useEffect(() => {
     if (animating === 0) return;
     const frame = frameRef.current;
@@ -228,11 +237,12 @@ export function AppFrame({
     <div
       ref={frameRef}
       className={css.frame}
-      style={{ gridTemplateColumns: `${cols.sidebar}px minmax(0px, 1fr)${docked ? ` ${cols.rightbar}px` : ""}` }}
+      style={{ gridTemplateColumns: `${cols.sidebar}px minmax(0px, 1fr) ${docked ? cols.rightbar : 0}px` }}
       data-testid={TESTID.appFrame}
       data-sidebar-collapsed={narrow || !sidebarVisible || undefined}
       data-narrow={narrow || undefined}
       data-dragging={dragging || undefined}
+      data-right-docked={docked || undefined}
       data-animating={animating > 0 || undefined}
     >
       {drawerOpen && <button className={css.sidebarScrim} tabIndex={-1} aria-hidden="true" onClick={() => setSidebarDrawerOpen(false)} />}
@@ -245,7 +255,7 @@ export function AppFrame({
         {main}
       </div>
       {rightPanel !== null && (
-        <div className={docked ? css.rightCol : css.rightOverlay} style={docked ? undefined : { width: Math.min(rightPanelWidth, viewport - 16) }}>
+        <div className={docked ? css.rightCol : css.rightOverlay} style={docked ? undefined : { width: overlayWidth }}>
           <div className={css.dragStrip} data-window-drag />
           {rightPanel(docked ? "docked" : "overlay")}
         </div>

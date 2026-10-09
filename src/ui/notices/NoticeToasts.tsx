@@ -19,9 +19,9 @@ export function NoticeToasts() {
   const actions = useActions();
   const t = useT();
   if (notice === null) return null;
-  const text = notice.code === undefined ? notice.message : t(`notice.${notice.code}`);
+  const text = notice.code === undefined ? notice.message : t(`notice.${notice.code}`, notice.params);
   const openThread = notice.action === "open-thread" && notice.threadId !== null ? notice.threadId : null;
-  const holdMs = openThread !== null ? ACTION_HOLD_MS : notice.level === "error" ? ERROR_HOLD_MS : INFO_HOLD_MS;
+  const holdMs = openThread !== null || notice.code === "modelSwitch" ? ACTION_HOLD_MS : notice.level === "error" ? ERROR_HOLD_MS : INFO_HOLD_MS;
   return (
     <>
       <Toast

@@ -21,6 +21,7 @@ import type { WorkspaceFile, WorkspaceDocument } from "./workspace";
 import type { DeviceOverview } from "./device-overview";
 import type { AppUpdateStatus } from "./app-update";
 import type { ModelRoutingInput, ModelRoutingSettings } from "./model-routing";
+import type { WorkbenchBridgeApi } from "./workbench";
 
 /** URL of the official omo installer script. */
 export const OMO_INSTALL_SCRIPT_URL = "https://get.omo.dev/install.sh";
@@ -238,6 +239,7 @@ export interface TaskWork {
   task: LiveTask;
   todo: HistoryResult["todo"];
   activity: string | null;
+  history?: HistoryResult;
 }
 
 export interface InstallLogLine {
@@ -394,7 +396,7 @@ export interface ThreadLink {
   status?: import("./protocol").LiveTask["status"];
 }
 
-export interface OmoBridgeApi {
+export interface OmoBridgeApi extends WorkbenchBridgeApi {
   /** Optional JSONL paths add verified header links and their parent chain, using header IDs. */
   loadThreadLinks(cwds: string[], paths?: string[]): Promise<ThreadLink[]>;
   /** Keys are the requested JSONL paths, not thread IDs; unknown creation origins are omitted. */
@@ -443,6 +445,7 @@ export interface OmoBridgeApi {
   loadHistory(sessionPath: string): Promise<HistoryResult>;
   /** Reads only tasks reachable through explicit child-session links in this workspace's native task store. */
   loadTaskWork(cwd: string, parentSessionId: string): Promise<TaskWork[]>;
+  sendTaskMessage(parentSessionId: string, taskId: string, message: string): Promise<void>;
   /**
    * Writes a new session beside `sessionPath` (which must resolve inside the omo sessions directory) holding that
    * session's active branch up to, but excluding, the user message at `point`; the source session is not modified.
@@ -525,6 +528,7 @@ export const IPC = {
   installLog: "omo:install-log",
   loadHistory: "history:load",
   loadTaskWork: "history:task-work",
+  sendTaskMessage: "history:task-message",
   branchSession: "history:branch",
   sessionTree: "history:tree",
   readAccountUsage: "accounts:usage",

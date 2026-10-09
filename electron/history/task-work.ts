@@ -153,6 +153,7 @@ export async function loadTaskWork(agentDir: string, cwd: string, parentSessionI
       const header: unknown = JSON.parse(text.split("\n")[0] ?? "");
       if (!object(header) || header["id"] !== task.child_session_id) return;
       const history = parseSessionJsonl(text);
+      work.history = history;
       work.todo = history.todo;
       const items = history.turns.flatMap((turn) => turn.items);
       const latest = items.findLast((item) => item.type === "agentMessage" || item.type === "dynamicToolCall");

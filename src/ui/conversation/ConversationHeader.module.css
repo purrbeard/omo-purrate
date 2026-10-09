@@ -42,6 +42,32 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.panelButton {
+  flex: none;
+  padding: 5px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.panelButton:hover,
+.panelButton[aria-pressed='true'] {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+:global([data-right-docked='true']) .panelButton {
+  display: none;
+}
+
+.panelButton:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
+}
+
 .breadcrumb {
   flex: 0 1 auto;
   display: flex;

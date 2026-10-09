@@ -54,7 +54,7 @@ function settleAfterDisconnect(conversation: Conversation): Conversation {
       })
     : conversation.turns;
   return { ...conversation, turns, resumed: false, activeTurnId: null,
-    live: { ...conversation.live, freshness: "stale", generation: conversation.live.generation + 1 } };
+    live: { ...conversation.live, freshness: "stale", generation: conversation.live.generation + 1, activityBaseline: new Map() } };
 }
 
 function applyBridgeStatus(state: AppState, status: BridgeStatus): AppState {
@@ -111,6 +111,13 @@ export function reduce(state: AppState, event: AppEvent): AppState {
   switch (event.type) {
     case "threads/links":
       return { ...state, threadLinks: event.links };
+    case "dagRuns/loaded":
+      return updateExistingConversation(state, event.threadId, (conversation) => {
+        const live = conversation.live;
+        if (event.runs.length === 0 || live.generation !== event.generation || live.dagRevision !== event.revision || live.runOrder.length > 0 || live.runsSource === "live") return conversation;
+        return { ...conversation, live: { ...live, freshness: "unattached", runsSource: "history",
+          runs: Object.fromEntries(event.runs.map(run => [run.run_id, run])), runOrder: event.runs.map(run => run.run_id) } };
+      });
     case "taskWork/loaded":
       return updateExistingConversation(state, event.threadId, (conversation) =>
         conversation.live.generation !== event.generation ? conversation :
@@ -159,6 +166,8 @@ export function reduce(state: AppState, event: AppEvent): AppState {
         ...(event.session === undefined ? {} : { session: event.session }),
       }));
     }
+    case "thread/sessionUpdated":
+      return updateExistingConversation(state, event.threadId, (conversation) => ({ ...conversation, session: event.session }));
     case "thread/activated": {
       const { threadId } = event;
       const activated = { ...state, activeThreadId: threadId };

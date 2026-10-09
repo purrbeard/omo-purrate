@@ -15,7 +15,7 @@ test("workflow graph and background work stay in the same conversation after mai
     await input.press("Enter");
     await arrived;
     await expect(byTestId(page, TESTID.workingIndicator)).toHaveCount(0);
-    await expect(byTestId(page, TESTID.assistantMessage)).toContainText("Background workflow started.");
+    await expect(page.getByTestId("conversation").getByTestId(TESTID.assistantMessage)).toContainText("Background workflow started.");
     const log = page.getByTestId("turn-work-log").first();
     await expect(log).not.toHaveAttribute("open", "");
     await log.locator(":scope > summary").click();

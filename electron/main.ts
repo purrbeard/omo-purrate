@@ -6,7 +6,9 @@ import { ENV, IPC } from "../shared/ipc";
 import type { MenuCommand } from "../shared/ipc";
 import { IphoneBridge, loadIphoneToken } from "./iphone/bridge";
 import { AndroidBridge } from "./android/bridge";
-import { registerIpc } from "./ipc";
+import { createSessionFileResolver, registerIpc } from "./ipc";
+import { registerWorkbenchIpc } from "./workbench-ipc";
+import { createWorkbenchHandlers } from "./workbench/create-handlers";
 import { installApplicationMenu } from "./menu";
 import { OmoSupervisor } from "./omo/supervisor";
 import { PreferencesStore } from "./prefs";
@@ -109,6 +111,7 @@ function run(): void {
 
   const iphone = new IphoneBridge(supervisor, undefined, undefined, loadIphoneToken(app.getPath("userData")));
   const android = new AndroidBridge(supervisor);
+  const workbench = createWorkbenchHandlers({ supervisor, homeDir, getWindow: () => mainWindow, sessionFile: createSessionFileResolver(supervisor, homeDir) });
 
   app.on("second-instance", () => {
     if (app.isReady()) focusWindow();
@@ -118,6 +121,7 @@ function run(): void {
     if (!app.isPackaged) app.dock?.setIcon(path.join(__dirname, "../build/icon.png"));
     installApplicationMenu(sendMenuCommand);
     registerIpc({ supervisor, iphone, android, prefs, getWindow: () => mainWindow, homeDir });
+    registerWorkbenchIpc(workbench);
     createWindow();
     iphone.start();
     void supervisor.start();
@@ -145,7 +149,7 @@ function run(): void {
         resolve();
       }, QUIT_STOP_TIMEOUT_MS);
     });
-    const stopped = Promise.all([android.stop(), supervisor.stop()]).catch((error: unknown) => {
+    const stopped = Promise.all([android.stop(), supervisor.stop(), workbench.dispose()]).catch((error: unknown) => {
       console.error("failed to stop omo", error);
     });
     void Promise.race([stopped, bounded]).finally(() => {

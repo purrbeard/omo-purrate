@@ -76,7 +76,12 @@ body {
   --dsw-omo-sidebar-glow: rgba(139, 92, 246, 0.07);
 }
 
+body {
+  color-scheme: light;
+}
+
 body[data-ds-dark-theme] {
+  color-scheme: dark;
   --dsw-omo-led-bg: #080c10;
   --dsw-omo-led-shadow: #00000088;
   --dsw-omo-led-off: #192127;

@@ -116,13 +116,14 @@ test("arrows wrap, filtering ranks ulw-loop, Tab inserts and Escape preserves", 
   const options = byTestId(page, TESTID.skillMenu).getByRole("option");
   await input.fill("/");
   await expect(rows.first()).toHaveAttribute("aria-selected", "true");
-  await expect(options).toHaveCount(7);
-  await expect(options.last()).toHaveAttribute("data-command", "btw");
+  await expect(options).toHaveCount(13);
+  await expect(options.nth(6)).toHaveAttribute("data-command", "btw");
+  await expect(options.last()).toHaveAttribute("data-command", "review");
   await input.press("ArrowUp");
   await expect(options.last()).toHaveAttribute("aria-selected", "true");
   await input.press("ArrowDown");
   await expect(rows.first()).toHaveAttribute("aria-selected", "true");
-  for (let index = 0; index < 7; index += 1) await input.press("ArrowDown");
+  for (let index = 0; index < 13; index += 1) await input.press("ArrowDown");
   await expect(rows.first()).toHaveAttribute("aria-selected", "true");
   await input.fill("/ulw");
   await expect(rows.first()).toHaveAttribute("data-skill-name", "ulw-loop");
@@ -264,6 +265,7 @@ test("the ulw filter ranks ulw-loop first and drops unrelated skills", async () 
   const { page } = current();
   await newSession(page);
   await byTestId(page, TESTID.composerInput).fill("/ulw");
+  await expect(byTestId(page, TESTID.commandOption)).toHaveCount(0);
   await expect(byTestId(page, TESTID.skillOption).first()).toHaveAttribute("data-skill-name", "ulw-loop");
   for (const name of ["plan", "user-only-skill", "long-description-skill", "sixth-skill"]) {
     await expect(page.locator(`[data-testid="${TESTID.skillOption}"][data-skill-name="${name}"]`)).toHaveCount(0);

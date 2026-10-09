@@ -1,5 +1,6 @@
 import type { BridgeStatus, HistoricalTask, HistoryResult, HistoryTurn, MemoryWriteNotice, SessionNotice, TaskWork } from "../../shared/ipc";
 import type { DagActivity, DagHeartbeat, DagRun, LiveTask, TodoPhase, WireGoal } from "../../shared/protocol";
+import type { WorkflowTransition } from "../ui/conversation/workflow-activity";
 import type {
   CommandApprovalParams,
   FileChangeApprovalParams,
@@ -90,6 +91,10 @@ export interface ThreadLiveState {
   freshness: "unattached" | "live" | "stale";
   runs: Record<string, DagRun>;
   runOrder: string[];
+  runsSource: "history" | "live" | null;
+  dagRevision: number;
+  activityLog: WorkflowTransition[];
+  activityBaseline: ReadonlyMap<string, string>;
   truncatedRuns?: number;
   tasks: Record<string, LiveTask>;
   taskOrder: string[];
@@ -113,12 +118,14 @@ export type PendingRequest =
   | { kind: "userInput"; id: RequestId; threadId: string; params: UserInputParams; receivedAtMs: number; resolved?: boolean };
 
 /** Notices the UI translates by code; a notice without a code shows its message as-is (omo's own error text). */
-export type NoticeCode = "noActiveThread" | "steered" | "branchBusy";
+export type NoticeCode = "noActiveThread" | "steered" | "branchBusy" | "modelSwitch";
 
 export interface Notice {
   id: string;
   level: "info" | "error";
   message: string;
+  /** Values for the placeholders of a coded notice's translation. */
+  params?: Record<string, string>;
   threadId: string | null;
   code?: NoticeCode;
   action?: "open-thread";
@@ -199,6 +206,7 @@ export interface AppState {
 export type AppEvent =
   | { type: "threads/links"; links: import("../../shared/ipc").ThreadLink[] }
   | { type: "taskWork/loaded"; threadId: string; work: TaskWork[]; generation: number }
+  | { type: "dagRuns/loaded"; threadId: string; runs: DagRun[]; generation: number; revision: number }
   | { type: "mcp/updated"; mcp: AppState["mcp"] }
   | { type: "bridge/status"; status: BridgeStatus }
   | { type: "rpc/notification"; notification: RpcNotification; receivedAtMs: number }
@@ -211,6 +219,7 @@ export type AppEvent =
   | { type: "threads/listed"; threads: Thread[]; nextCursor: string | null; append: boolean }
   | { type: "threads/origins"; origins: Record<string, "agent" | "user" | "dori" | "unknown"> }
   | { type: "thread/opened"; thread: Thread; resumed: boolean; session?: SessionModel }
+  | { type: "thread/sessionUpdated"; threadId: string; session: SessionModel }
   | { type: "thread/activated"; threadId: string | null }
   | { type: "history/loading"; threadId: string }
   | ({ type: "history/replaced"; threadId: string } & HistoryResult)

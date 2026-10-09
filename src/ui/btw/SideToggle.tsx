@@ -1,35 +1,32 @@
 import { useEffect } from "react";
 import { IconPanelLeftOutlineRegular, Tooltip } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useT } from "../../i18n";
-import { selectSidesOf, useAppStore } from "../../state";
+import { selectSidesOf } from "../../state";
 import { useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
-import { uiState } from "../ui-state";
+import { uiState, useUiState } from "../ui-state";
 import css from "./SidePanel.module.css";
 
 /** ⌘E toggles the side chat panel from anywhere in the window (the Aside browser's Ask Aside shortcut). */
 export function useSidePanelShortcut(): void {
   const actions = useActions();
-  const store = useAppStore();
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent): void => {
       const modifier = window.omo.platform === "darwin" ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
       if (!modifier || event.altKey || event.shiftKey || event.isComposing) return;
       if (event.key.toLowerCase() !== "e") return;
       event.preventDefault();
-      uiState.setWorkflowPanelOpen(false);
-      uiState.setWorkspacePanelOpen(false);
-      actions.setSidePanel(!store.getState().btw.open);
+      actions.setSidePanel(uiState.get().rightTab !== "btw");
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [actions, store]);
+  }, [actions]);
 }
 
 export function SideToggle() {
   const t = useT();
   const actions = useActions();
-  const open = useAppSelector((state) => state.btw.open);
+  const open = useUiState().rightTab === "btw";
   const count = useAppSelector((state) => selectSidesOf(state, state.activeThreadId).length);
   return (
     <Tooltip label={t("btw.toggle.hint")} side="bottom" delayMs={500}>
@@ -39,7 +36,7 @@ export function SideToggle() {
         data-testid={TESTID.sideToggle}
         aria-pressed={open}
         aria-label={t("btw.toggle")}
-        onClick={() => { uiState.setWorkflowPanelOpen(false); uiState.setWorkspacePanelOpen(false); actions.setSidePanel(!open); }}
+        onClick={() => actions.setSidePanel(!open)}
       >
         <IconPanelLeftOutlineRegular size={16} className={css.toggleIcon} />
         {count > 0 && <span className={css.toggleCount}>{count}</span>}

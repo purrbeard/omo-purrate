@@ -330,6 +330,7 @@ export interface ClientRequestMap {
     result: { data: McpServerStatus[]; nextCursor: string | null };
   };
   "thread/goal/get": { params: { threadId: string }; result: { goal: WireGoal | null } };
+  "thread/compact/start": { params: { threadId: string }; result: Record<string, never> };
   "thread/goal/set": { params: { threadId: string; objective?: string | null; status?: "active" | "paused" | "complete"; tokenBudget?: number | null }; result: { goal: WireGoal } };
   extension_request: { params: { threadId: string; name: string; data?: unknown }; result: unknown };
   "thread/loaded/list": { params: Record<string, never>; result: { data: string[]; nextCursor: string | null } };
@@ -362,6 +363,8 @@ export interface ClientRequestMap {
   "thread/name/set": { params: { threadId: string; name: string }; result: Record<string, never> };
   "thread/archive": { params: { threadId: string }; result: Record<string, never> };
   "thread/delete": { params: { threadId: string }; result: Record<string, never> };
+  /** omo takes a turn's model and effort from the thread settings; it drops the same fields on turn/start. */
+  "thread/settings/update": { params: { threadId: string; model?: string; effort?: ReasoningEffort }; result: Record<string, never> };
   "turn/start": {
     params: {
       threadId: string;
@@ -387,6 +390,7 @@ export const CLIENT_METHODS = [
   "account/providerAccounts/remove",
   "mcpServerStatus/list",
   "thread/goal/get",
+  "thread/compact/start",
   "thread/goal/set",
   "extension_request",
   "thread/loaded/list",
@@ -398,6 +402,7 @@ export const CLIENT_METHODS = [
   "thread/resume",
   "thread/read",
   "thread/name/set",
+  "thread/settings/update",
   "thread/archive",
   "thread/delete",
   "turn/start",

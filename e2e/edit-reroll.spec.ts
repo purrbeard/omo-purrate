@@ -81,6 +81,10 @@ test("edit and repeated regeneration preserve one native session, images, origin
     await byTestId(page, TESTID.reasoningPicker).click();
     await page.locator(`[data-testid="${TESTID.reasoningOption}"][data-effort="high"]`).click();
     await expect(byTestId(page, TESTID.reasoningPicker)).toHaveAttribute("data-effort", "high");
+    // The first regenerate on the newly picked model is held back once with the cache warning.
+    await byTestId(page, TESTID.regenerate).click();
+    await expect(byTestId(page, TESTID.noticeToast)).toContainText("GPT-6 Astra");
+    await expect(byTestId(page, TESTID.turn)).toHaveCount(2);
     for (let retry = 0; retry < 2; retry += 1) {
       await completeTurn(page, threadId, () => byTestId(page, TESTID.regenerate).click());
       await expect(byTestId(page, TESTID.turn)).toHaveCount(2);

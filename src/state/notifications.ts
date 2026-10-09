@@ -199,6 +199,6 @@ export function applyNotification(state: AppState, notification: ServerNotificat
       return dropRequest(state, notification.params.requestId);
     }
     case "extension_event":
-      return applyLiveExtension(state, notification.params.threadId, notification.params.name, notification.params.data);
+      return applyLiveExtension(state, notification.params.threadId, notification.params.name, notification.params.data, receivedAtMs);
   }
 }

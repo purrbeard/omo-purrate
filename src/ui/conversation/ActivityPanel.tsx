@@ -62,7 +62,7 @@ export function ActivityToggle({ threadId, open, controlsId, onToggle }: {
   const freshness = useAppSelector((state) => selectThreadLiveState(state, threadId)?.freshness ?? "unattached");
   const hasStoredWork = useAppSelector(state => state.threadLinks.some(link => link.parentId === threadId && link.taskId !== undefined));
   const { done, failed, running, total } = workSummary(runs, tasks, freshness === "live");
-  if (total === 0 && !hasStoredWork) return null;
+  if (total === 0 && runs.length === 0 && !hasStoredWork) return null;
   const label = [t("activity.chipDone", { done, total }), ...(failed > 0 ? [t("activity.chipFailed", { failed })] : [])].join(" · ");
   return (
     <button type="button" className={css.toggle} data-testid={TESTID.omoActivityToggle} data-freshness={freshness}
@@ -173,8 +173,8 @@ function WorkRow({ tree, node, activity, dependencies = [], live, now, depth = 0
   );
 }
 
-function RunCard({ run, live, activity, trees, now, view }: {
-  run: DagRun; live: boolean; activity: Record<string, DagActivity> | undefined; trees: TaskTree[]; now: number; view: "list" | "graph";
+function RunCard({ run, live, restored = false, activity, trees, now, view }: {
+  run: DagRun; live: boolean; restored?: boolean; activity: Record<string, DagActivity> | undefined; trees: TaskTree[]; now: number; view: "list" | "graph";
 }) {
   const t = useT();
   const groups = useMemo(() => groupNodesByDependency(run), [run]);
@@ -188,12 +188,12 @@ function RunCard({ run, live, activity, trees, now, view }: {
   const ended = Date.parse(run.completed_at ?? run.updated_at);
   const elapsed = Number.isFinite(started) && Number.isFinite(ended) ? Math.max(0, (live && run.status === "running" ? now : ended) - started) : null;
   return (
-    <details className={css.run} open={run.status !== "completed"} data-testid={TESTID.dagRun} data-run-id={run.run_id} data-status={run.status}>
+    <details className={css.run} open={run.status !== "completed"} data-testid={TESTID.dagRun} data-run-id={run.run_id} data-status={run.status} data-source={restored ? "history" : "live"}>
       <summary className={css.runHeader}>
         <StateDot state={runDot(run.status, live)} size={10} />
         <span className={css.runName}>{run.name}</span>
         <span className={css.runCounts}>{t("activity.chipDone", summary)}{summary.failed > 0 && ` · ${t("activity.chipFailed", summary)}`}</span>
-        <span className={css.runStatus}>{knownStatus === null ? run.status : t(RUN_LABELS[knownStatus])}</span>
+        <span className={css.runStatus}>{knownStatus === null ? run.status : t(RUN_LABELS[knownStatus])}{restored && ` · ${t("activity.task.restored")}`}</span>
       </summary>
       <div className={css.runOverview}>
         {activeWave !== undefined && <span>{t("activity.run.wave", { index: activeWave.index + 1 })} / {waves.length}</span>}
@@ -266,7 +266,7 @@ export function ActivityPanel({ threadId, id, view = "list", docked = false }: {
         {error !== null && <p className={css.error} role="status">{t("activity.children.error")} <span title={error}>{error}</span></p>}
         {summary.total === 0 && <p className={css.empty}>{t(view === "graph" ? "activity.graph.empty" : "activity.empty")}</p>}
         {view === "list" && <div className={css.legend} aria-hidden><span>{t("activity.column.work")}</span><span>{t("activity.column.agent")}</span><span>{t("activity.column.time")}</span><span>{t("activity.column.step")}</span></div>}
-        {runs.map((run) => <RunCard key={run.run_id} run={run} live={isLive} activity={live.dagActivity[run.run_id]} trees={trees} now={now} view={view} />)}
+        {runs.map((run) => <RunCard key={run.run_id} run={run} live={isLive && live.runsSource === "live"} restored={live.runsSource === "history"} activity={live.dagActivity[run.run_id]} trees={trees} now={now} view={view} />)}
         {view === "list" && standalone.length > 0 && <section className={css.section}>
           <h2 className={css.sectionTitle}>{t("activity.tasks")}</h2>
           {taskGroups.map(group => <details key={group.id} data-testid="workflow-task-group" data-turn-id={group.id} open={group === taskGroups[0]}>

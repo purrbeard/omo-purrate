@@ -14,6 +14,7 @@ const common = {
 try {
   await Promise.all([
     build({ ...common, format: "esm", entryPoints: ["electron/omo/tree-selection-extension.ts"], outfile: "dist-electron/tree-selection-extension.js" }),
+    build({ ...common, format: "esm", entryPoints: ["electron/omo/task-message-extension.ts"], outfile: "dist-electron/task-message-extension.js" }),
     build({ ...common, entryPoints: ["electron/main.ts"], outfile: "dist-electron/main.cjs" }),
     build({ ...common, entryPoints: ["electron/preload.ts"], outfile: "dist-electron/preload.cjs" }),
     build({ ...common, entryPoints: ["scripts/smoke-bridge.ts"], outfile: "dist-electron/smoke-bridge.cjs" }),

@@ -5,6 +5,7 @@ import type {
   ClientMethod,
   ClientParams,
   ClientResult,
+  DagRun,
   Model,
   RequestId,
   RpcNotification,
@@ -93,8 +94,22 @@ class FakeBridge implements OmoBridgeApi {
   getProxySettings(): ReturnType<OmoBridgeApi["getProxySettings"]> { return Promise.resolve({ baseUrl: "", apiKeyConfigured: false, modelCount: 0 }); }
   applyProxySettings(): ReturnType<OmoBridgeApi["applyProxySettings"]> { return Promise.resolve({ baseUrl: "", apiKeyConfigured: false, modelCount: 0 }); }
   loadTaskWork(): ReturnType<OmoBridgeApi["loadTaskWork"]> { return Promise.resolve([]); }
+  sendTaskMessage(): Promise<void> { return Promise.resolve(); }
   loadThreadLinks(): ReturnType<OmoBridgeApi["loadThreadLinks"]> { return Promise.resolve([]); }
   loadThreadOrigins(): ReturnType<OmoBridgeApi["loadThreadOrigins"]> { return Promise.resolve({}); }
+  loadContextUsage(): ReturnType<OmoBridgeApi["loadContextUsage"]> { return Promise.resolve({ tokens: null, provider: null, model: null, compacted: false }); }
+  loadNativeCatalog(): ReturnType<OmoBridgeApi["loadNativeCatalog"]> { return Promise.resolve({ commands: [], contextWindows: {}, error: null }); }
+  readonly dagLoads: Array<{ cwd: string; threadId: string }> = [];
+  dagRuns: (cwd: string, threadId: string) => Promise<DagRun[]> = async () => [];
+  loadDagRuns(cwd: string, threadId: string): ReturnType<OmoBridgeApi["loadDagRuns"]> {
+    this.dagLoads.push({ cwd, threadId });
+    return this.dagRuns(cwd, threadId);
+  }
+  terminalOpen(threadId: string, cwd: string): ReturnType<OmoBridgeApi["terminalOpen"]> { return Promise.resolve({ threadId, cwd, running: true, output: [] }); }
+  terminalWrite(): ReturnType<OmoBridgeApi["terminalWrite"]> { return Promise.resolve(); }
+  terminalKill(): ReturnType<OmoBridgeApi["terminalKill"]> { return Promise.resolve(); }
+  onTerminalChunk(): () => void { return () => {}; }
+  onTerminalExit(): () => void { return () => {}; }
   getIphoneStatus(): ReturnType<OmoBridgeApi["getIphoneStatus"]> { return Promise.resolve({ enabled: false, state: "searching", devices: [] }); }
   onIphoneStatus(): () => void { return () => {}; }
   readonly platform = "darwin";
@@ -137,6 +152,7 @@ class FakeBridge implements OmoBridgeApi {
       cwd: "/tmp/work/project",
       reasoningEffort: null,
     }),
+    "thread/settings/update": () => ({}),
     "turn/start": () => ({ turn: runningTurn }),
     "turn/steer": () => ({}),
     "turn/interrupt": () => ({}),
@@ -592,6 +608,42 @@ describe("createActions", () => {
     expect(conversation?.pendingUserMessages).toEqual([{ clientId: "id-1", text: "hello", sentAtMs: 5_000 }]);
   });
 
+  it("applies the composer model to the thread before the turn, because omo drops it on turn/start", async () => {
+    const context = setup();
+    await listThread(context);
+    await context.actions.openThread(THREAD_ID);
+    context.store.dispatch({ type: "composer/modelSelected", modelId: "opencodex/opencode-go/deepseek-v4.1-flash", effort: "high" });
+    expect(await context.actions.sendMessage("hello")).toBe(true);
+    expect(context.bridge.methods().slice(-2)).toEqual(["thread/settings/update", "turn/start"]);
+    expect(context.bridge.calls.at(-2)?.params).toEqual({ threadId: THREAD_ID, model: "opencodex/opencode-go/deepseek-v4.1-flash", effort: "high" });
+  });
+
+  it("fails the message instead of running it on another model when the thread settings are refused", async () => {
+    const context = setup();
+    await listThread(context);
+    await context.actions.openThread(THREAD_ID);
+    context.store.dispatch({ type: "composer/modelSelected", modelId: "opencodex/opencode-go/deepseek-v4.1-flash", effort: null });
+    context.bridge.failing.add("thread/settings/update");
+    expect(await context.actions.sendMessage("hello")).toBe(false);
+    expect(context.bridge.methods()).not.toContain("turn/start");
+  });
+
+  it("holds the first turn that would continue a conversation on another model, and warns once", async () => {
+    const context = setup();
+    await listThread(context);
+    context.bridge.history = async () => historyOf([{ ...failedHistory(), id: "done", status: "completed" as const, error: null }]);
+    await context.actions.openThread(THREAD_ID);
+    context.store.dispatch({ type: "composer/modelSelected", modelId: "opencodex/opencode-go/deepseek-v4.1-flash", effort: null });
+    expect(await context.actions.sendMessage("hello")).toBe(false);
+    expect(context.bridge.methods()).not.toContain("turn/start");
+    expect(context.store.getState().notices).toMatchObject([{ level: "info", code: "modelSwitch", threadId: THREAD_ID, params: { to: "opencodex/opencode-go/deepseek-v4.1-flash" } }]);
+    expect(await context.actions.sendMessage("hello")).toBe(true);
+    expect(context.bridge.methods().slice(-2)).toEqual(["thread/settings/update", "turn/start"]);
+    expect(context.store.getState().notices).toHaveLength(1);
+    expect(await context.actions.sendMessage("again")).toBe(true);
+    expect(context.store.getState().notices).toHaveLength(1);
+  });
+
   it("steers the running turn instead of starting a new one", async () => {
     const context = setup();
     await listThread(context);
@@ -663,6 +715,64 @@ describe("createActions", () => {
     expect(context.bridge.methods()).not.toContain("thread/resume");
     expect(context.store.getState().conversations[THREAD_ID]?.historyState).toBe("loaded");
     expect(context.store.getState().activeThreadId).toBe(THREAD_ID);
+  });
+
+  const recordedRun: DagRun = { run_id: "recorded", run_key: "key", name: "Recorded workflow", status: "running",
+    created_at: "2026-10-07T00:00:00Z", updated_at: "2026-10-07T00:01:00Z", counts: { running: 1 },
+    nodes: [{ id: "A", prompt: "Work", state: "running", depends_on: [], attempt: 1, created_at: "2026-10-07T00:00:00Z" }], edges: [], waves: [] };
+
+  it("restores each opened parent and child session's own recorded DAG without attaching it", async () => {
+    const context = setup();
+    context.bridge.threadList = () => ({ data: [makeThread(THREAD_ID, { cwd: "/parent", path: SESSION_PATH }), makeThread("child", { cwd: "/child", path: "/child.jsonl" })], nextCursor: null });
+    context.bridge.dagRuns = async (_cwd, threadId) => [{ ...recordedRun, run_id: threadId }];
+    await listThread(context);
+    await context.actions.openThread(THREAD_ID);
+    await context.actions.openThread("child");
+    expect(context.bridge.dagLoads).toEqual([{ cwd: "/parent", threadId: THREAD_ID }, { cwd: "/child", threadId: "child" }]);
+    for (const id of [THREAD_ID, "child"]) expect(context.store.getState().conversations[id]?.live).toMatchObject({
+      freshness: "unattached", runsSource: "history", runOrder: [id], activityLog: [], runs: { [id]: { run_id: id } },
+    });
+    expect(context.bridge.methods()).not.toContain("thread/resume");
+    expect(context.store.getState().activeThreadId).toBe("child");
+  });
+
+  it.each([false, true])("does not overwrite a live DAG snapshot arriving during restore (empty=%s)", async (empty) => {
+    const context = setup();
+    await listThread(context);
+    const pending = deferred<DagRun[]>();
+    const requested = deferred<void>();
+    context.bridge.dagRuns = () => { requested.resolve(); return pending.promise; };
+    const opening = context.actions.openThread(THREAD_ID);
+    await requested.promise;
+    const liveRun = { ...recordedRun, run_id: "live" };
+    context.store.dispatch({ type: "rpc/notification", receivedAtMs: 1, notification: { method: "extension_event", params: {
+      threadId: THREAD_ID, name: "omo.dag.updated", data: { parent_session_id: THREAD_ID, runs: empty ? [] : [liveRun] },
+    } } });
+    pending.resolve([recordedRun]);
+    await opening;
+    expect(context.store.getState().conversations[THREAD_ID]?.live).toMatchObject({
+      freshness: "live", runsSource: "live", runOrder: empty ? [] : ["live"], activityLog: [],
+    });
+    expect(context.store.getState().conversations[THREAD_ID]?.live.runs["recorded"]).toBeUndefined();
+  });
+
+  it("skips persisted DAG reads when the session already has a live snapshot", async () => {
+    const context = setup();
+    await listThread(context);
+    context.store.dispatch({ type: "rpc/notification", receivedAtMs: 1, notification: { method: "extension_event", params: {
+      threadId: THREAD_ID, name: "omo.dag.updated", data: { parent_session_id: THREAD_ID, runs: [recordedRun] },
+    } } });
+    await context.actions.openThread(THREAD_ID);
+    expect(context.bridge.dagLoads).toEqual([]);
+  });
+
+  it("keeps successfully loaded history usable when its persisted DAG read fails", async () => {
+    const context = setup();
+    await listThread(context);
+    context.bridge.dagRuns = async () => { throw new Error("DAG read failed"); };
+    await context.actions.openThread(THREAD_ID);
+    expect(context.store.getState().conversations[THREAD_ID]?.historyState).toBe("loaded");
+    expect(context.store.getState().notices.at(-1)).toMatchObject({ threadId: THREAD_ID, message: "DAG read failed" });
   });
 
   it("loads session annotations when opening history and keeps them on a turns-only reload", async () => {
@@ -1117,6 +1227,10 @@ describe("branching from a user message", () => {
         dispatch({ type: "composer/modelSelected", modelId: "opencodex/openai/gpt-6.1-sol", effort: "low" });
       }
     };
+    // The conversation ran on another model: the first attempt is held before the session tree moves.
+    await expect(context.actions.branchFrom(THREAD_ID, "3", "u", "edited", "regenerated")).resolves.toBe(false);
+    expect(context.bridge.branches).toEqual([]);
+    expect(selectToastNotice(context.store.getState())).toMatchObject({ code: "modelSwitch" });
     await expect(context.actions.branchFrom(THREAD_ID, "3", "u", "edited", "regenerated")).resolves.toBe(true);
     expect(context.bridge.calls.find((call) => call.method === "turn/start")?.params).toMatchObject({
       model: "opencodex/p2bc7fb/gpt-6.1-sol", effort: "high",

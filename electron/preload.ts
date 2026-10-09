@@ -38,6 +38,8 @@ import type { WorkspaceFile, WorkspaceDocument } from "../shared/workspace";
 import type { DeviceOverview } from "../shared/device-overview";
 import type { AppUpdateStatus } from "../shared/app-update";
 import type { ModelRoutingInput, ModelRoutingSettings } from "../shared/model-routing";
+import type { ContextUsage, NativeCatalog, TerminalChunk, TerminalExit, TerminalSnapshot, WORKBENCH_IPC } from "../shared/workbench";
+import type { DagRun } from "../shared/protocol";
 
 // The sandboxed preload can require only "electron", so the channel table is restated here; `satisfies` keeps it equal to IPC.
 const CHANNELS = {
@@ -75,6 +77,7 @@ const CHANNELS = {
   installLog: "omo:install-log",
   loadHistory: "history:load",
   loadTaskWork: "history:task-work",
+  sendTaskMessage: "history:task-message",
   loadThreadLinks: "history:thread-links",
   loadThreadOrigins: "history:thread-origins",
   branchSession: "history:branch",
@@ -104,6 +107,17 @@ const CHANNELS = {
   setPermissionPreset: "workspace:preset:set",
 } as const satisfies typeof IPC;
 
+const WORKBENCH = {
+  loadContextUsage: "workbench:context-usage",
+  loadNativeCatalog: "workbench:native-catalog",
+  loadDagRuns: "workbench:dag-runs",
+  terminalOpen: "terminal:open",
+  terminalWrite: "terminal:write",
+  terminalKill: "terminal:kill",
+  terminalChunk: "terminal:chunk",
+  terminalExit: "terminal:exit",
+} as const satisfies typeof WORKBENCH_IPC;
+
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
   try {
     const result: T = await ipcRenderer.invoke(channel, ...args);
@@ -122,6 +136,14 @@ function subscribe<T>(channel: string, listener: (payload: T) => void): () => vo
 }
 
 const api = {
+  loadContextUsage: (sessionPath: string): Promise<ContextUsage> => invoke(WORKBENCH.loadContextUsage, sessionPath),
+  loadNativeCatalog: (cwd: string, force?: boolean): Promise<NativeCatalog> => invoke(WORKBENCH.loadNativeCatalog, cwd, force === true),
+  loadDagRuns: (cwd: string, threadId: string): Promise<DagRun[]> => invoke(WORKBENCH.loadDagRuns, cwd, threadId),
+  terminalOpen: (threadId: string, cwd: string): Promise<TerminalSnapshot> => invoke(WORKBENCH.terminalOpen, threadId, cwd),
+  terminalWrite: (threadId: string, line: string): Promise<void> => invoke(WORKBENCH.terminalWrite, threadId, line),
+  terminalKill: (threadId: string): Promise<void> => invoke(WORKBENCH.terminalKill, threadId),
+  onTerminalChunk: (listener: (chunk: TerminalChunk) => void) => subscribe(WORKBENCH.terminalChunk, listener),
+  onTerminalExit: (listener: (exit: TerminalExit) => void) => subscribe(WORKBENCH.terminalExit, listener),
   readModelRouting: (): Promise<ModelRoutingSettings> => invoke(CHANNELS.readModelRouting),
   saveModelRouting: (input: ModelRoutingInput): Promise<ModelRoutingSettings> => invoke(CHANNELS.saveModelRouting, input),
   importExistingMcpConfigs: (): Promise<{ imported: string[]; sources: number }> => invoke(CHANNELS.importExistingMcpConfigs),
@@ -160,6 +182,7 @@ const api = {
   onInstallLog: (listener: (line: InstallLogLine) => void) => subscribe(CHANNELS.installLog, listener),
   loadHistory: (sessionPath: string): Promise<HistoryResult> => invoke(CHANNELS.loadHistory, sessionPath),
   loadTaskWork: (cwd: string, parentSessionId: string): Promise<TaskWork[]> => invoke(CHANNELS.loadTaskWork, cwd, parentSessionId),
+  sendTaskMessage: (parentSessionId: string, taskId: string, message: string): Promise<void> => invoke(CHANNELS.sendTaskMessage, parentSessionId, taskId, message),
   loadThreadLinks: (cwds: string[], paths?: string[]) => invoke(CHANNELS.loadThreadLinks, cwds, paths),
   loadThreadOrigins: (paths: string[]): Promise<Record<string, "agent">> => invoke(CHANNELS.loadThreadOrigins, paths),
   branchSession: (sessionPath: string, point: BranchPoint): Promise<BranchResult> => invoke(CHANNELS.branchSession, sessionPath, point),

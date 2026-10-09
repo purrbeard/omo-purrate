@@ -22,6 +22,16 @@ it("keeps an assistant as branch representative when runtime notices follow it",
     { type: "custom_message", customType: "omo-model-profile:unavailable", id: "notice-tail", parentId: "a", content: "profile unavailable" }].map(value => JSON.stringify(value)).join("\n");
   expect(parseSessionTree(source).branches).toEqual([{ entryId: "a", label: "answer", active: true }]);
 });
+
+it("labels branches with a short plain-text summary instead of raw Markdown", () => {
+  const answer = "**32개 스레드를 정리했습니다.** 자세한 내용은 [릴리스](https://example.com)와 `코드`를 확인하세요. " + "긴 설명 ".repeat(30);
+  const source = [entry("u", null, "user", "question"), entry("a", "u", "assistant", answer)].map(value => JSON.stringify(value)).join("\n");
+  const [branch] = parseSessionTree(source).branches;
+  expect(branch?.label.startsWith("32개 스레드를 정리했습니다. 자세한 내용은 릴리스와 코드를")).toBe(true);
+  expect(branch?.label).not.toMatch(/[*`[\]()]/);
+  expect(branch?.label.length).toBeLessThanOrEqual(60);
+  expect(branch?.label.endsWith("…")).toBe(true);
+});
 const node = (value: Frame, children: Frame[] = []): Frame => ({ entry: value, children });
 const tree = {
   leafId: "persisted",

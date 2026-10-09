@@ -1,13 +1,14 @@
 import type { AccountUsage, BridgeStatus, OmoBridgeApi } from "../../shared/ipc";
 import type { ApprovalDecision, ProviderAccount, ReasoningEffort, RequestId, RpcNotification, ThreadSessionResult } from "../../shared/protocol";
 import { messageInput, type ImageInput } from "../ui/composer/attachments";
+import { normalizeModel, resolveEffort } from "../ui/composer/model-groups";
 import { resendOf, storedText } from "../ui/conversation/resend";
 import { uiState } from "../ui/ui-state";
 import type { AppStore } from "./store";
 import type { AppState, NoticeCode, SessionModel, SideChat } from "./types";
 import { parseStoredSides, selectSidesOf, sideDraftKey, sideName } from "./btw";
 import { isModel, isSkill, isSkillError, isThread, parseNotification } from "./wire";
-import { selectSkillCatalog } from "./selectors";
+import { resolveComposerModel, selectSkillCatalog } from "./selectors";
 import { object, parseGoal } from "./live-wire";
 
 import { normalizeMcpPage, type McpServer } from "./mcp";
@@ -140,8 +141,8 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
   const newId = options.newId ?? (() => crypto.randomUUID());
   const sideStorage = options.sideStorage ?? memorySideStorage();
 
-  const notify = (level: "info" | "error", message: string, threadId: string | null = null, code?: NoticeCode): void => {
-    store.dispatch({ type: "notice/pushed", notice: { id: newId(), level, message, threadId, ...(code === undefined ? {} : { code }) } });
+  const notify = (level: "info" | "error", message: string, threadId: string | null = null, code?: NoticeCode, params?: Record<string, string>): void => {
+    store.dispatch({ type: "notice/pushed", notice: { id: newId(), level, message, threadId, ...(code === undefined ? {} : { code }), ...(params === undefined ? {} : { params }) } });
   };
   const fail = (error: unknown, threadId: string | null = null): void => notify("error", errorMessage(error), threadId);
   const guarded = async (work: () => Promise<void>, threadId: string | null = null): Promise<void> => {
@@ -260,7 +261,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     guarded(async () => {
       const result = await bridge.request("model/list", { includeHidden: false });
       if (!Array.isArray(result.data)) throw new Error("omo returned a malformed model/list result");
-      store.dispatch({ type: "models/loaded", models: result.data.filter(isModel) });
+      store.dispatch({ type: "models/loaded", models: result.data.filter(isModel).map(normalizeModel) });
     });
 
   const refreshThreads = (append = false): Promise<void> =>
@@ -325,6 +326,70 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     }
   };
 
+  /**
+   * Applies the composer selection to the thread. omo reads a turn's model and effort from the thread settings and drops
+   * them on turn/start, so without this a session keeps running on the profile model omo chose at startup.
+   */
+  const applyThreadSettings = async (threadId: string, model: string | null, effort: ReasoningEffort | null): Promise<void> => {
+    if (model === null && effort === null) return;
+    const update = (withEffort: boolean) => bridge.request("thread/settings/update", {
+      threadId, ...(model === null ? {} : { model }), ...(withEffort && effort !== null ? { effort } : {}),
+    });
+    // Keeps the session omo reported in step with what was just applied, so the next turn is compared against it.
+    const applied = (appliedEffort: ReasoningEffort | null): void => {
+      if (model === null) return;
+      const cut = model.indexOf("/");
+      const previous = store.getState().conversations[threadId]?.session;
+      store.dispatch({ type: "thread/sessionUpdated", threadId, session: {
+        modelProvider: cut > 0 ? model.slice(0, cut) : previous?.modelProvider ?? "",
+        model: store.getState().models.find((entry) => entry.id === model)?.model ?? (cut > 0 ? model.slice(cut + 1) : model),
+        reasoningEffort: appliedEffort ?? previous?.reasoningEffort ?? null,
+      } });
+    };
+    try {
+      await update(true);
+      applied(effort);
+    } catch (error) {
+      const message = errorMessage(error);
+      // An omo without thread settings keeps choosing its own model; nothing more can be applied to it.
+      if (message.startsWith("-32601")) return;
+      // A level the model does not offer must not block the message; the model itself still has to apply.
+      if (effort === null || !/effort/i.test(message)) throw error;
+      if (model !== null) { await update(false); applied(null); }
+    }
+  };
+
+  const ensureResumed = async (threadId: string): Promise<void> => {
+    if (store.getState().conversations[threadId]?.resumed === true) return;
+    const resumed = await bridge.request("thread/resume", { threadId });
+    if (!isThread(resumed.thread)) throw new Error("omo returned a malformed thread/resume result");
+    store.dispatch({ type: "thread/opened", thread: resumed.thread, resumed: true, session: sessionOf(resumed) });
+    await readGoal(threadId);
+    await loadSkills(resumed.thread.cwd, { force: true });
+  };
+
+  const warnedSwitches = new Set<string>();
+  /**
+   * False the first time a conversation that already has turns is about to continue on another model: the message is
+   * held back and one notice says what the switch costs. A prompt cache belongs to one model, so the whole context is
+   * sent again uncached, and a smaller window can force a compaction. Sending again goes through.
+   */
+  const confirmModelSwitch = (threadId: string, modelId: string | null): boolean => {
+    const state = store.getState();
+    const conversation = state.conversations[threadId];
+    const session = conversation?.session;
+    if (modelId === null || conversation === undefined || session == null || conversation.turns.length === 0) return true;
+    const running = resolveComposerModel(state.models, null, session);
+    const runningId = running?.id ?? `${session.modelProvider}/${session.model}`;
+    const key = `${threadId}\n${modelId}`;
+    if (runningId === modelId || warnedSwitches.has(key)) return true;
+    warnedSwitches.add(key);
+    const target = state.models.find((model) => model.id === modelId);
+    notify("info", `Not sent yet: switching from ${runningId} to ${modelId} discards this conversation's prompt cache. Send again to continue.`, threadId, "modelSwitch",
+      { from: running?.displayName ?? runningId, to: target?.displayName ?? modelId });
+    return false;
+  };
+
   /** Sends to a thread: steers its running turn, otherwise resumes the thread when needed and starts a turn. */
   const deliver = async (threadId: string, text: string, announceSteer: boolean, images: readonly ImageInput[] = [], selection?: AppState["composer"]): Promise<boolean> => {
     let imagePaths: string[];
@@ -350,15 +415,13 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     }
     const clientId = newId();
     try {
-      if (conversation?.resumed !== true) {
-        const resumed = await bridge.request("thread/resume", { threadId });
-        if (!isThread(resumed.thread)) throw new Error("omo returned a malformed thread/resume result");
-        store.dispatch({ type: "thread/opened", thread: resumed.thread, resumed: true, session: sessionOf(resumed) });
-        await readGoal(threadId);
-        await loadSkills(resumed.thread.cwd, { force: true });
-      }
+      await ensureResumed(threadId);
+      if (!confirmModelSwitch(threadId, (selection ?? store.getState().composer).modelId)) return false;
       store.dispatch({ type: "user/messageSent", threadId, clientId, text, ...(images.length === 0 ? {} : { images }), sentAtMs: now() });
-      const { modelId, effort } = selection ?? store.getState().composer;
+      const { modelId, effort: chosenEffort } = selection ?? store.getState().composer;
+      // The same resolution the composer shows, so the level on screen is the level the turn runs with.
+      const effort = resolveEffort(store.getState().models.find((model) => model.id === modelId) ?? null, chosenEffort);
+      await applyThreadSettings(threadId, modelId, effort);
       await bridge.request("turn/start", {
         threadId,
         input: messageInput(text, imagePaths),
@@ -561,6 +624,14 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       } catch (error) {
         store.dispatch({ type: "history/failed", threadId, message: errorMessage(error) });
         fail(error, threadId);
+        return;
+      }
+      const live = store.getState().conversations[threadId]?.live;
+      if (cwd !== undefined && live !== undefined && live.runOrder.length === 0 && live.runsSource !== "live") {
+        await guarded(async () => {
+          const runs = await bridge.loadDagRuns(cwd, threadId);
+          store.dispatch({ type: "dagRuns/loaded", threadId, runs, generation: live.generation, revision: live.dagRevision });
+        }, threadId);
       }
     },
 
@@ -661,6 +732,16 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         notify("error", "Wait for the running turn to finish, or stop it, before editing or regenerating.", threadId, "branchBusy");
         return false;
       }
+      // The warning has to come before the session tree moves; the session omo reports is only known once resumed.
+      if (selection.modelId !== null) {
+        try {
+          await ensureResumed(threadId);
+        } catch (error) {
+          fail(error, threadId);
+          return false;
+        }
+        if (!confirmModelSwitch(threadId, selection.modelId)) return false;
+      }
       // Item ids are only unique within a turn, so the clicked message is found by its turn and item id together.
       const shown = conversation.turns.flatMap((turn) =>
         turn.items.flatMap((entry) => (entry.item.type === "userMessage" ? [{ turnId: turn.id, item: entry.item }] : [])));
@@ -752,7 +833,8 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     },
 
     setSidePanel(open) {
-      if (open) { uiState.setWorkflowPanelOpen(false); uiState.setWorkspacePanelOpen(false); }
+      if (open) uiState.setRightTab("btw");
+      else uiState.closeRightTab("btw");
       store.dispatch({ type: "btw/toggled", open });
     },
 
@@ -788,6 +870,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     },
 
     async askNewSide({ question, prompt, context }) {
+      uiState.setRightTab("btw");
       store.dispatch({ type: "btw/toggled", open: true });
       const state = store.getState();
       const parentId = state.activeThreadId;

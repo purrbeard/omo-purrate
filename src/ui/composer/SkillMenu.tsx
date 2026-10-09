@@ -158,14 +158,14 @@ export function SkillMenu({
               >
                 <span className={css.head}>
                   <span className={css.name}>{`/${command.name}`}</span>
-                  <span className={css.scope}>{t("btw.command.kind")}</span>
+                  <span className={css.scope}>{t(`composer.commands.${command.source ?? "builtin"}`)}</span>
                   {command.aliases.map((alias) => (
                     <span key={alias} className={css.scope}>
                       {t("btw.command.alias", { alias })}
                     </span>
                   ))}
                 </span>
-                <span className={css.description}>{t(command.description)}</span>
+                <span className={css.description}>{command.nativeDescription ?? t(command.description)}</span>
               </button>
             );
           }
@@ -191,6 +191,7 @@ export function SkillMenu({
             >
               <span className={css.head}>
                 <span className={css.name}>{skill.name}</span>
+                <span className={css.scope}>{t("composer.commands.skill")}</span>
                 <span className={css.scope}>{t(SCOPE_KEY[skill.scope])}</span>
                 {!skill.enabled && (
                   <span className={css.badge} title={t("composer.skills.userOnlyHint")}>

@@ -57,6 +57,22 @@
   right: 8px;
   bottom: 8px;
   max-width: calc(100% - 16px);
+  border-radius: var(--dsw-radius-lg);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 28%);
+  animation: overlayIn var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+@keyframes overlayIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rightOverlay {
+    animation: none;
+  }
 }
 
 .sidebarScrim {

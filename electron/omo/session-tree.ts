@@ -87,6 +87,14 @@ function text(content: unknown): string {
   return Array.isArray(content) ? content.flatMap((block) => isRecord(block) && block["type"] === "text" && typeof block["text"] === "string" ? [block["text"]] : []).join("\n") : "";
 }
 
+const LABEL_LIMIT = 60;
+
+function plain(markdown: string): string {
+  const line = markdown.replace(/```[\s\S]*?```/g, " ").replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[*_`~#>|]/g, "").replace(/\s+/g, " ").trim();
+  return line.length > LABEL_LIMIT ? `${line.slice(0, LABEL_LIMIT - 1).trimEnd()}…` : line;
+}
+
 function normalizeTree(value: unknown): SessionTreeResult {
   const { tree, leafId } = parseTree(value);
   const branches = new Map<string, { entryId: string; label: string; active: boolean }>();
@@ -104,7 +112,7 @@ function normalizeTree(value: unknown): SessionTreeResult {
       const entry = meaningful.entry;
       const content = isRecord(entry["message"]) ? entry["message"]["content"] : entry["content"];
       const fallback = isRecord(entry["message"]) ? String(entry["message"]["role"]) : "custom_message";
-      branches.set(entry.id, { entryId: entry.id, label: label ?? (text(content).replace(/\s+/g, " ").trim().slice(0, 160) || fallback), active: false });
+      branches.set(entry.id, { entryId: entry.id, label: label ?? (plain(text(content)) || fallback), active: false });
     }
     for (const child of [...node.children].reverse()) pending.push({ node: child, meaningful, label });
   }

@@ -85,7 +85,7 @@ export const ConversationHeader = memo(function ConversationHeader({
         )}
         {cwd !== "" && <CommitPushButton key={cwd} cwd={cwd} />}
         {cwd !== "" && <OpenButton cwd={cwd} />}
-        {cwd !== "" && <button type="button" className={css.sidebarToggle} data-testid="workspace-toggle" aria-pressed={workspacePanelOpen} aria-label={t("shell.workspace.files")} onClick={() => uiState.setWorkspacePanelOpen(!workspacePanelOpen)}>{t("shell.workspace.files")}</button>}
+        {cwd !== "" && <button type="button" className={css.panelButton} data-testid="workspace-toggle" aria-pressed={workspacePanelOpen} aria-label={t("shell.workspace.files")} onClick={() => uiState.setWorkspacePanelOpen(!workspacePanelOpen)}>{t("shell.workspace.files")}</button>}
         {panels}
       </div>
     </header>

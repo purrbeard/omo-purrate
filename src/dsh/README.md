@@ -36,4 +36,5 @@ External dependencies are declared in `package.json` `devDependencies` with the 
 
 - `primitives/FishLogo.tsx` and `primitives/BrandWordmark.tsx` are NOT copied: they embed the DeepSeek whale mark and wordmark, which are trademarks. The app brand is the text wordmark "OmO".
 - `primitives/index.ts`: the three export lines for `FishLogo`, `FISH_LOGO_PATH`, `FISH_LOGO_VIEWBOX`, `BrandWordmark` and `BrandWordmarkProps` are removed (lines 44-46 of the original). Nothing else changed.
+- `primitives/markdown/katex.tsx`: the eager `import katex from 'katex'` is replaced by a dynamic import on the first TeX node, so KaTeX stays out of the app entry chunk; the rendered element tree is unchanged once it has loaded.
 - `primitives/css-modules.d.ts` is NOT copied: `vite/client` already declares `*.module.css`, and a second ambient declaration would duplicate its default export.

@@ -180,6 +180,10 @@ test("custom profile models persist, drive previews and turns, and restore Autom
     await expect(led).toHaveAttribute("data-effort", "MEDIUM");
     await handle.press("Enter");
     await page.keyboard.press("Escape");
+    // The session ran on Fake Beta: continuing it on another model is held once with the cache warning.
+    await byTestId(page, TESTID.composerInput).fill("SCENARIO:echo custom normal profile");
+    await byTestId(page, TESTID.composerSend).click();
+    await expect(byTestId(page, TESTID.noticeToast)).toContainText("GPT-6 Astra");
     await send(page, "SCENARIO:echo custom normal profile");
     await expect(byTestId(page, TESTID.turn).last()).toHaveAttribute("data-status", "completed");
     expect(launched.readFakeLog()).toContainEqual(expect.objectContaining({

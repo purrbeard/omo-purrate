@@ -1,5 +1,5 @@
 import { resolveProfile } from "./ui/composer/model-profiles";
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { lazy, Suspense, useEffect, useMemo, useSyncExternalStore } from "react";
 import { createActions, createAppStore, localSideStorage, selectAgentChildren, selectMainThreadId, selectTasks } from "./state";
 import { I18nProvider, resolveLocale } from "./i18n";
 import { ActionsContext, StoreContext, useAppSelector } from "./ui/app-context";
@@ -11,17 +11,22 @@ import { useNewSessionFlow } from "./ui/new-session";
 import { NoticeToasts } from "./ui/notices/NoticeToasts";
 import { ThreadNotifications } from "./ui/notices/ThreadNotifications";
 import { ConnectionBanner } from "./ui/onboarding/ConnectionBanner";
-import { Onboarding } from "./ui/onboarding/Onboarding";
-import { SettingsDialog } from "./ui/settings/SettingsDialog";
 import { AppFrame } from "./ui/shell/AppFrame";
+import { RightDock, useTerminalShortcut } from "./ui/shell/RightDock";
 import { Sidebar } from "./ui/sidebar/Sidebar";
 import { applyThemePreference } from "./ui/theme";
 import { uiState, useUiState, WORKFLOW_PANEL_WIDTHS } from "./ui/ui-state";
-import { WorkspacePanel } from "./ui/workspace/WorkspacePanel";
+import type { RightTab } from "./ui/ui-state";
 import { WorkflowPanel } from "./ui/conversation/WorkflowPanel";
-import { AgentPanel } from "./ui/conversation/AgentPanel";
+import { AgentWorkspace } from "./ui/conversation/AgentWorkspace";
 import { ProjectPickerHost } from "./ui/projects/ProjectPickerHost";
-import { SetupWizard } from "./ui/wizard/SetupWizard";
+
+// Surfaces that are closed at startup load on first use, keeping them out of the entry chunk.
+const Onboarding = lazy(() => import("./ui/onboarding/Onboarding").then(module => ({ default: module.Onboarding })));
+const SettingsDialog = lazy(() => import("./ui/settings/SettingsDialog").then(module => ({ default: module.SettingsDialog })));
+const TerminalPanel = lazy(() => import("./ui/terminal/TerminalPanel").then(module => ({ default: module.TerminalPanel })));
+const WorkspacePanel = lazy(() => import("./ui/workspace/WorkspacePanel").then(module => ({ default: module.WorkspacePanel })));
+const SetupWizard = lazy(() => import("./ui/wizard/SetupWizard").then(module => ({ default: module.SetupWizard })));
 
 function MainPane() {
   return (
@@ -33,28 +38,37 @@ function MainPane() {
   );
 }
 
-const renderSidePanel = (placement: "docked" | "overlay") => <SidePanel placement={placement} />;
-const renderWorkspacePanel = (placement: "docked" | "overlay") => <WorkspacePanel placement={placement} onClose={() => uiState.setWorkspacePanelOpen(false)} />;
-const renderWorkflowPanel = (placement: "docked" | "overlay") => <WorkflowPanel placement={placement} />;
-const renderAgentPanel = (placement: "docked" | "overlay") => <AgentPanel placement={placement} />;
+type Placement = "docked" | "overlay";
+
+const PANELS: Record<RightTab, (placement: Placement) => JSX.Element> = {
+  agents: (placement) => <AgentWorkspace placement={placement} />,
+  btw: (placement) => <SidePanel placement={placement} />,
+  terminal: (placement) => <TerminalPanel placement={placement} onClose={() => uiState.closeRightTab("terminal")} />,
+  workflow: (placement) => <WorkflowPanel placement={placement} />,
+  files: (placement) => <WorkspacePanel placement={placement} onClose={() => uiState.setWorkspacePanelOpen(false)} />,
+};
+
+function dockWidth(tab: RightTab, workflowWidth: number): number {
+  switch (tab) {
+    case "agents": return 560;
+    case "btw": return SIDE_PANEL_WIDTH;
+    case "terminal": return 440;
+    case "workflow": return workflowWidth;
+    case "files": return 440;
+  }
+}
 
 function Shell() {
   const bridgeState = useAppSelector((state) => state.bridge?.state ?? null);
-  const sidePanelOpen = useAppSelector((state) => state.btw.open);
   useSidePanelShortcut();
-  const { sidebarVisible, sidebarWidth, workspacePanelOpen, workflowPanelOpen, workflowPanelSize, onboardingOpen, agentPanelOpen } = useUiState();
+  useTerminalShortcut();
+  const { sidebarVisible, sidebarWidth, workflowPanelSize, onboardingOpen, settingsOpen, rightTab, agentAuto, canDock } = useUiState();
   const hasAgents = useAppSelector(state => {
     const main = selectMainThreadId(state);
     return main !== null && (selectAgentChildren(state, main).length > 0 || selectTasks(state, main).length > 0 || state.threadLinks.some(link => link.parentId === main && link.taskId !== undefined));
   });
+  const activeTab: RightTab | null = rightTab ?? (agentAuto && hasAgents && canDock ? "agents" : null);
   const newSession = useNewSessionFlow();
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 799px)");
-    const close = () => { if (media.matches) uiState.setAgentPanelOpen(false); };
-    close();
-    media.addEventListener("change", close);
-    return () => media.removeEventListener("change", close);
-  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -83,7 +97,7 @@ function Shell() {
   if (bridgeState === "not-found") {
     return (
       <>
-        <Onboarding />
+        <Suspense fallback={null}><Onboarding /></Suspense>
         <NoticeToasts />
       </>
     );
@@ -96,12 +110,13 @@ function Shell() {
         sidebarVisible={sidebarVisible}
         sidebarWidth={sidebarWidth}
         onSidebarWidthChange={uiState.setSidebarWidth}
-        rightPanel={workspacePanelOpen ? renderWorkspacePanel : workflowPanelOpen ? renderWorkflowPanel : sidePanelOpen ? renderSidePanel : agentPanelOpen && hasAgents ? renderAgentPanel : null}
-        rightPanelWidth={workspacePanelOpen ? 440 : workflowPanelOpen ? WORKFLOW_PANEL_WIDTHS[workflowPanelSize] : sidePanelOpen ? SIDE_PANEL_WIDTH : 340}
+        onCanDockChange={uiState.setCanDock}
+        rightPanel={activeTab === null ? null : (placement: Placement) => <RightDock tab={activeTab} placement={placement}><Suspense fallback={null}>{PANELS[activeTab](placement)}</Suspense></RightDock>}
+        rightPanelWidth={activeTab === null ? 0 : dockWidth(activeTab, WORKFLOW_PANEL_WIDTHS[workflowPanelSize])}
       />
-      <SettingsDialog />
+      {settingsOpen && <Suspense fallback={null}><SettingsDialog /></Suspense>}
       <ProjectPickerHost />
-      {onboardingOpen && <SetupWizard />}
+      {onboardingOpen && <Suspense fallback={null}><SetupWizard /></Suspense>}
       <ThreadNotifications />
       <NoticeToasts />
     </>

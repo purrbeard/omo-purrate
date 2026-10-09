@@ -15,9 +15,36 @@
  * tag name regardless of namespace.
  */
 
-import { createElement } from 'react'
+import { createElement, useSyncExternalStore } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import katex from 'katex'
+
+/* OmO local edit: KaTeX (about a quarter megabyte minified) loads on the first
+   TeX node instead of with the app entry. Until it arrives the source text
+   shows in place; once loaded, rendering is synchronous and the element tree
+   is the same one the eager import produced. */
+type Katex = (typeof import('katex'))['default']
+let katex: Katex | null = null
+let requested = false
+const waiting = new Set<() => void>()
+
+function subscribe(notify: () => void): () => void {
+  waiting.add(notify)
+  if (!requested) {
+    requested = true
+    void import('katex').then((module) => {
+      katex = module.default
+      for (const wake of [...waiting]) wake()
+    })
+  }
+  return () => {
+    waiting.delete(notify)
+  }
+}
+
+function PendingTex({ value, displayMode }: { value: string; displayMode: boolean }) {
+  const loaded = useSyncExternalStore(subscribe, () => katex)
+  return <>{loaded === null ? value : renderLoaded(loaded, value, displayMode)}</>
+}
 
 /**
  * Convert one inline `style` attribute string into React's style object.
@@ -64,6 +91,10 @@ function domToReact(node: ChildNode, key: number): ReactNode {
  * parse (colored with KaTeX's stock `errorColor`, matching rehype-katex).
  */
 export function renderTexToReact(value: string, displayMode: boolean): ReactNode {
+  return katex === null ? <PendingTex value={value} displayMode={displayMode} /> : renderLoaded(katex, value, displayMode)
+}
+
+function renderLoaded(katex: Katex, value: string, displayMode: boolean): ReactNode {
   let html: string
   try {
     html = katex.renderToString(value, { displayMode, throwOnError: true })

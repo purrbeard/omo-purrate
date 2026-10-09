@@ -33,6 +33,8 @@ export function useTaskWork(threadId: string): string | null {
       }
     };
     void refresh();
+    const delivered = (event: Event): void => { if (event instanceof CustomEvent && event.detail === threadId) void refresh(); };
+    window.addEventListener("omo-ui:task-message", delivered);
     const timer = ticking ? setInterval(() => void refresh(), 2000) : null;
     const unsubscribe = window.omo.onNotification((notification) => {
       if (notification.method !== "extension_event") return;
@@ -41,6 +43,7 @@ export function useTaskWork(threadId: string): string | null {
     });
     return () => {
       disposed = true;
+      window.removeEventListener("omo-ui:task-message", delivered);
       if (timer !== null) clearInterval(timer);
       unsubscribe();
     };

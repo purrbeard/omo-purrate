@@ -44,11 +44,14 @@ function WorkspaceContents({ cwd, placement, onClose }: WorkspacePanelProps & { 
     return () => window.removeEventListener(GIT_REFRESH_EVENT, refresh);
   }, []);
 
+  // The opener survives docked/overlay switches: while docked the header toggle is hidden and cannot take focus back.
+  const opener = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (placement !== "overlay") return;
-    const previous = document.activeElement;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body && panelRef.current?.contains(active) !== true) opener.current = active;
     closeRef.current?.focus();
-    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true }); };
+    return () => { if (opener.current?.isConnected) opener.current.focus({ preventScroll: true }); };
   }, [placement]);
 
   useEffect(() => {

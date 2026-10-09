@@ -311,13 +311,18 @@ function getThread(threadId) {
 
 const threadView = (record, includeTurns) => ({ ...record.thread, turns: includeTurns ? record.thread.turns : [] });
 
-const sessionResult = (record) => ({
-  thread: threadView(record, true),
-  model: DEMO?.session?.model ?? "alpha",
-  modelProvider: DEMO?.session?.modelProvider ?? "fake",
-  cwd: record.thread.cwd,
-  reasoningEffort: "medium",
-});
+// Like omo, a thread keeps the model and effort set through thread/settings/update and reports them on resume.
+const sessionResult = (record) => {
+  const applied = record.settings?.model;
+  const cut = applied?.indexOf("/") ?? -1;
+  return {
+    thread: threadView(record, true),
+    model: applied === undefined ? DEMO?.session?.model ?? "alpha" : applied.slice(cut + 1),
+    modelProvider: applied === undefined || cut <= 0 ? DEMO?.session?.modelProvider ?? "fake" : applied.slice(0, cut),
+    cwd: record.thread.cwd,
+    reasoningEffort: record.settings?.effort ?? "medium",
+  };
+};
 
 // ---- turns --------------------------------------------------------------------------------
 
@@ -402,7 +407,9 @@ function appendAgentDelta(turn, item, delta) {
 
 function closeAgentMessage(record, turn, item, stopReason) {
   finishItem(turn, item);
-  recordEntry(record, assistantEntry([{ type: "text", text: item.text }], stopReason));
+  const entry = assistantEntry([{ type: "text", text: item.text }], stopReason);
+  if (item.text === "echo: usage-turn") entry.message.usage = { ...zeroUsage(), input: 24000, output: 1000, totalTokens: 25000 };
+  recordEntry(record, entry);
 }
 
 async function runEcho(record, turn, text) {
@@ -1090,6 +1097,10 @@ function handleRequest(id, method, params) {
   if (!initialized) throw new RpcFailure(SERVER_ERROR, "Not initialized");
 
   switch (method) {
+    case "thread/compact/start":
+      getThread(requireString(params, "threadId"));
+      respond(id, {});
+      return;
     case "thread/goal/get":
       respond(id, { goal: getThread(requireString(params, "threadId")).goal ?? null });
       return;
@@ -1109,6 +1120,7 @@ function handleRequest(id, method, params) {
       return;
     }
     case "extension_request": {
+      if (params.name === "omo-ui.task.send") { respond(id, { delivered: true }); break; }
       const record = getThread(requireString(params, "threadId"));
       if (params.name !== "fake.advance") throw new RpcFailure(NOT_FOUND, "Extension not found");
       record.advanceLive?.();
@@ -1188,6 +1200,12 @@ function handleRequest(id, method, params) {
       record.thread.name = name;
       recordEntry(record, { type: "session_info", name });
       notify("thread/name/updated", { threadId: record.thread.id, threadName: name });
+      respond(id, {});
+      return;
+    }
+    case "thread/settings/update": {
+      const record = getThread(requireString(params, "threadId"));
+      record.settings = { ...record.settings, ...(typeof params.model === "string" ? { model: params.model } : {}), ...(typeof params.effort === "string" ? { effort: params.effort } : {}) };
       respond(id, {});
       return;
     }
@@ -1327,13 +1345,41 @@ function serveTree(file) {
   lines.on("close", () => { process.exitCode = 0; });
 }
 
+function serveCatalog() {
+  const lines = createInterface({ input: process.stdin });
+  lines.on("line", (line) => {
+    const frame = JSON.parse(line);
+    write({ type: "extension_ui_request", method: "setStatus", message: "catalog ready" });
+    const reply = (data) => write({ id: frame.id, type: "response", command: frame.type, success: true, data });
+    if (frame.type === "get_commands") {
+      reply({ commands: [
+        { name: "todo", description: "Track work", source: "extension", syntax: "slash" },
+        { name: "review", source: "prompt", syntax: "slash" },
+        { name: "skill:ulw-loop", description: "Run a loop", source: "skill", syntax: "dollar" },
+        { name: "builtin", source: "builtin", syntax: "slash" },
+        { name: "bad-syntax", source: "extension", syntax: "other" },
+      ] });
+    } else if (frame.type === "get_available_models") {
+      reply({ models: [
+        { id: "fake-model", provider: "fake", contextWindow: 128000 },
+        ...MODELS.map((model) => ({ id: model.model, provider: "fake", contextWindow: 128000 })),
+        { id: "invalid", provider: "fake", contextWindow: 0 },
+        { id: "fraction", provider: "fake", contextWindow: 1.5 },
+      ] });
+    }
+  });
+  lines.on("close", () => { process.exitCode = 0; });
+}
+
 const argv = process.argv.slice(2);
 if (argv.length === 1 && argv[0] === "--version") {
   process.stdout.write(`${VERSION_LINE}\n`);
-} else if (argv.length === 3 && argv[0] === "app-server" && argv[1] === "--listen" && argv[2] === "stdio://") {
+} else if ((argv.length === 3 || (argv.length === 5 && argv[3] === "--extension")) && argv[0] === "app-server" && argv[1] === "--listen" && argv[2] === "stdio://") {
   serve();
 } else if (argv.length === 7 && argv[0] === "--mode" && argv[1] === "rpc" && argv[2] === "--session" && argv[4] === "--no-extensions" && argv[5] === "--extension") {
   serveTree(argv[3]);
+} else if (argv.length === 4 && argv[0] === "--mode" && argv[1] === "rpc" && argv[2] === "--no-session" && argv[3] === "--offline") {
+  serveCatalog();
 } else {
   process.stderr.write(USAGE);
   process.exitCode = 2;

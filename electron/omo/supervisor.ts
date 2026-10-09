@@ -1,4 +1,5 @@
 import { ENV, getOmoInstallCommand } from "../../shared/ipc";
+import path from "node:path";
 import type { BridgeStatus, Diagnostics, OmoBinary } from "../../shared/ipc";
 import type { ClientMethod, ClientParams, ClientResult, RequestId, RpcNotification, RpcServerRequest } from "../../shared/protocol";
 import { AppServerClient, AppServerStartError, BRIDGE_ERROR_CODES, RpcRequestError } from "./app-server-client";
@@ -222,7 +223,7 @@ export class OmoSupervisor {
     const createClient = this.options.createClient ?? ((options: AppServerClientOptions) => new AppServerClient(options));
     const client = createClient({
       command: binary.path,
-      args: ["app-server", "--listen", "stdio://"],
+      args: ["app-server", "--listen", "stdio://", "--extension", path.join(__dirname, "task-message-extension.js")],
       cwd: this.options.homeDir,
       env,
       clientVersion: this.options.clientVersion,

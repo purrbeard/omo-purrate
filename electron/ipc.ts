@@ -92,6 +92,19 @@ function requireString(value: unknown, name: string): string {
   return value;
 }
 
+/** Shared by history:load and the workbench handlers: a renderer-supplied session path must stay inside the omo sessions directory. */
+export function createSessionFileResolver(supervisor: OmoSupervisor, homeDir: string): (sessionPath: unknown) => Promise<string> {
+  return async (sessionPath) => {
+    const requested = requireString(sessionPath, "sessionPath");
+    if (!path.isAbsolute(requested)) throw new Error("sessionPath must be absolute");
+    const codexHome = supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent");
+    const root = await realpath(path.join(codexHome, "sessions"));
+    const target = await realpath(requested);
+    if (!isInside(root, target)) throw new Error("sessionPath is outside the omo sessions directory");
+    return target;
+  };
+}
+
 function isInside(root: string, target: string): boolean {
   const relative = path.relative(root, target);
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
@@ -122,15 +135,7 @@ export function registerIpc(deps: IpcDeps): () => void {
   let applyingProxy = false;
   const proxyAgentDir = (): string => supervisor.initializeResult?.codexHome ?? process.env["OMO_CODING_AGENT_DIR"] ?? path.join(homeDir, ".omo", "agent");
   /** Resolves a renderer-supplied session path, refusing anything outside the omo sessions directory. */
-  const sessionFile = async (sessionPath: unknown): Promise<string> => {
-    const requested = requireString(sessionPath, "sessionPath");
-    if (!path.isAbsolute(requested)) throw new Error("sessionPath must be absolute");
-    const codexHome = supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent");
-    const root = await realpath(path.join(codexHome, "sessions"));
-    const target = await realpath(requested);
-    if (!isInside(root, target)) throw new Error("sessionPath is outside the omo sessions directory");
-    return target;
-  };
+  const sessionFile = createSessionFileResolver(supervisor, homeDir);
 
   let treeBusy = false;
   const handlers: Record<string, (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown> = {
@@ -266,6 +271,18 @@ export function registerIpc(deps: IpcDeps): () => void {
       supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent"),
       requireString(cwd, "cwd"), requireString(parentSessionId, "parentSessionId"),
     ),
+    [IPC.sendTaskMessage]: async (_event, parentSessionId, taskId, message): Promise<void> => {
+      const parent = requireString(parentSessionId, "parentSessionId");
+      const target = requireString(taskId, "taskId");
+      const { thread } = await supervisor.request("thread/read", { threadId: parent });
+      const work = await loadTaskWork(supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent"), thread.cwd, parent);
+      const linked = work.find(item => item.task.task_id === target);
+      await supervisor.request("extension_request", {
+        threadId: parent,
+        name: "omo-ui.task.send",
+        data: { taskId: target, message: requireString(message, "message"), ...(linked !== undefined && linked.parentSessionId !== parent ? { allScope: true } : {}) },
+      });
+    },
     [IPC.readAccountUsage]: () => readAccountUsage({ agentDir: supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent") }),
     [IPC.loadThreadLinks]: async (_event, cwds, paths = []) => {
       if (!Array.isArray(cwds) || cwds.some(cwd => typeof cwd !== "string" || !path.isAbsolute(cwd))) throw new Error("Invalid workspace paths");
