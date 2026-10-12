@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { getWorkspaceDiff, listWorkspaceFiles, readWorkspaceFile } from "../../electron/workspace-files";
+import { getWorkspaceDiff, listSessionWork, listWorkspaceFiles, readWorkspaceFile } from "../../electron/workspace-files";
 
 const exec = promisify(execFile);
 
@@ -17,6 +17,37 @@ async function repository() {
 }
 
 describe("workspace files", () => {
+  it("includes recent worktree commits and pending files but excludes older commits", async () => {
+    const { cwd, git } = await repository();
+    await git("config", "user.name", "test");
+    await git("config", "user.email", "test@example.test");
+    await writeFile(path.join(cwd, "base.txt"), "base\n");
+    await git("add", ".");
+    const commit = (root: string, date: string) => exec("git", ["-C", root, "commit", "-m", "fixture"], { windowsHide: true, env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } });
+    await commit(cwd, "2020-01-01T00:00:00Z");
+    const child = `${cwd}-child`;
+    await git("worktree", "add", "-b", "child", child);
+    await writeFile(path.join(child, "한글 file.ts"), "one\ntwo\n");
+    await writeFile(path.join(child, "binary.bin"), Buffer.from([0, 1]));
+    await exec("git", ["-C", child, "add", "."]);
+    await commit(child, "2025-01-01T00:00:00Z");
+    await writeFile(path.join(child, "pending.txt"), "pending\n");
+    const work = await listSessionWork(cwd, Date.parse("2024-01-01T00:00:00Z"));
+    const other = work.find((entry) => entry.branch === "child");
+    expect(work.flatMap((entry) => entry.commits)).toHaveLength(1);
+    expect(other?.commits[0]?.files).toEqual(expect.arrayContaining([
+      { path: "한글 file.ts", additions: 2, deletions: 0 },
+      { path: "binary.bin", additions: null, deletions: null },
+    ]));
+    expect(other?.changes).toEqual([{ path: "pending.txt", status: "??", additions: 1, deletions: 0 }]);
+  });
+
+  it("returns no commits for an empty repository and no worktrees for a non-Git directory", async () => {
+    const { cwd } = await repository();
+    expect((await listSessionWork(cwd, 0)).flatMap((entry) => entry.commits)).toEqual([]);
+    const plain = await mkdtemp(path.join(os.tmpdir(), "omo-session-plain-"));
+    expect(await listSessionWork(plain, 0)).toEqual([]);
+  });
   it("lists and reads a plain workspace without requiring Git", async () => {
     const cwd = await mkdtemp(path.join(os.tmpdir(), "omo-workspace-plain-"));
     await mkdir(path.join(cwd, "folder"));
@@ -38,8 +69,8 @@ describe("workspace files", () => {
     await writeFile(path.join(cwd, "node_modules", "dependency.js"), "ignored dependency\n");
     const files = await listWorkspaceFiles(cwd);
     expect(files).toEqual(expect.arrayContaining([
-      { path: "tracked.ts", status: "AM" },
-      { path: "new file.ts", status: "??" },
+      { path: "tracked.ts", status: "AM", additions: 1, deletions: 0 },
+      { path: "new file.ts", status: "??", additions: 1, deletions: 0 },
     ]));
     expect(files.some((file) => /ignored|node_modules|\.git\//.test(file.path))).toBe(false);
     expect(files.every((file) => !path.isAbsolute(file.path))).toBe(true);
@@ -52,7 +83,25 @@ describe("workspace files", () => {
     await writeFile(path.join(subdir, "one.ts"), "one\n");
     await writeFile(path.join(cwd, "outside.ts"), "outside\n");
     await git("add", ".");
-    expect(await listWorkspaceFiles(subdir)).toEqual([{ path: "one.ts", status: "A" }]);
+    expect(await listWorkspaceFiles(subdir)).toEqual([{ path: "one.ts", status: "A", additions: 1, deletions: 0 }]);
+  });
+
+  it("counts changed lines against the last commit, including deletions and binary files", async () => {
+    const { cwd, git } = await repository();
+    await writeFile(path.join(cwd, "edited.ts"), "one\ntwo\nthree\n");
+    await writeFile(path.join(cwd, "removed.ts"), "a\nb\n");
+    await git("add", ".");
+    await git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "base");
+    await writeFile(path.join(cwd, "edited.ts"), "one\n2\nthree\nfour\nfive");
+    await git("rm", "--quiet", "removed.ts");
+    await writeFile(path.join(cwd, "image.bin"), Buffer.from([0, 1, 2, 0]));
+    const changed = (await listWorkspaceFiles(cwd)).filter((file) => file.status !== "");
+    expect(changed).toEqual(expect.arrayContaining([
+      { path: "edited.ts", status: "M", additions: 3, deletions: 1 },
+      { path: "removed.ts", status: "D", additions: 0, deletions: 2 },
+      { path: "image.bin", status: "??", additions: null, deletions: null },
+    ]));
+    expect(changed).toHaveLength(3);
   });
 
   it("reads UTF-8 code as safe text and reports its language", async () => {
@@ -124,5 +173,63 @@ describe("workspace files", () => {
     await git("add", "removed.ts");
     await rename(path.join(cwd, "removed.ts"), path.join(cwd, "moved.ts"));
     expect(await getWorkspaceDiff(cwd, "removed.ts")).toContain("-const removed = true;");
+  });
+  it("attributes worktree commits to their own branch and flags whether the main branch contains them", async () => {
+    const { cwd, git } = await repository();
+    await git("config", "user.name", "test");
+    await git("config", "user.email", "test@example.test");
+    await git("checkout", "-q", "-b", "main");
+    await writeFile(path.join(cwd, "base.txt"), "base\n");
+    await git("add", ".");
+    const at = (root: string, date: string, ...args: string[]) => exec("git", ["-C", root, ...args], { windowsHide: true, env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } });
+    await at(cwd, "2020-01-01T00:00:00Z", "commit", "-q", "-m", "old");
+    const child = `${cwd}-feat`;
+    await git("worktree", "add", "-q", "-b", "feat", child);
+    await writeFile(path.join(child, "one.txt"), "1\n");
+    await at(child, "2030-01-01T00:00:00Z", "add", ".");
+    await at(child, "2030-01-01T00:00:00Z", "commit", "-q", "-m", "feat-merged");
+    await at(cwd, "2030-01-02T00:00:00Z", "merge", "-q", "--no-ff", "feat", "-m", "merge feat");
+    await writeFile(path.join(child, "two.txt"), "2\n");
+    await at(child, "2030-01-03T00:00:00Z", "add", ".");
+    await at(child, "2030-01-03T00:00:00Z", "commit", "-q", "-m", "feat-pending");
+    const since = Date.parse("2029-12-31T00:00:00Z");
+    for (const from of [cwd, child]) {
+      const work = await listSessionWork(from, since);
+      const main = work.find((entry) => entry.branch === "main")!;
+      const feat = work.find((entry) => entry.branch === "feat")!;
+      expect(main).toMatchObject({ base: true, baseBranch: "main" });
+      expect(main.commits.map((commit) => [commit.subject, commit.merged])).toEqual([["merge feat", undefined]]);
+      expect(feat).toMatchObject({ base: false, baseBranch: "main", current: from === child });
+      expect(feat.commits.map((commit) => [commit.subject, commit.merged])).toEqual([["feat-pending", false], ["feat-merged", true]]);
+    }
+  });
+  it("keeps a commit shared by two worktree branches in one group wherever the panel is opened", async () => {
+    const { cwd, git } = await repository();
+    await git("config", "user.name", "test");
+    await git("config", "user.email", "test@example.test");
+    await git("checkout", "-q", "-b", "main");
+    await writeFile(path.join(cwd, "base.txt"), "base\n");
+    await git("add", ".");
+    const at = (root: string, date: string, ...args: string[]) => exec("git", ["-C", root, ...args], { windowsHide: true, env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } });
+    await at(cwd, "2020-01-01T00:00:00Z", "commit", "-q", "-m", "old");
+    const first = `${cwd}-a`;
+    await git("worktree", "add", "-q", "-b", "feat-a", first);
+    await writeFile(path.join(first, "a.txt"), "a\n");
+    await at(first, "2030-01-01T00:00:00Z", "add", ".");
+    await at(first, "2030-01-01T00:00:00Z", "commit", "-q", "-m", "shared");
+    const second = `${cwd}-b`;
+    await git("worktree", "add", "-q", "-b", "feat-b", second, "feat-a");
+    await writeFile(path.join(second, "b.txt"), "b\n");
+    await at(second, "2030-01-02T00:00:00Z", "add", ".");
+    await at(second, "2030-01-02T00:00:00Z", "commit", "-q", "-m", "only-b");
+    const since = Date.parse("2029-12-31T00:00:00Z");
+    // The session's own worktree is always listed, even without commits; compare only the groups that hold commits.
+    const groups = async (from: string) => Object.fromEntries((await listSessionWork(from, since)).filter((work) => work.commits.length > 0).map((work) => [work.branch, work.commits.map((commit) => commit.subject)]));
+    const fromA = await groups(first);
+    expect(fromA).toEqual(await groups(second));
+    expect(fromA).toEqual(await groups(cwd));
+    expect(fromA["feat-a"]).toEqual(["shared"]);
+    expect(fromA["feat-b"]).toEqual(["only-b"]);
+    expect((await listSessionWork(second, since))[0]?.current).toBe(true);
   });
 });

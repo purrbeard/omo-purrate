@@ -71,7 +71,46 @@
 .status { flex: none; font: 600 10px/16px ui-monospace, Consolas, monospace; color: var(--dsw-alias-state-business-primary); }
 .status[data-status='added'] { color: #34a853; }
 .status[data-status='deleted'] { color: #d86a6a; }
+.lines { display: inline-flex; flex: none; gap: 4px; font: 500 10px/16px ui-monospace, Consolas, monospace; color: var(--dsw-alias-label-tertiary); }
+.lines [data-kind='added'] { color: #34a853; }
+.lines [data-kind='removed'] { color: #d86a6a; }
 .footer { justify-content: space-between; height: 25px; padding: 0 12px; border-top: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-tertiary); font-size: 10px; }
 .empty, .error { margin: 0; padding: 20px 14px; color: var(--dsw-alias-label-tertiary); overflow-wrap: anywhere; }
 .error { color: var(--dsw-alias-label-primary); }
+.sessionNote { margin: 6px 8px; color: var(--dsw-alias-label-tertiary); font-size: 11px; }
+.sessionGroup { padding: 6px 8px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.sessionGroup .fileRow { box-sizing: border-box; cursor: default; }
+.sessionGroup h3 { margin: 4px 0; font: inherit; font-weight: 600; overflow-wrap: anywhere; }
+.sessionGroup h3 .worktreeFolder { margin-left: 6px; color: var(--dsw-alias-label-tertiary); font-weight: 400; }
+.sessionGroup summary { cursor: pointer; overflow-wrap: anywhere; }
 .panel button:focus-visible, .preview:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }
+
+.flowBadge,
+.mergeBadge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 17px;
+  vertical-align: middle;
+}
+
+.flowBadge[data-kind="base"],
+.mergeBadge[data-merged="true"] {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 45%, transparent);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.flowBadge[data-kind="current"] {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary);
+}
+
+.mergeBadge[data-merged="false"] {
+  border-color: color-mix(in srgb, var(--dsw-static-amber-600) 50%, transparent);
+  color: var(--dsw-static-amber-600);
+}
