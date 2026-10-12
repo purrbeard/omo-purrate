@@ -106,18 +106,11 @@ export function Composer() {
     if (!connected || busy) return;
     setImageNotice("");
     const accepted = files.filter((file) => isImageFile(file.name, file.type));
-    if (accepted.length !== files.length) setImageNotice(t("composer.images.rejected"));
+    const others = files.filter((file) => !accepted.includes(file)).map((file) => window.omo.imageFilePath(file));
+    if (others.includes("")) setImageNotice(t("composer.images.rejected"));
+    addReferences(others.filter((path) => path !== "").map((value) => ({ kind: "file", value })));
     try { addImages(await Promise.all(accepted.slice(0, IMAGE_LIMIT + 1).map(readImage))); }
     catch (error) { setImageNotice(t("composer.images.error", { message: String(error) })); }
-  };
-  const pickImages = async (): Promise<void> => {
-    setImageNotice("");
-    try {
-      const paths = await window.omo.pickImages();
-      const accepted = paths.filter((path) => isImageFile(path));
-      if (accepted.length !== paths.length) setImageNotice(t("composer.images.rejected"));
-      addImages(accepted.map((path) => ({ type: "localImage", path })));
-    } catch (error) { setImageNotice(t("composer.images.error", { message: String(error) })); }
   };
   const addReferences = (added: readonly DraftContext[]): void => {
     setContext(current => {
@@ -570,7 +563,7 @@ export function Composer() {
                 setDraft(result.draft);
                 setCaret(result.caret);
               }} />
-            <button type="button" className={css.chip} data-testid={TESTID.attachmentPick} aria-label={t("composer.images.attach")} disabled={!connected || busy || images.length >= IMAGE_LIMIT} onClick={() => void pickImages()}><IconPaperclipOutlineRegular size={16} /></button>
+            <button type="button" className={css.chip} data-testid={TESTID.attachmentPick} aria-label={t("composer.images.attach")} disabled={!connected || busy} onClick={() => void pickReferences("files")}><IconPaperclipOutlineRegular size={16} /></button>
             {connected && <PermissionPicker disabled={!connected} />}
             {activeThreadId === null && (
               <button

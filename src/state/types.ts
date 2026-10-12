@@ -118,7 +118,7 @@ export type PendingRequest =
   | { kind: "userInput"; id: RequestId; threadId: string; params: UserInputParams; receivedAtMs: number; resolved?: boolean };
 
 /** Notices the UI translates by code; a notice without a code shows its message as-is (omo's own error text). */
-export type NoticeCode = "noActiveThread" | "steered" | "branchBusy" | "modelSwitch";
+export type NoticeCode = "noActiveThread" | "steered" | "branchBusy" | "modelSwitch" | "sessionChangedElsewhere" | "sessionReloadBusy";
 
 export interface Notice {
   id: string;
@@ -148,7 +148,7 @@ export interface SideChat {
   /** The question as typed; the first side message also carries the main thread's background. */
   question: string;
   createdAtMs: number;
-  /** Whether the first side message carried the main thread's read-only background. */
+  /** Whether the first side message carried the main thread's background. */
   context: boolean;
 }
 

@@ -93,7 +93,6 @@ describe("sidePrompt", () => {
     });
     const lines = prompt.split("\n");
     expect(lines[0]).toBe(SIDE_BACKGROUND_MARKER);
-    expect(prompt).toContain("Do not edit files, run commands that change state, or start subagents unless the user explicitly asks");
     expect(prompt).toContain("Main thread: Fix login\nWorkspace: /work/app\n\n<user>\nfix the login bug\n</user>\n<assistant>\nDone.\n</assistant>\n[end of background]");
     expect(lines.at(-1)).toBe("Side question: what changed?");
   });

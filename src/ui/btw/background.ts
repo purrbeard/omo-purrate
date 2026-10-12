@@ -90,8 +90,8 @@ export function sidePrompt({ title, cwd, messages, question }: SidePromptInput):
     lines.push("No main conversation background is attached to this side chat.");
   } else {
     lines.push(
-      "Below is recent context from the user's main OmO conversation, given as read-only background for a side question. " +
-        "Answer from it. Do not edit files, run commands that change state, or start subagents unless the user explicitly asks in this side chat.",
+      "Below is recent context from the user's main OmO conversation, given as background for this side chat. " +
+        "The user may ask questions or give you work here; when they ask for changes, edit files, run commands or start subagents as you would in the main conversation.",
       `Main thread: ${title}`,
       `Workspace: ${cwd}`,
       "",

@@ -1,7 +1,7 @@
 /**
  * /btw side chats: the registry of side threads per main thread, the panel state, and the rules that keep side
  * threads out of the main thread list. omo's own /btw exists only in its TUI, so OmO UI runs each side chat as a
- * separate omo thread whose first message carries the main thread's read-only background.
+ * separate omo thread whose first message carries the main thread's background.
  */
 import type { AppEvent, AppState, BtwState, Notice, SideChat, ThreadSummary } from "./types";
 

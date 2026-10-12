@@ -13,7 +13,7 @@ test("picker sends local images and echoes user thumbnails", async () => {
   mkdirSync(dir, { recursive: true });
   const image = path.join(dir, "picked.png");
   writeFileSync(image, Buffer.from(PNG, "base64"));
-  const launched = await launchApp({ omo: "fake", pickDir: dir, extraEnv: { [ENV.qaPickImages]: JSON.stringify([image]) } });
+  const launched = await launchApp({ omo: "fake", pickDir: dir, extraEnv: { [ENV.qaPickAttachments]: JSON.stringify([image]) } });
   try {
     const { page, readFakeLog } = launched;
     await newSession(page);
@@ -60,4 +60,27 @@ test("paste and drop preview, remove, and send image-only", async () => {
     expect(await byTestId(page, TESTID.userMessage).locator("img").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
     await expect(byTestId(page, TESTID.attachmentThumbnail)).toHaveCount(0);
   } finally { await launched.close(); }
+});
+
+test("the paperclip attaches any file type as a file reference", async () => {
+  const dir = path.join(WT, "test-results", "attachment-any-file");
+  mkdirSync(dir, { recursive: true });
+  const document = path.join(dir, "notes.pdf");
+  const archive = path.join(dir, "bundle.zip");
+  writeFileSync(document, "%PDF-1.4\n");
+  writeFileSync(archive, "PK");
+  const launched = await launchApp({ omo: "fake", pickDir: dir, extraEnv: { [ENV.qaPickAttachments]: JSON.stringify([document, archive]) } });
+  try {
+    const { page, readFakeLog } = launched;
+    await newSession(page);
+    await byTestId(page, TESTID.attachmentPick).click();
+    await expect(page.getByTestId("context-chip")).toHaveText(["notes.pdf", "bundle.zip"]);
+    await expect(byTestId(page, TESTID.attachmentNotice)).toHaveCount(0);
+    await byTestId(page, TESTID.composerInput).fill("Read these");
+    await byTestId(page, TESTID.composerSend).click();
+    const request = readFakeLog().find((entry) => entry["method"] === "turn/start");
+    const text = String((request?.["params"] as { input: { text: string }[] }).input[0]?.text);
+    expect(text).toContain(JSON.stringify(document));
+    expect(text).toContain(JSON.stringify(archive));
+  } finally { await launched.close(); rmSync(dir, { recursive: true, force: true }); }
 });

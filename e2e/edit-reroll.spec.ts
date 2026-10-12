@@ -38,7 +38,7 @@ test("edit and repeated regeneration preserve one native session, images, origin
   const userData = tempDir("user-data");
   const image = path.join(pickDir, "question.png");
   writeFileSync(image, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1sAAAAASUVORK5CYII=", "base64"));
-  const options = { omo: "fake" as const, fakeHome, pickDir, userData, extraEnv: { [ENV.qaPickImages]: JSON.stringify([image]) } };
+  const options = { omo: "fake" as const, fakeHome, pickDir, userData, extraEnv: { [ENV.qaPickAttachments]: JSON.stringify([image]) } };
   let launched: LaunchedApp | null = await launchApp(options);
   try {
     const { page, readFakeLog } = launched;
