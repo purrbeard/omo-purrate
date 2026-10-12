@@ -19,6 +19,8 @@ const TIMEOUT_MS = 30_000;
 const GIF_LIMIT_BYTES = 4 * 1024 * 1024;
 const WIDE = { width: 1440, height: 1000 };
 const NARROW = { width: 1280, height: 800 };
+// The sidebar lists sessions the app manages; the seeded past sessions belong to it like ones started here.
+const SEED_IDS = seedThreads("", 0).map((thread) => thread.id);
 const tid = (id) => `[data-testid="${id}"]`;
 
 const temp = mkdtempSync(path.join(tmpdir(), "omo-ui-readme-"));
@@ -41,19 +43,22 @@ function parseOnly(argv) {
  * shell startup files or variables. `omo: null` leaves omo unresolvable for the onboarding screen. A setup failure
  * after the launch closes the app and rethrows the setup error.
  */
-async function launch({ theme, locale = "en", size = WIDE, omo = FAKE_OMO, video = null }) {
+async function launch({ theme, locale = "en", size = WIDE, omo = FAKE_OMO }) {
   const run = path.join(temp, `run-${++launches}`);
   const userData = path.join(run, "user-data");
   const home = path.join(run, "home");
   for (const dir of [userData, home]) mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(userData, "preferences.json"), `${JSON.stringify({ theme, locale })}\n`);
+  writeFileSync(path.join(userData, "preferences.json"), `${JSON.stringify({ theme, locale, onboardingCompleted: true, managedThreadIds: SEED_IDS })}\n`);
+  const windows = process.platform === "win32";
   // node's directory is on PATH only for the fake omo, whose shebang is `#!/usr/bin/env node`.
-  const searchPath = [...(omo === null ? [] : [path.dirname(process.execPath)]), "/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+  const system = windows ? [path.join(process.env.SystemRoot ?? "C:\\Windows", "System32"), process.env.SystemRoot ?? "C:\\Windows"] : ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+  const searchPath = [...(omo === null ? [] : [path.dirname(process.execPath)]), ...system];
   const env = {
     HOME: home,
-    SHELL: "/bin/zsh",
     TMPDIR: tmpdir(),
-    PATH: searchPath.join(":"),
+    PATH: searchPath.join(path.delimiter),
+    OMO_UI_IPHONE_BRIDGE: "0",
+    OMO_UI_OMO_AUTO_UPDATE: "0",
     OMO_UI_USER_DATA: userData,
     OMO_UI_QA_PICK_DIR: workspace(WORKSPACES[0]),
     FAKE_OMO_HOME: path.join(run, "fake-home"),
@@ -61,20 +66,27 @@ async function launch({ theme, locale = "en", size = WIDE, omo = FAKE_OMO, video
     FAKE_OMO_SEED_THREADS: seedFile,
     FAKE_OMO_SKILLS: JSON.stringify(skillCatalog(temp)),
   };
-  for (const key of ["USER", "LOGNAME"]) if (process.env[key] !== undefined) env[key] = process.env[key];
+  if (windows) {
+    // A fresh profile: the app and omo discovery read USERPROFILE/APPDATA, never the user's own.
+    Object.assign(env, { USERPROFILE: home, APPDATA: path.join(home, "AppData", "Roaming"), LOCALAPPDATA: path.join(home, "AppData", "Local"), TEMP: tmpdir(), TMP: tmpdir() });
+    for (const key of ["SystemRoot", "SystemDrive", "windir", "ComSpec", "PATHEXT", "USERNAME", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE"]) if (process.env[key] !== undefined) env[key] = process.env[key];
+  } else {
+    env.SHELL = "/bin/zsh";
+    for (const key of ["USER", "LOGNAME"]) if (process.env[key] !== undefined) env[key] = process.env[key];
+  }
   if (omo !== null) env.OMO_UI_OMO_BIN = omo;
   const app = await electron.launch({
     args: ["."],
     cwd: ROOT,
     env,
     timeout: TIMEOUT_MS,
-    ...(video === null ? {} : { recordVideo: { dir: video, size } }),
   });
   try {
     const page = await app.firstWindow({ timeout: TIMEOUT_MS });
-    const startedAt = Date.now();
     await app.evaluate(({ BrowserWindow }, wanted) => BrowserWindow.getAllWindows()[0]?.setContentSize(wanted.width, wanted.height), size);
-    await page.waitForFunction((width) => window.innerWidth === width, size.width, { timeout: TIMEOUT_MS });
+    await page.waitForFunction((width) => window.innerWidth === width, size.width, { timeout: TIMEOUT_MS }).catch(async (error) => {
+      throw new Error(`window width stayed ${await page.evaluate(() => `${window.innerWidth}x${window.innerHeight} @${window.devicePixelRatio}`)}, wanted ${size.width}: ${error}`);
+    });
     const ready = omo === null ? tid("onboarding") : `html[data-bridge-state="connected"] ${tid("app-frame")}`;
     await page.locator(ready).first().waitFor({ state: "visible", timeout: TIMEOUT_MS });
     await page.waitForFunction((dark) => document.body.hasAttribute("data-ds-dark-theme") === dark, theme === "dark");
@@ -91,7 +103,7 @@ async function launch({ theme, locale = "en", size = WIDE, omo = FAKE_OMO, video
       return value;
     });
     await page.addStyleTag({ content: `html { background: ${fill} !important; }` });
-    return { app, page, startedAt };
+    return { app, page };
   } catch (error) {
     await app.close().catch((closeError) => console.error(`closing the app after its launch setup failed: ${closeError}`));
     throw error;
@@ -136,7 +148,11 @@ async function newSession(page, workspaceName = null) {
   const known = await page.locator(tid("thread-row")).evaluateAll((rows) => rows.map((row) => row.getAttribute("data-thread-id")));
   if (workspaceName === null) await page.locator(tid("new-session")).click();
   else {
-    const group = page.locator(`${tid("workspace-group")}[data-cwd="${workspace(workspaceName)}"]`);
+    const group = page.locator(`${tid("workspace-group")}[data-cwd=${JSON.stringify(workspace(workspaceName))}]`);
+    if (await group.count() === 0) {
+      const shown = await page.locator(tid("workspace-group")).evaluateAll((groups) => groups.map((node) => node.getAttribute("data-cwd")));
+      throw new Error(`no sidebar group for ${workspace(workspaceName)}; shown: ${JSON.stringify(shown)}`);
+    }
     await group.hover();
     await group.locator(tid("workspace-compose")).click();
   }
@@ -211,12 +227,9 @@ async function hero(theme) {
       await page.locator(tid("omo-activity-toggle")).click();
       await page.locator(tid("omo-activity")).waitFor({ state: "visible" });
       await shot(page, "activity", [tid("omo-activity")], 0);
-      await page.locator(tid("omo-activity")).evaluate((panel) => {
-        const scroller = [panel, ...panel.querySelectorAll("*")].find(
-          (node) => node.scrollHeight > node.clientHeight + 4 && getComputedStyle(node).overflowY !== "visible",
-        );
-        if (scroller !== undefined) scroller.scrollTop = scroller.scrollHeight;
-      });
+      // The workflow panel opens on the graph; its Agents view lists the child tasks.
+      await page.locator(tid("workflow-list")).click();
+      await page.locator(`${tid("omo-activity")} ${tid("omo-task")}, ${tid("omo-activity")} ${tid("dag-node")}`).first().waitFor({ state: "visible", timeout: TIMEOUT_MS });
       await shot(page, "activity-tasks", [tid("omo-activity")], 0);
       await page.keyboard.press("Escape");
       await page.locator(tid("todo-dock")).click();
@@ -233,7 +246,7 @@ async function hero(theme) {
 async function migrate() {
   const { app, page } = await launch({ theme: "dark" });
   try {
-    await newSession(page, "omo-ui-macosapp");
+    await newSession(page, "omo-ui-windows");
     await send(page, PROMPTS.chips, ["ulw-loop", "mass-ulw"]);
     await nameSession(page, NAMES.chips);
     await waitFor(page.locator(tid("conversation")), SETTLED.chips);
@@ -288,39 +301,63 @@ async function onboarding() {
   }
 }
 
-/** Records the /btw flow and encodes docs/media/side-chat.gif with an ffmpeg palette. */
+/**
+ * Records the /btw flow as timed window screenshots and encodes docs/media/side-chat.gif with an ffmpeg palette.
+ * Screenshots replace Playwright's Electron video recording, which does not finish on Windows.
+ */
 async function gif() {
-  const videoDir = path.join(temp, "video");
-  const { app, page, startedAt } = await launch({ theme: "dark", size: NARROW, video: videoDir });
-  let typingAt = 0;
-  let endedAt = 0;
+  const frameDir = path.join(temp, "frames");
+  mkdirSync(frameDir, { recursive: true });
+  const { app, page } = await launch({ theme: "dark", size: NARROW });
+  const frames = [];
+  let recording = true;
+  const record = async () => {
+    while (recording) {
+      const file = path.join(frameDir, `${String(frames.length).padStart(4, "0")}.png`);
+      await page.screenshot({ path: file });
+      frames.push({ file, at: Date.now() });
+    }
+  };
+  let recorder = null;
   try {
     await newSession(page);
     await send(page, PROMPTS.checkout, ["ulw-loop"]);
     await nameSession(page, NAMES.checkout);
     await waitFor(page.locator(tid("conversation")), SETTLED.checkout);
-    await page.waitForTimeout(600);
-    typingAt = Date.now();
+    // Wide frames open the Agents panel by themselves; the clip shows the side chat taking that column.
+    const agents = page.locator(`${tid("right-dock")}[data-tab="agents"]`);
+    if (await agents.isVisible()) {
+      await agents.locator(tid("right-dock-close")).click();
+      await agents.waitFor({ state: "hidden", timeout: TIMEOUT_MS });
+    }
+    await settle(page);
+    recorder = record();
+    await page.waitForTimeout(1200);
     await askSide(page, 45);
     await page.waitForTimeout(2200);
-    endedAt = Date.now();
   } finally {
+    recording = false;
+    await recorder;
     await app.close();
   }
-  const [video] = readdirSync(videoDir).filter((name) => name.endsWith(".webm"));
-  if (video === undefined) throw new Error(`no video in ${videoDir}`);
-  const start = Math.max(0, (typingAt - startedAt) / 1000 - 1.2);
-  const duration = (endedAt - typingAt) / 1000 + 1.2;
+  if (frames.length < 2) throw new Error(`only ${frames.length} frames recorded`);
+  // ffconcat keeps each frame on screen for the real time until the next one.
+  const list = frames.map((frame, index) => {
+    const next = frames[index + 1]?.at ?? frame.at + 1500;
+    return `file '${frame.file.replaceAll("\\", "/")}'\nduration ${((next - frame.at) / 1000).toFixed(3)}`;
+  });
+  const concat = path.join(temp, "frames.ffconcat");
+  writeFileSync(concat, `ffconcat version 1.0\n${list.join("\n")}\nfile '${frames.at(-1).file.replaceAll("\\", "/")}'\n`);
   const file = path.join(OUT, "side-chat.gif");
   for (const [fps, width] of [[12, 1024], [10, 900], [8, 800]]) {
     execFileSync("ffmpeg", [
-      "-v", "error", "-y", "-ss", start.toFixed(2), "-t", duration.toFixed(2), "-i", path.join(videoDir, video),
+      "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", concat,
       "-vf", `fps=${fps},scale=${width}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=160:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
       "-loop", "0", file,
     ]);
     if (statSync(file).size <= GIF_LIMIT_BYTES) break;
   }
-  console.log(`gif ${path.relative(ROOT, file)} (${(statSync(file).size / 1024 / 1024).toFixed(2)} MB)`);
+  console.log(`gif ${path.relative(ROOT, file)} (${frames.length} frames, ${(statSync(file).size / 1024 / 1024).toFixed(2)} MB)`);
 }
 
 function dimensions(file) {

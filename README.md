@@ -29,7 +29,7 @@
   <img alt="OmO UI running a ulw-loop session: tool cards, a table of two running agent lanes, the todo list and goal above the composer, and a /btw side chat answering in the right panel" src="docs/media/hero-light.png">
 </picture>
 
-Maintained by [purrbeard](https://github.com/purrbeard), this Windows fork is based on [realsigridjin/omo-ui-macosapp](https://github.com/realsigridjin/omo-ui-macosapp), copyright sigridjineth. The original MIT license, DeepSeek notices and font licenses are preserved. This is an independent Windows distribution, not an official upstream release. macOS and iOS source is retained from upstream but is not a supported or device-tested target of this fork. Existing tour images below are upstream screenshots, not Windows release evidence.
+Maintained by [purrbeard](https://github.com/purrbeard), this Windows fork is based on [realsigridjin/omo-ui-macosapp](https://github.com/realsigridjin/omo-ui-macosapp), copyright sigridjineth. The original MIT license, DeepSeek notices and font licenses are preserved. This is an independent Windows distribution, not an official upstream release. macOS and iOS source is retained from upstream but is not a supported or device-tested target of this fork. The tour images below are captured from this Windows app.
 
 Install omo and the app in one step from a normal (not Administrator) PowerShell window:
 
@@ -110,7 +110,7 @@ Open **Settings > Runtime > opencodex**. Enter the OpenAI-compatible base URL, f
 
 ## Feature tour
 
-The tour below was captured from the built app by `npm run screenshots`, which plays scripted demo sessions through the repository's fake omo (`tests/fixtures/fake-omo.mjs`): every screen is the real interface, and none shows a real person's sessions. The last screenshot is the same app on the installed omo with a real model.
+The tour below was captured from the built app by `npm run screenshots`, which plays scripted demo sessions through the repository's fake omo (`tests/fixtures/fake-omo.mjs`): every screen is the real interface, and none shows a real person's sessions. The last screenshot is the installed Windows app on the real omo with a real model.
 
 ### Skills, one keystroke away
 
@@ -131,7 +131,7 @@ When omo fans work out, for example with mass-ulw, the **Activity** chip in the 
   <img src="docs/media/activity.png" width="760" alt="Activity panel: the checkout DAG run with three waves, one completed node, two running nodes with their current activity and one blocked node">
 </p>
 <p align="center">
-  <img src="docs/media/activity-tasks.png" width="760" alt="Activity panel scrolled to the child tasks, each with its category, model, status and progress">
+  <img src="docs/media/activity-tasks.png" width="760" alt="Activity panel list view: each node of the checkout run with its category, model and current activity">
 </p>
 
 <p align="center">
@@ -183,10 +183,10 @@ Every label in the window is available in Korean. Choose the language in Setting
 
 ### On the real omo
 
-The same window on the installed omo with a real model, with the sidebar collapsed (Ctrl+\\).
+The installed OmO UI Windows on the real omo, answering with DeepSeek v4.1 Flash in a throwaway sample project.
 
 <p align="center">
-  <img src="docs/media/real-omo.png" alt="OmO UI on the installed omo answering a question about how cart totals are computed in a sample project">
+  <img src="docs/media/real-omo.png" alt="OmO UI Windows on the real omo answering how cart totals are computed in a sample project, with a formula table">
 </p>
 
 ## Install
@@ -309,7 +309,7 @@ npm run icon           # re-render build/icon.icns and build/icon.png from build
 npm run screenshots    # re-capture docs/media from the built app (ffmpeg encodes the GIF)
 ```
 
-`npm run screenshots` drives the built app with Playwright against the demo scenes in `scripts/readme-demo.mjs`, played by `tests/fixtures/fake-omo.mjs` when `FAKE_OMO_DEMO` is set. `node scripts/readme-media.mjs --only hero,migrate,korean,onboarding,gif` re-captures a subset. The real-omo screenshot is not produced by the script; it was taken from a session on the installed omo in a throwaway workspace.
+`npm run screenshots` drives the built app with Playwright against the demo scenes in `scripts/readme-demo.mjs`, played by `tests/fixtures/fake-omo.mjs` when `FAKE_OMO_DEMO` is set. `node scripts/readme-media.mjs --only hero,migrate,korean,onboarding,gif` re-captures a subset. The real-omo screenshot comes from `e2e/readme-real-omo.spec.ts`, which drives the installed app on your real omo with fresh app data and a temporary sample project: `$env:OMO_UI_README_REAL = '1'; npx playwright test e2e/readme-real-omo.spec.ts` (set `OMO_UI_README_MODEL` to pick another model; it spends a short paid turn).
 
 Environment variables (defined in `shared/ipc.ts`):
 

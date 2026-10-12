@@ -2,7 +2,7 @@
 // catalog and the FAKE_OMO_DEMO scenes that tests/fixtures/fake-omo.mjs plays. None of it ships in the app.
 import path from "node:path";
 
-export const WORKSPACES = ["acme-shop", "payments-api", "omo-ui-macosapp", "docs-site"];
+export const WORKSPACES = ["acme-shop", "payments-api", "omo-ui-windows", "docs-site"];
 
 /** Session names the capture script sets after sending, as omo names sessions from their first request. */
 export const NAMES = {
@@ -36,8 +36,8 @@ const SEEDS = [
   ["acme-shop", "Add Apple Pay to the payment step", DAY + 2 * HOUR],
   ["payments-api", "Rotate the webhook signing secret", 3 * HOUR],
   ["payments-api", "Retry failed payouts with exponential backoff", 2 * DAY],
-  ["omo-ui-macosapp", "Polish the side chat panel", 5 * HOUR],
-  ["omo-ui-macosapp", "Package the DMG for the 0.1 release", DAY + 6 * HOUR],
+  ["omo-ui-windows", "Polish the side chat panel", 5 * HOUR],
+  ["omo-ui-windows", "Package the Windows installer for 0.1.4", DAY + 6 * HOUR],
   ["docs-site", "Rewrite the getting-started guide", 3 * DAY],
 ];
 
