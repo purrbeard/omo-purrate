@@ -6,6 +6,7 @@ import { SectionHeading } from "./SectionHeading";
 import css from "./SettingsDialog.module.css";
 import { AppUpdateSection } from "./AppUpdateSection";
 import { uiState } from "../ui-state";
+import { TESTID } from "../testids";
 
 const DSH_REPOSITORY_URL = "https://github.com/deepseek-ai/deepseek-harness";
 
@@ -13,6 +14,7 @@ export function AboutSection() {
   const t = useT();
   const diagnostics = useDiagnostics();
   const [openError, setOpenError] = useState<string | null>(null);
+  const [logsError, setLogsError] = useState<string | null>(null);
   const pending = diagnostics.kind === "failed" ? t("shell.settings.omo.loadFailed", { message: diagnostics.message }) : t("shell.settings.omo.loading");
   const versions = diagnostics.kind === "ready" ? diagnostics.value : null;
 
@@ -23,6 +25,13 @@ export function AboutSection() {
     );
   };
 
+  const openLogs = (): void => {
+    window.omo.openLogsFolder().then(
+      () => setLogsError(null),
+      (error: unknown) => setLogsError(errorMessage(error)),
+    );
+  };
+
   return (
     <section className={css.section}>
       <SectionHeading title={t("shell.settings.nav.about")} intro={t("shell.settings.about.intro")} />
@@ -30,6 +39,7 @@ export function AboutSection() {
       <div className={css.card}>
         <div className={css.cardBody}>
           <button className={css.link} type="button" data-testid="settings-show-onboarding" onClick={() => { uiState.setOnboardingOpen(true); }}>{t("shell.settings.about.showOnboarding")}</button>
+          <button className={css.link} type="button" data-testid={TESTID.settingsOpenLogs} onClick={openLogs}>{t("shell.settings.about.openLogs")}</button>
         </div>
       </div>
       <div className={css.card}>
@@ -58,6 +68,11 @@ export function AboutSection() {
           </a>
         </div>
       </div>
+      {logsError !== null && (
+        <p className={css.error} role="alert">
+          {t("shell.settings.about.openLogsFailed", { message: logsError })}
+        </p>
+      )}
       {openError !== null && (
         <p className={css.error} role="alert">
           {t("shell.settings.about.openFailed", { message: openError })}
