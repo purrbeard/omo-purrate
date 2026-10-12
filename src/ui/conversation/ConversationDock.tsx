@@ -8,10 +8,11 @@ import {
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { TodoPhase, WireGoal } from "../../../shared/protocol";
 import { useT, type MessageKey } from "../../i18n";
-import { selectGoal, selectThreadLiveState, selectTodo } from "../../state";
+import { selectDagRuns, selectGoal, selectTasks, selectThreadLiveState, selectTodo } from "../../state";
+import { BackgroundWorkStrip } from "../composer/BackgroundWorkStrip";
 import { useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
-import { currentTodo, goalVisible, todoCounts, todoDot, type TodoStatus } from "./activity-model";
+import { currentTodo, goalVisible, todoCounts, todoDot, workSummary, type TodoStatus } from "./activity-model";
 import { formatWholeSeconds } from "./format";
 import css from "./ConversationDock.module.css";
 
@@ -37,7 +38,7 @@ export function TodoDock({ phases, restored, live }: { phases: readonly TodoPhas
   if (counts.total === 0) return null;
   const current = currentTodo(phases);
   return (
-    <section className={css.card} data-testid={TESTID.todoDock} data-source={restored ? "history" : "live"} aria-label={t("todo.title")}>
+    <section className={css.card} data-testid={TESTID.todoDock} data-source={restored ? "history" : "live"} data-open={open || undefined} aria-label={t("todo.title")}>
       <button
         type="button"
         className={css.header}
@@ -132,17 +133,25 @@ export function GoalStrip({ goal, threadId }: { goal: WireGoal | null | undefine
   );
 }
 
-/** The stack above the composer card for the active thread: todo list, then goal. */
+/** One status line above the composer card for the active thread: todo progress, goal, then running background work. */
 export function ConversationDock() {
+  const t = useT();
   const threadId = useAppSelector((state) => state.activeThreadId);
   const todo = useAppSelector((state) => (threadId === null ? null : selectTodo(state, threadId)));
   const goal = useAppSelector((state) => (threadId === null ? undefined : selectGoal(state, threadId)));
   const live = useAppSelector((state) => threadId !== null && selectThreadLiveState(state, threadId)?.freshness === "live");
-  if (threadId === null || (todo === null && !goalVisible(goal))) return null;
+  const runs = useAppSelector((state) => (threadId === null ? EMPTY : selectDagRuns(state, threadId)));
+  const tasks = useAppSelector((state) => (threadId === null ? EMPTY : selectTasks(state, threadId)));
+  const background = workSummary(runs, tasks, live).running > 0;
+  const hasTodo = todo !== null && todoCounts(todo.phases).total > 0;
+  if (threadId === null || (!hasTodo && !goalVisible(goal) && !background)) return null;
   return (
-    <div className={css.dock}>
-      {todo !== null && <TodoDock phases={todo.phases} restored={todo.source === "history"} live={live && todo.source === "live"} />}
+    <div className={css.dock} data-testid="composer-status-line" role="group" aria-label={t("conversation.statusLine")}>
+      {hasTodo && <TodoDock phases={todo.phases} restored={todo.source === "history"} live={live && todo.source === "live"} />}
       <GoalStrip key={threadId} goal={goal} threadId={threadId} />
+      {background && <BackgroundWorkStrip threadId={threadId} />}
     </div>
   );
 }
+
+const EMPTY: readonly never[] = [];

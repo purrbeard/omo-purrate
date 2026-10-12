@@ -116,6 +116,12 @@
   text-overflow: ellipsis;
 }
 
+.tabCount {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
 .tabIcon {
   flex: none;
   opacity: 0.7;

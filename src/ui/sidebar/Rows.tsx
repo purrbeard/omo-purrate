@@ -269,7 +269,7 @@ export function ThreadRow({ thread, active, searching = false, nowMs, onOpen, on
     <div className={clsx(css.sessionRow, (active || currentId === thread.id) && css.selected, menuOpen && css.menuOpen)} {...rowProps} data-creator={creator}>
       <button type="button" className={css.rowMain} onClick={() => onOpen(thread.id)}>
         <WorkspaceBadge cwd={thread.cwd} className={css.rowBadge} />
-        <span className={css.title} title={`${title} · ${creatorLabel}`}>{title}<span className={css.creator} data-testid="thread-creator-label">{creatorLabel}</span></span>
+        <span className={css.title} title={creator === "unknown" ? title : `${title} · ${creatorLabel}`}>{title}{creator !== "unknown" && <span className={css.creator} data-testid="thread-creator-label">{creatorLabel}</span>}</span>
         {running ? <RunningStatus threadId={thread.id} /> : (
           <span className={css.time}>{formatThreadTime(thread.updatedAt, nowMs, t, preferences?.timeFormat ?? "system", locale)}</span>
         )}

@@ -3,7 +3,7 @@ import type { KeyboardEvent } from "react";
 import clsx from "clsx";
 import { Button, IconCheckOutlineRegular, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import { pathPartsOf } from "@deepseek-ai/dsh-util-workspace-path";
-import { useLocale, useT } from "../../i18n";
+import { useT } from "../../i18n";
 import { workspaceName } from "../conversation/format";
 import { PlusCircleGlyph } from "../glyphs";
 import { WorkspaceBadge } from "../sidebar/WorkspaceBadge";
@@ -11,29 +11,6 @@ import { initialProject } from "./project-list";
 import type { ProjectEntry } from "./project-list";
 import { PROJECT_TESTID } from "./testids";
 import css from "./ProjectPicker.module.css";
-
-const LABELS = {
-  en: {
-    title: "Select a project",
-    description: "Choose where the new thread starts.",
-    projects: "Projects",
-    recent: "Recent",
-    oneThread: "1 thread",
-    newProjectHint: "Choose a folder on this computer",
-    continue: "Continue",
-    starting: "Starting thread…",
-  },
-  ko: {
-    title: "프로젝트 선택",
-    description: "새 스레드를 시작할 프로젝트를 고르세요.",
-    projects: "프로젝트",
-    recent: "최근",
-    oneThread: "스레드 1개",
-    newProjectHint: "이 컴퓨터에서 폴더 선택",
-    continue: "계속",
-    starting: "스레드를 시작하는 중…",
-  },
-};
 
 /** Where a project lives, for the second line of its row: the parent directory, or the directory itself at a root. */
 function projectLocation(cwd: string): string {
@@ -73,7 +50,6 @@ export function ProjectPicker(props: ProjectPickerProps) {
 
 function OpenProjectPicker({ projects, lastWorkspace, busy, unavailable, onContinue, onNewProject, onClose }: ProjectPickerProps) {
   const t = useT();
-  const labels = LABELS[useLocale()];
   const id = useId();
   const [selectedCwd, setSelectedCwd] = useState(() => initialProject(projects, lastWorkspace)?.cwd ?? null);
   const selected = projects.find((project) => project.cwd === selectedCwd) ?? projects[0] ?? null;
@@ -90,8 +66,8 @@ function OpenProjectPicker({ projects, lastWorkspace, busy, unavailable, onConti
   };
 
   const threadsLabel = (count: number): string => {
-    if (count === 0) return labels.recent;
-    return count === 1 ? labels.oneThread : t("shell.sidebar.threadCount", { count });
+    if (count === 0) return t("projects.picker.recent");
+    return count === 1 ? t("projects.picker.oneThread") : t("shell.sidebar.threadCount", { count });
   };
 
   return (
@@ -102,13 +78,13 @@ function OpenProjectPicker({ projects, lastWorkspace, busy, unavailable, onConti
       }}
       className={css.card}
       contentClassName={css.content}
-      title={labels.title}
+      title={t("projects.picker.title")}
       closeLabel={t("common.close")}
-      description={labels.description}
+      description={t("projects.picker.description")}
       footer={
         <>
           <span className={css.status} role="status">
-            {busy === "starting" ? labels.starting : unavailable}
+            {busy === "starting" ? t("projects.picker.starting") : unavailable}
           </span>
           <Button variant="outline" className={css.action} disabled={busy === "starting"} onClick={onClose}>
             {t("common.cancel")}
@@ -120,14 +96,14 @@ function OpenProjectPicker({ projects, lastWorkspace, busy, unavailable, onConti
             disabled={locked || selected === null}
             onClick={submit}
           >
-            {labels.continue}
+            {t("projects.picker.continue")}
           </Button>
         </>
       }
     >
       <div className={css.picker} data-testid={PROJECT_TESTID.projectPicker}>
         {projects.length > 0 && (
-          <div className={css.list} role="radiogroup" aria-label={labels.projects} aria-disabled={locked} onKeyDown={onListKeyDown}>
+          <div className={css.list} role="radiogroup" aria-label={t("projects.picker.projects")} aria-disabled={locked} onKeyDown={onListKeyDown}>
             {projects.map((project, index) => {
               const checked = project === selected;
               return (
@@ -184,7 +160,7 @@ function OpenProjectPicker({ projects, lastWorkspace, busy, unavailable, onConti
           </span>
           <span className={css.text}>
             <span className={css.name}>{t("shell.newProject")}</span>
-            <span className={css.hint}>{labels.newProjectHint}</span>
+            <span className={css.hint}>{t("projects.picker.newProjectHint")}</span>
           </span>
         </button>
       </div>

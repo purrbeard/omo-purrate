@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import { Button, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
-import { useLocale } from "../../i18n";
+import { useT } from "../../i18n";
 import type { ImageInput } from "./attachments";
 import css from "./SketchDialog.module.css";
 
@@ -8,20 +8,6 @@ const WIDTH = 960;
 const HEIGHT = 540;
 // The drawing is white paper, independent of the surrounding application theme.
 const PAPER = "#ffffff";
-const LABELS = {
-  en: {
-    title: "Attach a sketch", close: "Close sketch", pen: "Pen", eraser: "Eraser",
-    color: "Pen color", undo: "Undo last stroke", clear: "Clear sketch",
-    cancel: "Cancel", attach: "Attach sketch", canvas: "Sketch canvas",
-    hint: "Draw with your mouse, pen, or finger. The sketch is attached as a PNG image.",
-  },
-  ko: {
-    title: "스케치 첨부", close: "스케치 닫기", pen: "펜", eraser: "지우개",
-    color: "펜 색상", undo: "마지막 획 취소", clear: "스케치 지우기",
-    cancel: "취소", attach: "스케치 첨부", canvas: "스케치 캔버스",
-    hint: "마우스, 펜 또는 손가락으로 그리세요. 스케치는 PNG 이미지로 첨부됩니다.",
-  },
-};
 
 type Point = { x: number; y: number };
 type Stroke = { points: Point[]; color: string; width: number; erase: boolean };
@@ -55,7 +41,7 @@ export function SketchDialog({ onAttach, onClose }: {
   onAttach: (image: ImageInput) => void;
   onClose: () => void;
 }) {
-  const labels = LABELS[useLocale()];
+  const t = useT();
   const hintId = useId();
   const canvas = useRef<HTMLCanvasElement>(null);
   const strokes = useRef<Stroke[]>([]);
@@ -117,13 +103,13 @@ export function SketchDialog({ onAttach, onClose }: {
     <Modal
       open
       onClose={onClose}
-      title={labels.title}
-      closeLabel={labels.close}
+      title={t("composer.sketch.title")}
+      closeLabel={t("composer.sketch.close")}
       className={css.dialog}
       contentClassName={css.content}
       footer={
         <>
-          <Button onClick={onClose}>{labels.cancel}</Button>
+          <Button onClick={onClose}>{t("common.cancel")}</Button>
           <Button
             variant="primary"
             disabled={strokeCount === 0}
@@ -134,22 +120,22 @@ export function SketchDialog({ onAttach, onClose }: {
               onClose();
             }}
           >
-            {labels.attach}
+            {t("composer.sketch.attach")}
           </Button>
         </>
       }
     >
       <div className={css.sketch}>
         <div className={css.toolbar}>
-          <div className={css.tools} role="group" aria-label={labels.canvas}>
+          <div className={css.tools} role="group" aria-label={t("composer.sketch.canvas")}>
             <Button size="sm" variant={eraser ? "ghost" : "outline"} aria-pressed={!eraser} data-modal-autofocus onClick={() => setEraser(false)}>
-              {labels.pen}
+              {t("composer.sketch.pen")}
             </Button>
             <Button size="sm" variant={eraser ? "outline" : "ghost"} aria-pressed={eraser} onClick={() => setEraser(true)}>
-              {labels.eraser}
+              {t("composer.sketch.eraser")}
             </Button>
             <label className={css.colorLabel}>
-              {labels.color}
+              {t("composer.sketch.color")}
               <input className={css.color} type="color" value={color} onChange={(event) => { setColor(event.currentTarget.value); setEraser(false); }} />
             </label>
           </div>
@@ -159,14 +145,14 @@ export function SketchDialog({ onAttach, onClose }: {
               setStrokeCount(strokes.current.length);
               if (canvas.current !== null) replay(canvas.current, strokes.current);
             }}>
-              {labels.undo}
+              {t("composer.sketch.undo")}
             </Button>
             <Button size="sm" disabled={strokeCount === 0} onClick={() => {
               strokes.current = [];
               setStrokeCount(0);
               if (canvas.current !== null) replay(canvas.current, strokes.current);
             }}>
-              {labels.clear}
+              {t("composer.sketch.clear")}
             </Button>
           </div>
         </div>
@@ -177,7 +163,7 @@ export function SketchDialog({ onAttach, onClose }: {
             width={WIDTH}
             height={HEIGHT}
             tabIndex={0}
-            aria-label={labels.canvas}
+            aria-label={t("composer.sketch.canvas")}
             aria-describedby={hintId}
             data-eraser={eraser || undefined}
             onPointerDown={start}
@@ -186,10 +172,10 @@ export function SketchDialog({ onAttach, onClose }: {
             onPointerCancel={cancelStroke}
             onLostPointerCapture={cancelStroke}
           >
-            {labels.hint}
+            {t("composer.sketch.hint")}
           </canvas>
         </div>
-        <p id={hintId} className={css.hint}>{labels.hint}</p>
+        <p id={hintId} className={css.hint}>{t("composer.sketch.hint")}</p>
       </div>
     </Modal>
   );

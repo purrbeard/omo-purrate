@@ -20,8 +20,9 @@ import { useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
 import { uiState, updatePreferences, useUiState } from "../ui-state";
 import { resolveComposerModel, selectActiveSessionModel } from "../../state";
-import { filterGroups, groupModels, resolveEffort } from "./model-groups";
+import { filterGroups, groupModels, modelDisplayName, resolveEffort } from "./model-groups";
 import { EFFORT_KEY } from "./effort-labels";
+import { APP_SHORTCUTS, shortcutKeys } from "../shortcuts";
 import css from "./ModelPicker.module.css";
 
 import { ProfilePicker } from "./ProfilePicker";
@@ -71,10 +72,11 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
 
   const effortLabel = currentEffort === null ? null : t(EFFORT_KEY[currentEffort]);
   const unavailableId = current === null ? modelId ?? (session ? `${session.modelProvider}/${session.model}` : null) : null;
-  const modelLabel = profile ? `${t(profile.startsWith("daily") ? "composer.profile.daily" : "composer.profile.geeky")}${profile.endsWith("heavy") ? ` · ${t("composer.profile.heavy")}` : ""}` : current?.displayName ?? (unavailableId ? t("composer.model.unavailable", { id: unavailableId }) : t("composer.model.none"));
+  const modelLabel = profile ? `${t(profile.startsWith("daily") ? "composer.profile.daily" : "composer.profile.geeky")}${profile.endsWith("heavy") ? ` · ${t("composer.profile.heavy")}` : ""}` : (current ? modelDisplayName(current) : undefined) ?? (unavailableId ? t("composer.model.unavailable", { id: unavailableId }) : t("composer.model.none"));
+  const shortcut = shortcutKeys(APP_SHORTCUTS.find(entry => entry.id === "model-picker")!, window.omo.platform).join(window.omo.platform === "darwin" ? "" : "+");
   const tooltip = effortLabel === null
-    ? t("composer.model.tooltipNoEffort", { model: modelLabel })
-    : t("composer.model.tooltip", { model: modelLabel, effort: effortLabel });
+    ? t("composer.model.tooltipNoEffort", { model: modelLabel, shortcut })
+    : t("composer.model.tooltip", { model: modelLabel, effort: effortLabel, shortcut });
   const triggerAria =
     current === null
       ? t("composer.model.select")
@@ -371,7 +373,7 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
                         onClick={() => chooseModel(model)}
                       >
                         <span className={css.optionCopy}>
-                          <span className={css.modelName}>{model.displayName}</span>
+                          <span className={css.modelName}>{modelDisplayName(model)}</span>
                           {model.description !== "" && <span className={css.modelDescription}>{model.description}</span>}
                         </span>
                         <span className={css.check}>{selected && <IconCheckOutlineRegular />}</span>

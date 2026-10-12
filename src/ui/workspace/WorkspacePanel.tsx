@@ -1,29 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionWorktree, WorkspaceFile } from "../../../shared/workspace";
-import { useLocale } from "../../i18n";
+import { useT } from "../../i18n";
 import { useAppSelector } from "../app-context";
 import { GIT_REFRESH_EVENT, selectCompletedTurnCount } from "../git/use-git-info";
 import css from "./WorkspacePanel.module.css";
 
-const LABELS = {
-  en: { title: "Files", close: "Close files", refresh: "Refresh files", changed: "Changes", all: "All files", search: "Search files", file: "File", diff: "Diff", loading: "Loading...", empty: "No files match", noChanges: "No changed files", noDiff: "No changes in this file", select: "Select a file to preview", noWorkspace: "Select a conversation to browse its workspace", readOnly: "Read only", tabClose: "Close tab", error: "Could not load workspace", binary: "binary" },
-  ko: { title: "파일", close: "파일 패널 닫기", refresh: "파일 새로고침", changed: "변경 사항", all: "모든 파일", search: "파일 검색", file: "파일", diff: "Diff", loading: "불러오는 중...", empty: "일치하는 파일 없음", noChanges: "변경된 파일 없음", noDiff: "이 파일에 변경 사항 없음", select: "미리 볼 파일을 선택하세요", noWorkspace: "대화를 선택해 작업 폴더를 확인하세요", readOnly: "읽기 전용", tabClose: "탭 닫기", error: "작업 폴더를 불러오지 못했습니다", binary: "바이너리" },
-};
 
 export interface WorkspacePanelProps {
   placement: "docked" | "overlay";
-  onClose: () => void;
 }
 
-export function WorkspacePanel({ placement, onClose }: WorkspacePanelProps) {
+export function WorkspacePanel({ placement }: WorkspacePanelProps) {
   const cwd = useAppSelector((state) => state.activeThreadId === null ? null : state.threads[state.activeThreadId]?.cwd ?? null);
   const threadId = useAppSelector((state) => state.activeThreadId);
-  return <WorkspaceContents key={threadId ?? "no-workspace"} threadId={threadId} cwd={cwd} placement={placement} onClose={onClose} />;
+  return <WorkspaceContents key={threadId ?? "no-workspace"} threadId={threadId} cwd={cwd} placement={placement} />;
 }
 
-function WorkspaceContents({ cwd, threadId, placement, onClose }: WorkspacePanelProps & { cwd: string | null; threadId: string | null }) {
-  const locale = useLocale();
-  const labels = LABELS[locale];
+function WorkspaceContents({ cwd, threadId, placement }: WorkspacePanelProps & { cwd: string | null; threadId: string | null }) {
+  const t = useT();
+  const labels = Object.fromEntries((["title", "refresh", "changed", "all", "search", "file", "diff", "loading", "empty", "noChanges", "noDiff", "select", "noWorkspace", "readOnly", "tabClose", "error", "binary"] as const)
+    .map(key => [key, t(`workspace.panel.${key}`)])) as Record<"title" | "refresh" | "changed" | "all" | "search" | "file" | "diff" | "loading" | "empty" | "noChanges" | "noDiff" | "select" | "noWorkspace" | "readOnly" | "tabClose" | "error" | "binary", string>;
   const [sessionView, setSessionView] = useState(false);
   const [sessionWork, setSessionWork] = useState<SessionWorktree[]>([]);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -42,7 +38,6 @@ function WorkspaceContents({ cwd, threadId, placement, onClose }: WorkspacePanel
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!sessionView || cwd === null || threadId === null) return;
@@ -62,16 +57,6 @@ function WorkspaceContents({ cwd, threadId, placement, onClose }: WorkspacePanel
     window.addEventListener(GIT_REFRESH_EVENT, refresh);
     return () => window.removeEventListener(GIT_REFRESH_EVENT, refresh);
   }, []);
-
-  // The opener survives docked/overlay switches: while docked the header toggle is hidden and cannot take focus back.
-  const opener = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    if (placement !== "overlay") return;
-    const active = document.activeElement;
-    if (active instanceof HTMLElement && active !== document.body && panelRef.current?.contains(active) !== true) opener.current = active;
-    closeRef.current?.focus();
-    return () => { if (opener.current?.isConnected) opener.current.focus({ preventScroll: true }); };
-  }, [placement]);
 
   useEffect(() => {
     if (cwd === null) return;
@@ -126,35 +111,11 @@ function WorkspaceContents({ cwd, threadId, placement, onClose }: WorkspacePanel
 
   return (
     <aside ref={panelRef} className={css.panel} data-placement={placement} data-testid="workspace-panel" aria-label={labels.title}
-      role={placement === "overlay" ? "dialog" : "complementary"} aria-modal={placement === "overlay" ? true : undefined} tabIndex={-1}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
-        if (placement === "overlay" && event.key === "Tab") {
-          const controls = [...(panelRef.current?.querySelectorAll<HTMLElement>('button, summary, [tabindex], input, select, textarea, a[href]') ?? [])].filter(control => {
-            if (control.tabIndex < 0 || control.matches(":disabled") || control.closest("[hidden], [inert]") !== null || control.getClientRects().length === 0) return false;
-            const visibility = getComputedStyle(control).visibility;
-            if (visibility === "hidden" || visibility === "collapse") return false;
-            for (let ancestor = control.parentElement; ancestor !== null && ancestor !== panelRef.current; ancestor = ancestor.parentElement) {
-              if (ancestor instanceof HTMLDetailsElement && !ancestor.open && !ancestor.querySelector(":scope > summary")?.contains(control)) return false;
-            }
-            return true;
-          });
-          const first = controls[0];
-          const last = controls[controls.length - 1];
-          if (first === undefined) { event.preventDefault(); panelRef.current?.focus(); return; }
-          if (!controls.includes(document.activeElement as HTMLElement)) { event.preventDefault(); (event.shiftKey ? last : first)?.focus(); return; }
-          if (event.shiftKey && document.activeElement === first && last !== undefined) { event.preventDefault(); last.focus(); }
-          if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-        }
-      }}>
+      tabIndex={-1}>
       <header className={css.header} data-window-drag>
-        <span className={css.title}>{labels.title}</span>
         {cwd !== null && <span className={css.workspace} title={cwd}>{cwd.split(/[\\/]/).filter(Boolean).at(-1)}</span>}
         <button className={css.iconButton} type="button" aria-label={labels.refresh} title={labels.refresh} disabled={cwd === null || listLoading} onClick={() => setRevision((value) => value + 1)}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 6a5 5 0 1 0 .1 3M13 2.5V6H9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        </button>
-        <button ref={closeRef} className={css.iconButton} type="button" aria-label={labels.close} onClick={onClose}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
         </button>
       </header>
       {cwd === null ? <p className={css.empty}>{labels.noWorkspace}</p> : <>
@@ -185,13 +146,13 @@ function WorkspaceContents({ cwd, threadId, placement, onClose }: WorkspacePanel
               <button type="button" aria-pressed={!sessionView && changesOnly} onClick={() => { setSessionView(false); setChangesOnly(true); }}>{labels.changed} <span className={css.count}>{changed}</span></button>
               {changed > 0 && <span className={css.lines} data-testid="workspace-line-totals"><span data-kind="added">+{totals.added}</span>{" "}<span data-kind="removed">−{totals.removed}</span></span>}
               <button type="button" aria-pressed={!sessionView && !changesOnly} onClick={() => { setSessionView(false); setChangesOnly(false); }}>{labels.all}</button>
-              <button type="button" aria-pressed={sessionView} onClick={() => setSessionView(true)}>{locale === "ko" ? "세션 이력" : "Session history"}</button>
+              <button type="button" aria-pressed={sessionView} onClick={() => setSessionView(true)}>{t("workspace.panel.sessionHistory")}</button>
             </div>
           </div>
           <input className={css.search} type="search" aria-label={labels.search} placeholder={labels.search} value={filter} onChange={(event) => setFilter(event.target.value)} />
           <div className={css.fileList} aria-busy={sessionView ? sessionLoading : listLoading}>
             {sessionView ? <>
-              <p className={css.sessionNote}>{locale === "ko" ? "세션 시작 이후 워크트리별 커밋(메인에 반영됐는지 포함)과 다른 워크트리의 미커밋 변경입니다. 다른 작업자의 변경도 포함될 수 있습니다." : "Commits since this session started, per worktree (with whether each reached the main branch), and other worktrees' uncommitted changes. May include other contributors' work."}</p>
+              <p className={css.sessionNote}>{t("workspace.panel.sessionNote")}</p>
               {sessionError !== null ? <p className={css.error} role="alert">{sessionError}</p>
                 : sessionLoading ? <p className={css.empty} role="status">{labels.loading}</p>
                 : sessionWork.every((work) => work.commits.length === 0 && work.changes.length === 0) ? <p className={css.empty}>{labels.noChanges}</p>
@@ -199,9 +160,9 @@ function WorkspaceContents({ cwd, threadId, placement, onClose }: WorkspacePanel
                   <h3 title={work.root} data-base={work.base || undefined}>
                     {work.branch ?? "HEAD"}
                     {work.base
-                      ? <span className={css.flowBadge} data-kind="base">{locale === "ko" ? "메인" : "main"}</span>
+                      ? <span className={css.flowBadge} data-kind="base">{t("workspace.panel.main")}</span>
                       : work.baseBranch !== null && <span className={css.flowBadge} data-testid="workspace-session-target">→ {work.baseBranch}</span>}
-                    {work.current && <span className={css.flowBadge} data-kind="current">{locale === "ko" ? "이 세션" : "this session"}</span>}
+                    {work.current && <span className={css.flowBadge} data-kind="current">{t("workspace.panel.thisSession")}</span>}
                     <span className={css.worktreeFolder}>{work.root.split(/[\\/]/).at(-1)}</span>
                   </h3>
                   {work.changes.filter((file) => file.path.toLowerCase().includes(filter.toLowerCase())).map((file) => <div key={file.path} className={css.fileRow} title={work.root}>
@@ -210,7 +171,7 @@ function WorkspaceContents({ cwd, threadId, placement, onClose }: WorkspacePanel
                   {work.commits.map((commit) => <details key={commit.hash} open data-testid="workspace-session-commit">
                     <summary>{commit.hash.slice(0, 7)} {commit.subject}
                       {commit.merged !== undefined && <span className={css.mergeBadge} data-testid="workspace-session-merged" data-merged={commit.merged}>
-                        {commit.merged ? (locale === "ko" ? `${work.baseBranch ?? "main"}에 반영됨` : `in ${work.baseBranch ?? "main"}`) : (locale === "ko" ? "미반영" : "not merged")}
+                        {commit.merged ? t("workspace.panel.merged", { branch: work.baseBranch ?? "main" }) : t("workspace.panel.notMerged")}
                       </span>}
                     </summary>
                     {commit.files.filter((file) => file.path.toLowerCase().includes(filter.toLowerCase())).map((file) => <div key={file.path} className={css.fileRow}>

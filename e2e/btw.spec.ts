@@ -152,10 +152,10 @@ test("a second /btw creates a second retained side chat listed in the picker", a
 
 test("closing and reopening the panel restores the side chats; ⌘E toggles it", async () => {
   const { page } = current();
-  await byTestId(page, TESTID.sideClose).click();
+  await page.getByTestId("right-dock-close").click();
   await expect(panel(page)).toBeHidden();
-  await expect(byTestId(page, TESTID.sideToggle)).toContainText("2");
-  await byTestId(page, TESTID.sideToggle).click();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+e" : "Control+e");
+  await expect(page.getByTestId("right-tab-btw")).toContainText("2");
   await expect(panel(page)).toBeVisible();
   await expect(byTestId(page, TESTID.sidePicker)).toContainText("BTW #1");
   await expect(sideQuestions(page).first()).toHaveText("what changed?");
@@ -181,7 +181,7 @@ test("the panel follows the Aside-derived design in dark and at 760x600", async 
 
 test("/btw without a question opens the panel without sending, and the / menu lists /btw", async () => {
   const { page, readFakeLog } = current();
-  await byTestId(page, TESTID.sideClose).click();
+  await page.getByTestId("right-dock-close").click();
   const input = byTestId(page, TESTID.composerInput);
   const before = { turns: methodCount(readFakeLog(), "turn/start"), threads: methodCount(readFakeLog(), "thread/start") };
   await input.fill("/btw");
@@ -249,7 +249,7 @@ test("another main thread shows only its own side chats, and a side error stays 
   await send(page, `/btw ${"does a long side question still leave room for the close button? ".repeat(3).trim()}`);
   await expect(sideAnswer(page)).toContainText("Side answer to");
   const panelBox = await panel(page).boundingBox();
-  const closeBox = await byTestId(page, TESTID.sideClose).boundingBox();
+  const closeBox = await page.getByTestId("right-dock-close").boundingBox();
   expect(panelBox !== null && closeBox !== null && closeBox.x + closeBox.width <= panelBox.x + panelBox.width).toBe(true);
   await shot(page, "C002-long-question");
 
@@ -273,7 +273,7 @@ test("side threads never appear in the sidebar and the side chats survive a rela
   await expect(threadRow(page, secondId)).toBeVisible();
   for (const id of sideIds) await expect(threadRow(page, id)).toHaveCount(0);
   await threadRow(page, mainId).getByRole("button").first().click();
-  await byTestId(page, TESTID.sideToggle).click();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+e" : "Control+e");
   await expect(panel(page)).toBeVisible();
   await expect(sideQuestions(page).first()).toHaveText("are we there yet?");
   await expect(sideAnswer(page)).toContainText('Side answer to "are we there yet?"');

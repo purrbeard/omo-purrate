@@ -5,13 +5,12 @@ import { IconFolderOpenOutlineRegular, IconPaperclipOutlineRegular, IconCloseOut
 import { ArrowUpGlyph } from "../glyphs";
 import { parseBtwCommand, selectActiveCwd, selectIsTurnActive, selectSkillCatalog } from "../../state";
 import type { SkillCatalog } from "../../state";
-import { useLocale, useT } from "../../i18n";
+import { useT } from "../../i18n";
 import { useActions, useAppSelector } from "../app-context";
 import { useAskSide } from "../btw/use-ask-side";
 import { ConversationDock } from "../conversation/ConversationDock";
 import { TESTID } from "../testids";
 import { updatePreferences, useUiState } from "../ui-state";
-import { BackgroundWorkStrip } from "./BackgroundWorkStrip";
 import { CheckoutBar } from "./CheckoutBar";
 import { ModelPicker } from "./ModelPicker";
 import { ContextGauge } from "./ContextGauge";
@@ -65,7 +64,6 @@ function StopIcon() {
  */
 export function Composer() {
   const t = useT();
-  const ko = useLocale() === "ko";
   const actions = useActions();
   const askSide = useAskSide();
   const activeThreadId = useAppSelector((state) => state.activeThreadId);
@@ -115,7 +113,7 @@ export function Composer() {
   const addReferences = (added: readonly DraftContext[]): void => {
     setContext(current => {
       const distinct = [...current, ...added].filter((entry, index, all) => all.findIndex(candidate => candidate.kind === entry.kind && candidate.value === entry.value) === index);
-      if (distinct.length > CONTEXT_LIMIT) setImageNotice(ko ? "자료는 메시지당 최대 10개까지 첨부할 수 있습니다." : "Attach up to 10 context items per message.");
+      if (distinct.length > CONTEXT_LIMIT) setImageNotice(t("composer.chip.contextLimit"));
       return addContext(current, added);
     });
   };
@@ -448,7 +446,6 @@ export function Composer() {
   return (
     <div className={css.root}>
       <ConversationDock />
-      {activeThreadId !== null && <BackgroundWorkStrip threadId={activeThreadId} />}
       <div
         className={clsx(css.card, !connected && css.cardDisabled, keyword !== null && css.cardMagic, dropping && css.cardDrop)}
         data-testid={TESTID.composer}
@@ -486,12 +483,12 @@ export function Composer() {
         {imageNotice !== "" && <div className={css.imageNotice} data-testid={TESTID.attachmentNotice} role="status">{imageNotice}</div>}
         {(context.length > 0 || planMode || goalDraft !== "") && <div className={css.contextChips}>
           {context.map((entry, index) => <button type="button" key={`${entry.kind}:${entry.value}`} data-testid="context-chip" className={css.contextChip}
-            title={entry.value} aria-label={`${ko ? "첨부 제거" : "Remove attachment"}: ${entry.kind === "terminal" ? "WindowsTerminal" : basename(entry.value)}`}
+            title={entry.value} aria-label={`${t("composer.chip.removeAttachment")}: ${entry.kind === "terminal" ? "WindowsTerminal" : basename(entry.value)}`}
             onClick={() => setContext(current => current.filter((_, position) => position !== index))}>
             <span>{entry.kind === "terminal" ? "WindowsTerminal" : basename(entry.value)}</span><IconCloseOutlineRegular size={12} />
           </button>)}
-          {planMode && <button type="button" className={css.contextChip} data-testid="plan-mode-chip" aria-label={ko ? "계획 모드 제거" : "Remove plan mode"} onClick={() => setPlanMode(false)}>{ko ? "계획 모드" : "Plan mode"}<IconCloseOutlineRegular size={12} /></button>}
-          {goalDraft !== "" && <button type="button" className={css.contextChip} data-testid="goal-draft-chip" title={goalDraft} aria-label={ko ? "목표 제거" : "Remove goal"} onClick={() => setGoalDraft("")}><span>{ko ? "목표" : "Goal"}: {goalDraft}</span><IconCloseOutlineRegular size={12} /></button>}
+          {planMode && <button type="button" className={css.contextChip} data-testid="plan-mode-chip" aria-label={t("composer.chip.removePlan")} onClick={() => setPlanMode(false)}>{t("composer.chip.planChip")}<IconCloseOutlineRegular size={12} /></button>}
+          {goalDraft !== "" && <button type="button" className={css.contextChip} data-testid="goal-draft-chip" title={goalDraft} aria-label={t("composer.chip.removeGoal")} onClick={() => setGoalDraft("")}><span>{t("composer.chip.goalChip")}: {goalDraft}</span><IconCloseOutlineRegular size={12} /></button>}
         </div>}
         <div className={css.scroll}>
           <div ref={mirrorRef} className={css.mirror} aria-hidden>

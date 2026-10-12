@@ -7,7 +7,7 @@ test("terminal runs commands in the session workspace", async () => {
   const running = await launchApp({ omo: "fake", pickDir: workspace, size: { width: 1280, height: 820 } });
   try {
     await newSession(running.page);
-    await running.page.getByTestId("terminal-toggle").click();
+    await running.page.keyboard.press("Control+Backquote");
     const panel = running.page.getByTestId("terminal-panel");
     await expect(panel).toBeVisible();
     await expect(panel).toHaveAttribute("data-placement", "docked");
@@ -19,7 +19,7 @@ test("terminal runs commands in the session workspace", async () => {
     await input.fill("Get-Location");
     await input.press("Enter");
     await expect(panel.getByTestId("terminal-output")).toContainText(path.basename(workspace), { timeout: 20_000 });
-    await panel.getByTestId("terminal-close").click();
+    await running.page.getByTestId("right-dock-close").click();
     await expect(panel).toHaveCount(0);
   } finally { await running.close(); }
 });

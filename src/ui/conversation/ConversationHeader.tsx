@@ -4,7 +4,7 @@ import { useT } from "../../i18n";
 import type { ThreadSummary } from "../../state";
 import { WorkspaceBadge } from "../sidebar/WorkspaceBadge";
 import { TESTID } from "../testids";
-import { uiState, useUiState } from "../ui-state";
+import { shownTab, uiState, useUiState } from "../ui-state";
 import { threadTitle, workspaceName } from "./format";
 import { OpenButton } from "./OpenButton";
 import { CommitPushButton } from "./CommitPushButton";
@@ -45,7 +45,9 @@ export const ConversationHeader = memo(function ConversationHeader({
   panels?: ReactNode;
 }) {
   const t = useT();
-  const { sidebarVisible, workspacePanelOpen } = useUiState();
+  const ui = useUiState();
+  const { sidebarVisible } = ui;
+  const dockOpen = shownTab(ui) !== null;
   const toggle = <span className={sidebarVisible ? css.narrowToggle : undefined}><SidebarToggle /></span>;
   if (!active) {
     return (
@@ -85,8 +87,13 @@ export const ConversationHeader = memo(function ConversationHeader({
         )}
         {cwd !== "" && <CommitPushButton key={cwd} cwd={cwd} />}
         {cwd !== "" && <OpenButton cwd={cwd} />}
-        {cwd !== "" && <button type="button" className={css.panelButton} data-testid="workspace-toggle" aria-pressed={workspacePanelOpen} aria-label={t("shell.workspace.files")} onClick={() => uiState.setWorkspacePanelOpen(!workspacePanelOpen)}>{t("shell.workspace.files")}</button>}
         {panels}
+        <Tooltip label={t(dockOpen ? "shell.dock.close" : "shell.dock.open")} side="bottom" align="end" delayMs={500}>
+          <button type="button" className={css.sidebarToggle} data-testid="dock-toggle" aria-pressed={dockOpen}
+            aria-label={t(dockOpen ? "shell.dock.close" : "shell.dock.open")} onClick={() => uiState.toggleDock()}>
+            <IconPanelLeftOutlineRegular size={16} className={ui.dockSide === "right" ? css.mirrored : undefined} />
+          </button>
+        </Tooltip>
       </div>
     </header>
   );

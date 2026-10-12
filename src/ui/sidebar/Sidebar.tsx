@@ -20,7 +20,7 @@ import { selectPinnedThreads } from "../../state/selectors";
 import type { ThreadSummary, WorkspaceGroup } from "../../state";
 import { useT } from "../../i18n";
 import { StoreContext, useActions, useAppSelector } from "../app-context";
-import { APP_VERSION, isPreRelease } from "../app-version";
+import { APP_VERSION, isDevBuild } from "../app-version";
 import { threadTitle } from "../conversation/format";
 import { BrandMark, PlusCircleGlyph } from "../glyphs";
 import { useNewSessionFlow } from "../new-session";
@@ -267,7 +267,7 @@ export function Sidebar() {
         <span className={css.brand}>
           <BrandMark size={22} className={css.brandMark} />
           <span className={css.brandName}>{t("app.brand")}</span>
-          {isPreRelease(APP_VERSION) && (
+          {isDevBuild() && (
             <span className={css.devBadge} title={APP_VERSION}>
               {t("shell.devBadge")}
             </span>

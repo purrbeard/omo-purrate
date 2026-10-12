@@ -6,6 +6,12 @@ export interface ModelGroup {
   models: Model[];
 }
 
+/** The model's own name: OpenCodex prefixes "owner · " for grouping, which the group header already shows. */
+export function modelDisplayName(model: Pick<Model, "displayName">): string {
+  const separator = model.displayName.indexOf(" · ");
+  return separator === -1 ? model.displayName : model.displayName.slice(separator + 3);
+}
+
 export function providerOf(id: string): string {
   const slash = id.indexOf("/");
   return slash === -1 ? id : id.slice(0, slash);

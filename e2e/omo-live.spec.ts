@@ -90,7 +90,7 @@ test("live stages show DAG states, child output, todo and goal across themes and
   await shot(page, "C001-live-dark");
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(760, 600));
   await expect(page.locator("html")).toHaveJSProperty("clientWidth", 760);
-  await page.getByTestId("workflow-close").click();
+  await page.getByTestId("right-dock-close").click();
   await expect(byTestId(page, TESTID.composerInput)).toBeVisible();
   await expect(byTestId(page, TESTID.composerInput)).toBeEnabled();
   await shot(page, "C001-narrow");

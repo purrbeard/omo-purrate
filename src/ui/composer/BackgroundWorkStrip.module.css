@@ -1,16 +1,13 @@
+/* A segment of the status line above the composer (ConversationDock). */
 .strip {
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 8px;
-  width: 100%;
-  max-width: var(--dsh-composer-card-max-width);
-  margin-bottom: 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--dsw-alias-border-l3);
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-specific-input-major);
+  min-height: 36px;
+  padding: 4px 12px;
+  border: 0;
+  background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-family: inherit;
   font-size: 13px;
@@ -26,15 +23,18 @@
 
 .strip:focus-visible {
   outline: 2px solid var(--dsw-focus-ring-color);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
 .count {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .open {
+  flex: none;
   margin-left: auto;
   color: var(--dsw-alias-label-primary);
 }

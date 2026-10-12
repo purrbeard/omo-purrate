@@ -3,6 +3,7 @@
 .header { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--dsw-alias-border-l2); }
 .heading { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .heading strong { font-size: 13px; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .heading span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary); }
 .header button { flex-shrink: 0; border: 0; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); font: inherit; padding: 8px; cursor: pointer; }
 .body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: monospace; line-height: 1.5; }

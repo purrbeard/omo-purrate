@@ -17,10 +17,9 @@ import { AppFrame } from "./ui/shell/AppFrame";
 import { RightDock, useTerminalShortcut } from "./ui/shell/RightDock";
 import { Sidebar } from "./ui/sidebar/Sidebar";
 import { applyThemePreference } from "./ui/theme";
-import { uiState, useUiState, WORKFLOW_PANEL_WIDTHS } from "./ui/ui-state";
-import type { RightTab } from "./ui/ui-state";
+import { shownTab, uiState, useUiState, WORKFLOW_PANEL_WIDTHS } from "./ui/ui-state";
+import type { RightTab, WorkView } from "./ui/ui-state";
 import { WorkflowPanel } from "./ui/conversation/WorkflowPanel";
-import { AgentWorkspace } from "./ui/conversation/AgentWorkspace";
 import { ProjectPickerHost } from "./ui/projects/ProjectPickerHost";
 import { CommandPalette } from "./ui/palette/CommandPalette";
 import { buildPaletteEntries } from "./ui/palette/palette-model";
@@ -50,19 +49,17 @@ function MainPane() {
 type Placement = "docked" | "overlay";
 
 const PANELS: Record<RightTab, (placement: Placement) => JSX.Element> = {
-  agents: (placement) => <AgentWorkspace placement={placement} />,
+  work: (placement) => <WorkflowPanel placement={placement} />,
   btw: (placement) => <SidePanel placement={placement} />,
-  terminal: (placement) => <TerminalPanel placement={placement} onClose={() => uiState.closeRightTab("terminal")} />,
-  workflow: (placement) => <WorkflowPanel placement={placement} />,
-  files: (placement) => <WorkspacePanel placement={placement} onClose={() => uiState.setWorkspacePanelOpen(false)} />,
+  terminal: (placement) => <TerminalPanel placement={placement} />,
+  files: (placement) => <WorkspacePanel placement={placement} />,
 };
 
-function dockWidth(tab: RightTab, workflowWidth: number): number {
+function dockWidth(tab: RightTab, workflowWidth: number, workView: WorkView): number {
   switch (tab) {
-    case "agents": return 560;
+    case "work": return workView === "agents" ? 560 : workflowWidth;
     case "btw": return SIDE_PANEL_WIDTH;
     case "terminal": return 440;
-    case "workflow": return workflowWidth;
     case "files": return 440;
   }
 }
@@ -76,12 +73,14 @@ function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const composing = useRef(false);
   const appState = useAppSelector(state => state);
-  const { sidebarVisible, sidebarWidth, workflowPanelSize, onboardingOpen, settingsOpen, rightTab, agentAuto, canDock, preferences, rightWidths, dockSide } = useUiState();
+  const ui = useUiState();
+  const { sidebarVisible, sidebarWidth, workflowPanelSize, onboardingOpen, settingsOpen, preferences, rightWidths, dockSide } = ui;
   const hasAgents = useAppSelector(state => {
     const main = selectMainThreadId(state);
     return main !== null && (selectAgentChildren(state, main).length > 0 || selectTasks(state, main).length > 0 || state.threadLinks.some(link => link.parentId === main && link.taskId !== undefined));
   });
-  const activeTab: RightTab | null = rightTab ?? (agentAuto && hasAgents && canDock ? "agents" : null);
+  useEffect(() => uiState.setWorkAvailable(hasAgents), [hasAgents]);
+  const activeTab: RightTab | null = shownTab({ ...ui, workAvailable: hasAgents });
   const newSession = useNewSessionFlow();
   const groups = useMemo(() => selectManagedThreadsByWorkspace(appState, preferences?.managedThreadIds ?? []), [appState, preferences?.managedThreadIds]);
   const sessions = useMemo(() => {
@@ -106,11 +105,11 @@ function Shell() {
       case "open-project": void newSession(); break;
       case "toggle-sidebar": uiState.toggleSidebar(); break;
       case "command-palette": openPalette(); break;
-      case "toggle-agents": uiState.toggleRightTab("agents"); break;
-      case "toggle-workflow": uiState.toggleRightTab("workflow"); break;
+      case "toggle-agents": uiState.toggleWork("agents"); break;
+      case "toggle-workflow": uiState.toggleWork("graph"); break;
       case "toggle-files": uiState.toggleRightTab("files"); break;
       case "toggle-terminal": uiState.toggleRightTab("terminal"); break;
-      case "toggle-side-chat": actions.setSidePanel(uiState.get().rightTab !== "btw"); break;
+      case "toggle-side-chat": actions.setSidePanel(shownTab(uiState.get()) !== "btw"); break;
       case "keyboard-shortcuts": uiState.setSettingsOpen(true, "keybindings"); break;
     }
   };
@@ -186,7 +185,7 @@ function Shell() {
         onSidebarWidthChange={uiState.setSidebarWidth}
         onCanDockChange={uiState.setCanDock}
         rightPanel={activeTab === null ? null : (placement: Placement) => <RightDock tab={activeTab} placement={placement}><Suspense fallback={null}>{PANELS[activeTab](placement)}</Suspense></RightDock>}
-        rightPanelWidth={activeTab === null ? 0 : rightWidths[activeTab] ?? dockWidth(activeTab, WORKFLOW_PANEL_WIDTHS[workflowPanelSize])}
+        rightPanelWidth={activeTab === null ? 0 : rightWidths[activeTab] ?? dockWidth(activeTab, WORKFLOW_PANEL_WIDTHS[workflowPanelSize], ui.workView)}
         onRightPanelWidthChange={activeTab === null ? undefined : (width) => uiState.setRightWidth(activeTab, width)}
         rightPanelSide={dockSide}
       />

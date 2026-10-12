@@ -15,7 +15,8 @@ test("child agents have independent tabs and native task messages without switch
     await byTestId(page, TESTID.composerSend).click();
     const workspace = page.getByTestId("agent-workspace");
     await expect(workspace).toHaveAttribute("data-placement", "docked");
-    await expect(page.getByTestId("agent-panel-toggle")).toBeHidden();
+    await expect(page.getByTestId("right-dock")).toHaveAttribute("data-tab", "work");
+    await expect(page.getByTestId("workflow-agents-view")).toHaveAttribute("aria-selected", "true");
     const parentId = await workspace.getAttribute("data-parent-id");
     const first = workspace.getByTestId("agent-chat-tab").first();
     await expect(first).toBeVisible();
@@ -30,8 +31,8 @@ test("child agents have independent tabs and native task messages without switch
     expect(deliveries[0]?.params).toEqual({ threadId: parentId, name: "omo-ui.task.send", data: { taskId, message: "Only this child receives this instruction" } });
     await expect(mainInput).toBeVisible();
     await input.fill("draft stays with this agent");
-    await page.getByTestId("right-tab-workflow").click();
-    await page.getByTestId("right-tab-agents").click();
+    await page.getByTestId("workflow-graph-view").click();
+    await page.getByTestId("workflow-agents-view").click();
     await expect(input).toHaveValue("draft stays with this agent");
     const second = workspace.getByTestId("agent-chat-tab").nth(1);
     await second.click();
@@ -62,7 +63,9 @@ test("child agents have independent tabs and native task messages without switch
     await expect(mainInput).toBeVisible();
     await shot(page, "agent-workspace-narrow-closed");
     await launched.app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.setSize(1440, 900); });
-    await page.getByTestId("agent-panel-toggle").click();
+    await page.getByTestId("dock-toggle").click();
     await expect(workspace).toHaveAttribute("data-placement", "docked");
+    await page.getByTestId("dock-toggle").click();
+    await expect(workspace).toHaveCount(0);
   } finally { await launched.close(); }
 });

@@ -426,11 +426,6 @@ export function SidePanel({ placement }: { placement: "docked" | "overlay" }) {
         <kbd className={css.kbd} aria-hidden>
           {window.omo.platform === "darwin" ? "⌘E" : "Ctrl+E"}
         </kbd>
-        <Tooltip label={t("btw.close")} side="bottom" delayMs={500}>
-          <button type="button" className={css.iconButton} data-testid={TESTID.sideClose} aria-label={t("btw.close")} onClick={close}>
-            <CloseIcon />
-          </button>
-        </Tooltip>
       </header>
       {parent === null ? (
         <div className={css.intro} data-testid={TESTID.sideIntro}>

@@ -87,7 +87,7 @@ test("compact DAG and nested subagent todos update without disturbing the conver
     await expect(page.locator("html")).toHaveJSProperty("clientWidth", 900);
     await expect(byTestId(page, TESTID.composerInput)).toBeVisible();
     await capture("expanded-narrow");
-    await page.getByTestId("workflow-close").click();
+    await page.getByTestId("right-dock-close").click();
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900));
     // Apply locale through the same settings control used by the app.
     await byTestId(page, TESTID.openSettings).click();

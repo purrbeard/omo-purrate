@@ -1,5 +1,6 @@
 export const messages = {
   en: {
+    "conversation.statusLine": "Session status",
     "goal.pause": "Pause",
     "goal.resume": "Resume",
     "goal.clear": "Clear",
@@ -176,6 +177,7 @@ export const messages = {
     "conversation.question.incomplete": "Answer every question to submit.",
   },
   ko: {
+    "conversation.statusLine": "세션 상태",
     "goal.pause": "일시 정지",
     "goal.resume": "재개",
     "goal.clear": "지우기",

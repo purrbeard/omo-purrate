@@ -176,7 +176,7 @@ test("every connection point reaches a live DeepSeek session", async () => {
     await point("terminal runs in the session workspace", async () => {
       const tab = page.getByTestId("right-tab-terminal");
       if (await tab.isVisible()) await tab.click();
-      else await page.getByTestId("terminal-toggle").click();
+      else await page.keyboard.press("Control+Backquote");
       const panel = page.getByTestId("terminal-panel");
       const input = panel.getByTestId("terminal-input");
       await expect(input).toBeEnabled({ timeout: 30_000 });
@@ -187,7 +187,8 @@ test("every connection point reaches a live DeepSeek session", async () => {
     });
 
     await point("workflow and files panels open for the session", async () => {
-      await page.getByTestId("right-tab-workflow").click();
+      await page.getByTestId("right-tab-work").click();
+      await page.getByTestId("workflow-graph-view").click();
       await expect(page.getByTestId("workflow-panel")).toBeVisible({ timeout: 20_000 });
       await page.getByTestId("right-tab-files").click();
       await expect(page.getByTestId("workspace-panel")).toBeVisible({ timeout: 20_000 });
@@ -195,7 +196,8 @@ test("every connection point reaches a live DeepSeek session", async () => {
     });
 
     await point("responsive placement follows the window", async () => {
-      await page.getByTestId("right-tab-agents").click();
+      await page.getByTestId("right-tab-work").click();
+      await page.getByTestId("workflow-agents-view").click();
       const seen: string[] = [];
       for (const [width, placement] of [[1440, "docked"], [1000, "docked"], [700, "overlay"], [1440, "docked"]] as const) {
         await app.evaluate(({ BrowserWindow }, wanted) => { BrowserWindow.getAllWindows()[0]?.setContentSize(wanted, 900); }, width);

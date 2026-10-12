@@ -62,18 +62,18 @@ test("workflow graph and background work stay in the same conversation after mai
       await shot(page, `workflow-${theme}-desktop-list`);
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(640, 760));
       await expect(panel).toHaveAttribute("data-placement", "overlay");
-      await expect(page.getByTestId("workflow-close")).toBeFocused();
+      await expect.poll(() => page.evaluate(() => document.getElementById("root")?.querySelector('[data-testid="right-dock"]')?.contains(document.activeElement) ?? false)).toBe(true);
       await page.getByTestId("workflow-log-view").click();
       await page.getByTestId("workflow-list").click();
       await shot(page, `workflow-${theme}-narrow-list`);
       await page.getByTestId("workflow-graph-view").click();
       await shot(page, `workflow-${theme}-narrow-graph`);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-      await page.getByTestId("workflow-close").click();
+      await page.getByTestId("right-dock-close").click();
       await background.click();
-      await expect(page.getByTestId("workflow-close")).toBeFocused();
+      await expect(page.getByTestId("right-dock-close")).toBeFocused();
       await page.getByTestId("workflow-log-view").click();
-      const firstControl = page.getByTestId("workflow-files");
+      const firstControl = page.getByTestId("right-tab-work");
       const lastControl = page.getByTestId("workflow-activity-log").locator(":scope > summary");
       await panel.evaluate(element => {
         const closed = document.createElement("details");
@@ -93,12 +93,12 @@ test("workflow graph and background work stay in the same conversation after mai
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900));
       await expect(panel).toHaveAttribute("data-placement", "docked");
     }
-    await page.getByTestId("workflow-files").click();
+    await page.getByTestId("right-tab-files").click();
     await expect(panel).toHaveCount(0);
     await expect(page.getByTestId("workspace-panel")).toBeVisible();
     await byTestId(page, TESTID.omoActivityToggle).click();
     await expect(panel).toBeVisible();
-    await page.getByTestId("workflow-close").click();
+    await page.getByTestId("right-dock-close").click();
     await send(page, "Keep going");
     await expect(byTestId(page, TESTID.assistantMessage).last()).toBeVisible();
     await expect(background).toBeVisible();

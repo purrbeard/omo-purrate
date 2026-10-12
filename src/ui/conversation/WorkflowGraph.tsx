@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Button, IconFullscreenOutlineRegular, StateDot } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { DagRun } from "../../../shared/protocol";
-import { useLocale, useT, type MessageKey, type Translate } from "../../i18n";
+import { useT, type MessageKey, type Translate } from "../../i18n";
 import { knownNodeState, nodeDot, nodeElapsedMs, type NodeState } from "./activity-model";
 import { formatDuration } from "./format";
 import {
@@ -17,12 +17,6 @@ const NODE_LABELS = {
   cancelled: "activity.node.cancelled", skipped: "activity.node.skipped",
 } as const satisfies Record<NodeState, MessageKey>;
 
-/** Pending dictionary keys (activity.graph.zoom / zoomIn / zoomOut / fit / unresolved); local until src/i18n/activity.ts carries them. */
-const LABELS = {
-  en: { zoom: "Zoom", zoomIn: "Zoom in", zoomOut: "Zoom out", fit: "Fit", unresolved: "Unknown dependencies: {nodes}" },
-  ko: { zoom: "확대/축소", zoomIn: "확대", zoomOut: "축소", fit: "맞춤", unresolved: "알 수 없는 선행 작업: {nodes}" },
-} as const;
-
 const ARROW_DIRECTIONS: Record<string, GraphDirection> = {
   ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
 };
@@ -37,7 +31,6 @@ export function WorkflowGraph({ run, live, now, onSelect }: {
   run: DagRun; live: boolean; now: number; onSelect: (nodeId: string) => void;
 }) {
   const t = useT();
-  const labels = LABELS[useLocale()];
   const layout = useMemo(() => layoutWorkflowGraph(run), [run]);
   const viewportRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -77,14 +70,14 @@ export function WorkflowGraph({ run, live, now, onSelect }: {
   return (
     <section className={css.root} data-testid={GRAPH_TESTID.graph} data-run-id={run.run_id} data-fit={fitted ? "" : undefined}
       aria-label={t("activity.graph")} onKeyDown={onKeyDown}>
-      <div className={css.toolbar} role="toolbar" aria-label={labels.zoom}>
-        <Button size="sm" variant="outline" className={css.zoomButton} aria-label={labels.zoomOut} disabled={scale <= MIN_SCALE}
+      <div className={css.toolbar} role="toolbar" aria-label={t("activity.graph.zoom")}>
+        <Button size="sm" variant="outline" className={css.zoomButton} aria-label={t("activity.graph.zoomOut")} disabled={scale <= MIN_SCALE}
           onClick={() => setManualScale(zoomOut(scale))}>−</Button>
-        <output className={css.scale} aria-label={labels.zoom}>{Math.round(scale * 100)}%</output>
-        <Button size="sm" variant="outline" className={css.zoomButton} aria-label={labels.zoomIn} disabled={scale >= MAX_SCALE}
+        <output className={css.scale} aria-label={t("activity.graph.zoom")}>{Math.round(scale * 100)}%</output>
+        <Button size="sm" variant="outline" className={css.zoomButton} aria-label={t("activity.graph.zoomIn")} disabled={scale >= MAX_SCALE}
           onClick={() => setManualScale(zoomIn(scale))}>+</Button>
         <Button size="sm" variant="outline" icon={<IconFullscreenOutlineRegular size={14} />} aria-pressed={fitted}
-          onClick={() => setManualScale(null)}>{labels.fit}</Button>
+          onClick={() => setManualScale(null)}>{t("activity.graph.fit")}</Button>
       </div>
       <div ref={viewportRef} className={css.viewport}>
         {layout.nodes.length === 0 ? <p className={css.empty}>{t("activity.run.empty")}</p> : (
@@ -112,7 +105,7 @@ export function WorkflowGraph({ run, live, now, onSelect }: {
                 const elapsed = nodeElapsedMs(node, now, live);
                 const dependencies = [...upstream, ...unresolved];
                 const dependsLine = dependencies.length === 0 ? null : t("activity.depends", { nodes: dependencies.join(", ") });
-                const unresolvedLine = unresolved.length === 0 ? null : labels.unresolved.replace("{nodes}", unresolved.join(", "));
+                const unresolvedLine = unresolved.length === 0 ? null : t("activity.graph.unresolved", { nodes: unresolved.join(", ") });
                 return (
                   <button key={node.id} type="button" className={css.node} data-testid={GRAPH_TESTID.node} data-node-id={node.id}
                     data-state={node.state} data-dot={dot} data-column={column} data-row={row}

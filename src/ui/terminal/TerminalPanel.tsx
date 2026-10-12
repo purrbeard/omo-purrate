@@ -6,7 +6,7 @@ import { selectMainThreadId } from "../../state";
 import { useAppSelector } from "../app-context";
 import css from "./TerminalPanel.module.css";
 
-export function TerminalPanel({ placement, onClose }: { placement: "docked" | "overlay"; onClose: () => void }) {
+export function TerminalPanel({ placement }: { placement: "docked" | "overlay" }) {
   const t = useT();
   const threadId = useAppSelector(selectMainThreadId);
   const cwd = useAppSelector(state => threadId === null ? undefined : state.threads[threadId]?.cwd);
@@ -27,10 +27,8 @@ export function TerminalPanel({ placement, onClose }: { placement: "docked" | "o
   const output = session.threadId === threadId ? session.output : [];
 
   useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (inputRef.current?.disabled === false) inputRef.current.focus();
     else panelRef.current?.focus();
-    return () => { if (previous?.isConnected) previous.focus(); };
   }, [placement]);
 
   useEffect(() => {
@@ -101,20 +99,13 @@ export function TerminalPanel({ placement, onClose }: { placement: "docked" | "o
   };
 
   return <aside ref={panelRef} className={css.panel} data-testid="terminal-panel" data-placement={placement} data-thread-id={threadId ?? undefined}
-    role={placement === "overlay" ? "dialog" : "complementary"} aria-modal={placement === "overlay" ? true : undefined} aria-labelledby={headingId} tabIndex={-1}
+    aria-labelledby={headingId} tabIndex={-1}
     onKeyDown={event => {
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); return; }
-      if (event.ctrlKey && event.key.toLowerCase() === "l") { event.preventDefault(); event.stopPropagation(); setSession(current => ({ ...current, output: [] })); atBottom.current = true; return; }
-      if (event.key !== "Tab" || placement !== "overlay") return;
-      const items = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [tabindex="0"]')];
-      const first = items[0], last = items.at(-1);
-      if (event.shiftKey && (document.activeElement === first || document.activeElement === event.currentTarget)) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === event.currentTarget)) { event.preventDefault(); first?.focus(); }
+      if (event.ctrlKey && event.key.toLowerCase() === "l") { event.preventDefault(); event.stopPropagation(); setSession(current => ({ ...current, output: [] })); atBottom.current = true; }
     }}>
     <header className={css.header}>
-      <div className={css.heading}><strong id={headingId}>{t("terminal.title")}</strong><span title={cwd}>{cwd?.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || cwd}</span></div>
+      <div className={css.heading}><strong id={headingId} className={css.srOnly}>{t("terminal.title")}</strong><span title={cwd}>{cwd?.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || cwd}</span></div>
       <button type="button" data-testid="terminal-restart" disabled={threadId === null || cwd === undefined || opening} onClick={() => void restart()}>{t("terminal.restart")}</button>
-      <button type="button" data-testid="terminal-close" aria-label={t("terminal.close")} onClick={onClose}>×</button>
     </header>
     <div ref={outputRef} className={css.body} data-testid="terminal-output" role="log" aria-live="polite" onScroll={event => {
       const region = event.currentTarget;

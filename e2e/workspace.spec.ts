@@ -12,10 +12,10 @@ test("workspace panel previews real files and changes", async () => {
   const running = await launchApp({ omo: "fake", pickDir: workspace, size: { width: 640, height: 760 } });
   try {
     await newSession(running.page);
-    await running.page.getByTestId("workspace-toggle").click();
+    await running.page.getByTestId("checkout-folder").click();
     const panel = running.page.getByTestId("workspace-panel");
     await expect(panel).toHaveAttribute("data-placement", "overlay");
-    await expect(panel.getByRole("button", { name: "Close files", exact: true })).toBeFocused();
+    await expect(running.page.getByTestId("right-dock-close")).toBeFocused();
     await expect(panel.getByTestId("workspace-file-lines")).toHaveText("+1 −0");
     await expect(panel.getByTestId("workspace-line-totals")).toHaveText("+1 −0");
     await panel.getByRole("button", { name: "hello.ts +1 −0 U", exact: true }).click();
@@ -49,7 +49,7 @@ test("workspace panel previews real files and changes", async () => {
     await expect(panel).toHaveAttribute("data-placement", "overlay");
     await expect(panel.locator('[data-diff="true"]')).toContainText("+export const hello");
     await shot(running.page, "workspace-real-file-diff");
-    const firstControl = panel.getByRole("button", { name: "Refresh files", exact: true });
+    const firstControl = running.page.getByTestId("right-tab-files");
     const lastControl = panel.getByRole("button", { name: "hello.ts +1 −0 U", exact: true });
     await lastControl.focus();
     await running.page.keyboard.press("Tab");
@@ -58,7 +58,7 @@ test("workspace panel previews real files and changes", async () => {
     await expect(lastControl).toBeFocused();
     await running.page.keyboard.press("Escape");
     await expect(panel).toHaveCount(0);
-    await expect(running.page.getByTestId("workspace-toggle")).toBeFocused();
+    await expect(running.page.getByTestId("checkout-folder")).toBeFocused();
   } finally { await running.close(); }
 });
 

@@ -301,7 +301,7 @@ test("verified native agents open on the right, retain the main selection and re
     await expect(page.getByTestId("composer-input")).toHaveAttribute("data-thread-id", main);
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(640, 850));
     await expect(page.getByTestId("agent-workspace")).toHaveCount(0);
-    await page.getByTestId("agent-panel-toggle").click();
+    await page.getByTestId("dock-toggle").click();
     await expect(page.getByTestId("agent-workspace")).toHaveAttribute("data-placement", "overlay");
     await shot(page, "right-agent-dark-narrow");
     await agent.click();
@@ -315,7 +315,7 @@ test("verified native agents open on the right, retain the main selection and re
     await page.locator('[data-section="appearance"]').click();
     await page.getByTestId("settings-theme-light").click();
     await page.keyboard.press("Escape");
-    await page.getByTestId("agent-panel-toggle").click();
+    await page.getByTestId("dock-toggle").click();
     await shot(page, "right-agent-light-narrow");
     await page.getByTestId("right-dock-close").click();
     await expect(page.getByTestId("composer-input")).toBeVisible();

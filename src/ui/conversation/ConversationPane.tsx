@@ -12,9 +12,8 @@ import { resolveWorkspacePath } from "@deepseek-ai/dsh-util-workspace-path";
 import type { ThreadItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { Conversation, ConversationTurn, PendingRequest } from "../../state";
-import { selectActiveConversation, selectIsTurnActive, selectPendingRequestsForThread, selectTasks, selectMainThreadId, selectAgentChildren } from "../../state";
+import { selectActiveConversation, selectIsTurnActive, selectPendingRequestsForThread, selectMainThreadId, selectTasks } from "../../state";
 import { useActions, useAppSelector } from "../app-context";
-import { SideToggle } from "../btw/SideToggle";
 import { TESTID } from "../testids";
 import { uiState, useUiState } from "../ui-state";
 import { ActivityToggle } from "./ActivityPanel";
@@ -200,14 +199,12 @@ export function ConversationPane() {
   const t = useT();
   const actions = useActions();
   const mainId = useAppSelector(selectMainThreadId);
-  const hasAgents = useAppSelector(state => mainId !== null && (selectAgentChildren(state, mainId).length > 0 || selectTasks(state, mainId).length > 0 || state.threadLinks.some(link => link.parentId === mainId && link.taskId !== undefined)));
-  const { agentPanelOpen, rightTab } = useUiState();
+  const showActivity = useUiState().workflowPanelOpen;
   const threadId = useAppSelector((state) => state.activeThreadId);
   const thread = useAppSelector((state) =>
     state.activeThreadId === null ? null : (state.threads[state.activeThreadId] ?? null),
   );
   const turnActive = useAppSelector(selectIsTurnActive);
-  const showActivity = useUiState().workflowPanelOpen;
   const toggleActivity = useCallback(() => {
     if (threadId === null) return;
     uiState.setWorkflowPanelOpen(!showActivity);
@@ -223,11 +220,6 @@ export function ConversationPane() {
     <section className={css.root} data-testid={TESTID.conversation}>
       <ConversationHeader active={threadId !== null} thread={thread} running={turnActive} activity={activity} panels={threadId === null ? null : <>
         {mainId !== null && threadId !== mainId && <button type="button" className={css.agentButton} data-testid="agent-header-return-main" onClick={() => void actions.openThread(mainId)}>{t("activity.returnMain")}</button>}
-        <span className={css.panelToggles}>
-        {hasAgents && <button type="button" className={css.agentButton} data-testid="agent-panel-toggle" aria-expanded={agentPanelOpen} onClick={() => uiState.setAgentPanelOpen(!agentPanelOpen)}>{t("activity.agents")}</button>}
-        <SideToggle />
-        <button type="button" className={css.agentButton} data-testid="terminal-toggle" aria-pressed={rightTab === "terminal"} onClick={() => uiState.toggleRightTab("terminal")}>{t("shell.dock.terminal")}</button>
-        </span>
       </>} />
       {threadId !== null && <SessionBranches key={threadId} threadId={threadId} />}
       {threadId === null ? (

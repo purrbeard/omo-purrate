@@ -141,7 +141,7 @@ test("REAL C: stop a running child, then restart restores parent/child and state
       await parentRow.getByRole("button").first().click();
       await expect(id(page, TESTID.goalStrip)).toHaveAttribute("data-status", "paused", { timeout: 60_000 });
       const tab = page.locator(`[data-testid="agent-chat-tab"][data-task-id="${taskId}"]`);
-      await page.getByTestId("right-tab-agents").click().catch(() => undefined);
+      await page.getByTestId("right-tab-work").click().catch(() => undefined);
       await expect(tab).toBeVisible({ timeout: 60_000 });
       const uiStatus = await tab.getAttribute("data-status");
       if (uiStatus === "running" || uiStatus === "queued") throw new Error("stopped child shows " + uiStatus + " after restart");

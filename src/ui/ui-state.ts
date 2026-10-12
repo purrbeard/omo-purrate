@@ -7,8 +7,10 @@ export const SIDEBAR_DEFAULT_WIDTH = 280;
 
 export const WORKFLOW_PANEL_WIDTHS = { normal: 580, wide: 720, maximized: 840 } as const;
 export type WorkflowPanelSize = keyof typeof WORKFLOW_PANEL_WIDTHS;
-export type RightTab = "agents" | "btw" | "terminal" | "workflow" | "files";
-export const RIGHT_TABS: readonly RightTab[] = ["agents", "btw", "terminal", "workflow", "files"];
+export type RightTab = "work" | "btw" | "terminal" | "files";
+export const RIGHT_TABS: readonly RightTab[] = ["work", "btw", "terminal", "files"];
+/** Views of the single Work panel: agent conversations, the run graph, the work list and the activity log. */
+export type WorkView = "agents" | "graph" | "list" | "activity";
 export type DockSide = "left" | "right";
 const DOCK_LAYOUT_KEY = "omo-ui.dock-layout.v1";
 
@@ -20,8 +22,12 @@ export function parseDockLayout(raw: string | null): { tabOrder: RightTab[]; doc
     const value: unknown = JSON.parse(raw);
     if (typeof value !== "object" || value === null) return fallback;
     const { tabOrder, dockSide } = value as { tabOrder?: unknown; dockSide?: unknown };
-    const order = Array.isArray(tabOrder) && tabOrder.length === RIGHT_TABS.length && RIGHT_TABS.every((tab) => tabOrder.includes(tab))
-      ? tabOrder as RightTab[] : fallback.tabOrder;
+    // Layouts saved before Agents and Workflow merged into Work keep their order, with Work where the first of them was.
+    const migrated = Array.isArray(tabOrder)
+      ? [...new Set(tabOrder.map((tab: unknown) => (tab === "agents" || tab === "workflow" ? "work" : tab)))]
+      : null;
+    const order = migrated !== null && migrated.length === RIGHT_TABS.length && RIGHT_TABS.every((tab) => migrated.includes(tab))
+      ? migrated as RightTab[] : fallback.tabOrder;
     return { tabOrder: order, dockSide: dockSide === "left" ? "left" : "right" };
   } catch { return fallback; }
 }
@@ -44,8 +50,14 @@ export type SettingsSection = "general" | "appearance" | "keybindings" | "model"
 
 export interface UiState {
   rightTab: RightTab | null;
-  /** Agents open by themselves on wide screens when the main session has agents, until the user closes them. */
+  /** Work opens by itself on wide screens when the main session has agents, until the user closes it. */
   agentAuto: boolean;
+  /** Whether the main session has agents or work to show; App reports it so toggles see the auto-opened panel. */
+  workAvailable: boolean;
+  /** The view the Work panel shows. */
+  workView: WorkView;
+  /** The tab the dock toggle reopens. */
+  lastTab: RightTab;
   /** False while the frame is too narrow for a third column; auto-opened agents wait for room instead of covering the conversation. */
   canDock: boolean;
   workspacePanelOpen: boolean;
@@ -71,6 +83,9 @@ export interface UiState {
 let state: UiState = {
   rightTab: null,
   agentAuto: true,
+  workAvailable: false,
+  workView: "agents",
+  lastTab: "work",
   canDock: true,
   workspacePanelOpen: false,
   workflowPanelOpen: false,
@@ -87,10 +102,16 @@ let state: UiState = {
 };
 const listeners = new Set<() => void>();
 
+/** @returns the tab the dock shows: the chosen one, or Work opened by itself for a session with agents */
+export function shownTab(value: Pick<UiState, "rightTab" | "agentAuto" | "canDock" | "workAvailable">): RightTab | null {
+  return value.rightTab ?? (value.agentAuto && value.canDock && value.workAvailable ? "work" : null);
+}
+
 function update(patch: Partial<UiState>): void {
   const next = { ...state, ...patch };
-  state = { ...next, workspacePanelOpen: next.rightTab === "files", workflowPanelOpen: next.rightTab === "workflow",
-    agentPanelOpen: next.rightTab === "agents" || (next.rightTab === null && next.agentAuto && next.canDock) };
+  const shown = shownTab(next);
+  state = { ...next, lastTab: next.rightTab ?? next.lastTab, workspacePanelOpen: shown === "files", workflowPanelOpen: shown === "work" && next.workView !== "agents",
+    agentPanelOpen: shown === "work" && next.workView === "agents" };
   for (const listener of [...listeners]) listener();
 }
 
@@ -107,14 +128,23 @@ export function clampSidebarWidth(width: number): number {
 
 export const uiState = {
   setRightTab: (rightTab: RightTab | null): void => update({ rightTab, ...(rightTab === null ? { agentAuto: false } : {}) }),
-  toggleRightTab: (tab: RightTab): void => update(state.rightTab === tab ? { rightTab: null, agentAuto: false } : { rightTab: tab }),
+  /** Closes the panel the dock shows (including Work opened by itself) or opens `tab`. */
+  toggleRightTab: (tab: RightTab): void => update(shownTab(state) === tab ? { rightTab: null, agentAuto: false } : { rightTab: tab }),
+  /** Closes `tab` when the dock shows it; closing the auto-opened Work keeps it closed for this window. */
   closeRightTab: (tab: RightTab): void => {
-    if (state.rightTab === tab) update({ rightTab: null, agentAuto: false });
-    else if (tab === "agents" && state.rightTab === null) update({ agentAuto: false });
+    if (shownTab(state) === tab) update({ rightTab: null, agentAuto: false });
   },
+  /** Opens the dock on the last tab, or closes whatever it shows. */
+  toggleDock: (): void => update(shownTab(state) !== null ? { rightTab: null, agentAuto: false } : { rightTab: state.lastTab }),
+  /** Opens Work on `view`; with the same view already shown it closes Work. */
+  toggleWork: (view: WorkView): void => update(shownTab(state) === "work" && state.workView === view ? { rightTab: null, agentAuto: false } : { rightTab: "work", workView: view }),
+  openWork: (view: WorkView): void => update({ rightTab: "work", workView: view }),
+  /** Switching the view of an auto-opened Work panel pins it, so it stays open (as an overlay) when the window narrows. */
+  setWorkView: (workView: WorkView): void => update({ workView, ...(shownTab(state) === "work" ? { rightTab: "work" as const } : {}) }),
+  setWorkAvailable: (workAvailable: boolean): void => { if (state.workAvailable !== workAvailable) update({ workAvailable }); },
   setWorkspacePanelOpen: (open: boolean): void => open ? update({ rightTab: "files" }) : uiState.closeRightTab("files"),
-  setWorkflowPanelOpen: (open: boolean): void => open ? update({ rightTab: "workflow" }) : uiState.closeRightTab("workflow"),
-  setAgentPanelOpen: (open: boolean): void => open ? update({ rightTab: "agents" }) : uiState.closeRightTab("agents"),
+  setWorkflowPanelOpen: (open: boolean): void => open ? uiState.openWork(state.workView === "agents" ? "graph" : state.workView) : uiState.closeRightTab("work"),
+  setAgentPanelOpen: (open: boolean): void => open ? uiState.openWork("agents") : uiState.closeRightTab("work"),
   disableAgentAuto: (): void => update({ agentAuto: false }),
   setCanDock: (canDock: boolean): void => { if (state.canDock !== canDock) update({ canDock }); },
   setWorkflowPanelSize: (workflowPanelSize: WorkflowPanelSize): void => update({ workflowPanelSize }),
