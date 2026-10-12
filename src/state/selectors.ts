@@ -149,18 +149,37 @@ export function selectManagedThreadsByWorkspace(state: AppState, managedIds: rea
     seen.add(thread.id);
     const children = state.threadLinks.flatMap(link => {
       const child = link.childId === undefined ? undefined : state.threads[link.childId];
-      return link.parentId !== thread.id || link.origin === "native" || link.taskId !== undefined || child === undefined || seen.has(child.id) || managed.has(child.id) ? [] : [summary(child, seen)];
+      return link.parentId !== thread.id || link.origin === "native" || link.taskId !== undefined || child === undefined || seen.has(child.id) ? [] : [summary(child, seen)];
     });
     return { ...thread, children, tasks: state.threadLinks.filter(link => link.parentId === thread.id && link.taskId !== undefined) };
   };
   for (const id of state.threadOrder) {
     const thread = state.threads[id];
     if (thread === undefined || !managed.has(id)) continue;
+    const parents = new Set([id]);
+    let ancestor = id;
+    let nested = false;
+    for (;;) {
+      const link = state.threadLinks.find((entry) => entry.childId === ancestor && entry.origin !== "native" && entry.taskId === undefined);
+      if (link === undefined || parents.has(link.parentId) || state.threads[link.parentId] === undefined) break;
+      parents.add(link.parentId);
+      if (managed.has(link.parentId)) { nested = true; break; }
+      ancestor = link.parentId;
+    }
+    if (nested) continue;
     let group = groups.get(thread.cwd);
     if (group === undefined) { group = { cwd: thread.cwd, label: workspaceLabel(thread.cwd), threads: [] }; groups.set(thread.cwd, group); }
     group.threads.push(summary(thread));
   }
   return [...groups.values()];
+}
+
+/** Pinned sessions keep preference order and their explicitly related children. */
+export function selectPinnedThreads(state: AppState, pinnedIds: readonly string[]): ThreadSummary[] {
+  return [...new Set(pinnedIds)].flatMap(id => {
+    const thread = state.threads[id];
+    return thread === undefined || isSideThread(state, thread) ? [] : selectManagedThreadsByWorkspace(state, [id]).flatMap(group => group.threads);
+  });
 }
 
 export function selectMainThreadId(state: AppState): string | null {

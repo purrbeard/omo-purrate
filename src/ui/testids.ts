@@ -1,6 +1,10 @@
 /** data-testid values shared by the UI and the e2e/QA drivers; each value is the kebab-case of its key. */
 export const TESTID = {
   appFrame: "app-frame",
+  commandPalette: "command-palette",
+  paletteInput: "palette-input",
+  paletteEntry: "palette-entry",
+  paletteEmpty: "palette-empty",
   sidebar: "sidebar",
   newSession: "new-session",
   sidebarToggle: "sidebar-toggle",
@@ -16,6 +20,7 @@ export const TESTID = {
   threadRow: "thread-row",
   threadMenu: "thread-menu",
   sidebarSettled: "sidebar-settled",
+  sidebarPinned: "sidebar-pinned",
   sidebarSettledToggle: "sidebar-settled-toggle",
   openAccounts: "open-accounts",
   openSettings: "open-settings",
@@ -87,6 +92,10 @@ export const TESTID = {
   todoPhase: "todo-phase",
   todoItem: "todo-item",
   goalStrip: "goal-strip",
+  goalPause: "goal-pause",
+  goalResume: "goal-resume",
+  goalClear: "goal-clear",
+  goalError: "goal-error",
   composer: "composer",
   attachmentPick: "attachment-pick",
   attachmentThumbnail: "attachment-thumbnail",
@@ -164,6 +173,9 @@ export const TESTID = {
   settingsDefaultModel: "settings-default-model",
   settingsModelRow: "settings-model-row",
   settingsSkillRow: "settings-skill-row",
+  settingsArchived: "settings-archived",
+  archivedThreadRow: "archived-thread-row",
+  archivedRestore: "archived-restore",
   settingsWorkspaceDefault: "settings-workspace-default",
   settingsWorkspaceRemove: "settings-workspace-remove",
   settingsThemeSystem: "settings-theme-system",
@@ -200,6 +212,7 @@ export const TESTID = {
   wizardNewProject: "wizard-new-project",
   wizardNoProject: "wizard-no-project",
   settingsShowOnboarding: "settings-show-onboarding",
+  settingsOpenLogs: "settings-open-logs",
 } as const;
 
 export type TestId = (typeof TESTID)[keyof typeof TESTID];

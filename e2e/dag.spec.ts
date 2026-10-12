@@ -3,6 +3,29 @@ import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
 import { byTestId, launchApp, newSession, send, setTheme, shot, tempDir, threadRow } from "./helpers.ts";
 
+test("running child agents can be stopped from the agent workspace", async () => {
+  const launched = await launchApp({ omo: "fake", pickDir: tempDir("agent-stop-workspace"), size: { width: 1440, height: 900 } });
+  const { page } = launched;
+  try {
+    const threadId = await newSession(page);
+    await send(page, "SCENARIO:dag");
+    await page.locator('[data-testid="agent-chat-tab"][data-task-id="st_dag_layout"]').click();
+    const stop = page.locator('[data-task-id="st_dag_layout"] [data-testid="agent-stop"]');
+    await expect(stop).toBeVisible();
+    await expect(stop).toHaveAccessibleName("Stop agent");
+    const current = threadRow(page, threadId);
+    await expect(current).toHaveAttribute("aria-current", "page");
+    await stop.click();
+    const cancels = () => launched.readFakeLog().filter(entry => entry.method === "extension_request" && (entry.params as { name?: string })?.name === "omo-ui.task.cancel");
+    await expect.poll(() => cancels().length).toBe(1);
+    expect(cancels()[0]?.params).toEqual({ threadId, name: "omo-ui.task.cancel", data: { taskId: "st_dag_layout" } });
+    const tab = page.locator('[data-testid="agent-chat-tab"][data-task-id="st_dag_layout"]');
+    await expect(tab).toHaveAttribute("data-status", "cancelled");
+    await expect(stop).toHaveCount(0);
+    await expect(current).toHaveAttribute("aria-current", "page");
+  } finally { await launched.close(); }
+});
+
 test("compact DAG and nested subagent todos update without disturbing the conversation", async () => {
   const pickDir = tempDir("dag-workspace");
   const launched = await launchApp({ omo: "fake", pickDir, size: { width: 1440, height: 900 } });

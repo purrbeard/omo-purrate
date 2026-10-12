@@ -233,7 +233,13 @@ export function parseSessionJsonl(text: string): HistoryResult {
   const notices: SessionNotice[] = [];
   // Notices before the first turn wait for it and sit at its top.
   const leading: SessionNotice[] = [];
+  let model: { provider: string; modelId: string } | null = null;
+  let thinkingLevel: string | null = null;
   for (const entry of activeBranch(entries, leafId)) {
+    if (entry.type === "model_change" && typeof entry.raw["provider"] === "string" && typeof entry.raw["modelId"] === "string") {
+      model = { provider: entry.raw["provider"], modelId: entry.raw["modelId"] };
+    }
+    if (entry.type === "thinking_level_change" && typeof entry.raw["thinkingLevel"] === "string") thinkingLevel = entry.raw["thinkingLevel"];
     if (entry.type === "custom_message" && typeof entry.raw["customType"] === "string") {
       const notice: SessionNotice = {
         id: entry.id,
@@ -308,6 +314,7 @@ export function parseSessionJsonl(text: string): HistoryResult {
   return { turns: builders.map((builder, index) => finishTurn(builder, index === builders.length - 1)), todo,
     ...(Object.keys(memoryWrites).length === 0 ? {} : { memoryWrites }),
     ...(notices.length === 0 ? {} : { notices }),
+    ...(model === null ? {} : { model: { ...model, thinkingLevel } }),
     tasks: [...taskOrder].flatMap((id) => {
       const receipt = tasks.get(id);
       const completion = completions.get(id);

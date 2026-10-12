@@ -29,6 +29,7 @@ import type { SettingsSection } from "../ui-state";
 import { DEFAULT_PREFERENCES } from "../../../shared/ipc";
 import { useAppStore } from "../../state";
 import { AboutSection } from "./AboutSection";
+import { ArchivedSection } from "./ArchivedSection";
 import { AccountsSection } from "./AccountsSection";
 import { AndroidSection } from "./AndroidSection";
 import { GeneralSection } from "./GeneralSection";
@@ -104,6 +105,14 @@ const GROUPS: readonly SectionGroup[] = [
         keys: ["shell.settings.theme", "shell.settings.language", "shell.settings.threadNotifications", "shell.settings.timeFormat", "shell.settings.autoSettle"],
         terms: [],
         render: () => <GeneralSection />,
+      },
+      {
+        id: "archived",
+        label: "shell.settings.nav.archived",
+        icon: IconPanelLeftOutlineRegular,
+        keys: ["shell.settings.archived.restore"],
+        terms: [],
+        render: () => <ArchivedSection />,
       },
       {
         id: "appearance",

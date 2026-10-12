@@ -6,6 +6,7 @@ import { TESTID } from "../testids";
 import { useGitInfo } from "../git/use-git-info";
 import { middleTruncate } from "../git/middle-truncate";
 import { BranchGlyph } from "../glyphs";
+import { uiState, useUiState } from "../ui-state";
 import css from "./CheckoutBar.module.css";
 
 const BRANCH_MAX_LENGTH = 28;
@@ -16,14 +17,15 @@ function basename(path: string): string {
 }
 
 /**
- * Thin bar attached under the composer card: the workspace folder button (opens the workspace in
- * the default Open target) on the left, and the current branch with upstream ahead/behind counts
+ * Thin bar attached under the composer card: the workspace folder button (opens the in-app files
+ * panel) on the left, and the current branch with upstream ahead/behind counts
  * on the right. Both hide for non-git folders; counts hide for branches without an upstream.
  */
 export function CheckoutBar() {
   const t = useT();
   const cwd = useAppSelector(selectActiveCwd);
   const info = useGitInfo(cwd);
+  const { workspacePanelOpen } = useUiState();
   if (cwd === null) return null;
   return (
     <div
@@ -39,9 +41,8 @@ export function CheckoutBar() {
         data-testid={TESTID.checkoutFolder}
         aria-label={t("composer.checkout.open", { path: cwd })}
         title={cwd}
-        onClick={() => {
-          window.omo.openWorkspace(cwd, null).catch((error: unknown) => console.warn("workspace did not open", error));
-        }}
+        aria-pressed={workspacePanelOpen}
+        onClick={() => uiState.setWorkspacePanelOpen(!workspacePanelOpen)}
       >
         <IconFolderOpenOutlineRegular size={13} className={css.icon} />
         <span className={css.folderLabel}>{basename(cwd)}</span>

@@ -221,6 +221,7 @@ function loadSessionFile(file) {
     if (typeof entry.id === "string") lastEntryId = entry.id;
     if (entry.type === "session_info" && typeof entry.name === "string") thread.name = entry.name;
     if (entry.type === "custom" && entry.customType === "fake-omo.archived") archived = true;
+    if (entry.type === "custom" && entry.customType === "fake-omo.unarchived") archived = false;
     if (entry.type === "message" && isRecord(entry.message) && entry.message.role === "user" && thread.preview === "") {
       thread.preview = firstText(Array.isArray(entry.message.content) ? entry.message.content : []);
     }
@@ -1104,6 +1105,15 @@ function handleRequest(id, method, params) {
     case "thread/goal/get":
       respond(id, { goal: getThread(requireString(params, "threadId")).goal ?? null });
       return;
+    case "thread/goal/clear": {
+      const threadId = requireString(params, "threadId");
+      const record = getThread(threadId);
+      const existed = record.goal != null;
+      record.goal = null;
+      respond(id, {});
+      if (existed) notify("thread/goal/cleared", { threadId });
+      return;
+    }
     case "thread/goal/set": {
       const threadId = requireString(params, "threadId");
       const record = getThread(threadId);
@@ -1111,8 +1121,8 @@ function handleRequest(id, method, params) {
       const now = Math.floor(Date.now() / 1000);
       const goal = {
         threadId, objective: params.objective ?? previous?.objective ?? "",
-        status: params.status ?? previous?.status ?? "active", tokenBudget: params.tokenBudget ?? null,
-        tokensUsed: 0, timeUsedSeconds: 0, createdAt: previous?.createdAt ?? now, updatedAt: now,
+        status: params.status ?? previous?.status ?? "active", tokenBudget: params.tokenBudget === undefined ? previous?.tokenBudget ?? null : params.tokenBudget,
+        tokensUsed: previous?.tokensUsed ?? 0, timeUsedSeconds: previous?.timeUsedSeconds ?? 0, createdAt: previous?.createdAt ?? now, updatedAt: now,
       };
       record.goal = goal;
       respond(id, { goal });
@@ -1121,6 +1131,11 @@ function handleRequest(id, method, params) {
     }
     case "extension_request": {
       if (params.name === "omo-ui.task.send") { respond(id, { delivered: true }); break; }
+      if (params.name === "omo-ui.task.cancel") {
+        respond(id, { cancelled: true });
+        getThread(requireString(params, "threadId")).cancelTask?.(params.data?.taskId);
+        break;
+      }
       const record = getThread(requireString(params, "threadId"));
       if (params.name !== "fake.advance") throw new RpcFailure(NOT_FOUND, "Extension not found");
       record.advanceLive?.();
@@ -1185,6 +1200,29 @@ function handleRequest(id, method, params) {
       notify("mcpServer/startupStatus/updated", { threadId: thread.id, name: "demo-tools", status: "connected" });
       return;
     }
+    case "thread/fork": {
+      const original = getThread(requireString(params, "threadId"));
+      const thread = {
+        ...structuredClone(original.thread), ...defaultThread(randomUUID()),
+        cwd: requireString(params, "cwd"), forkedFromId: original.thread.id,
+        preview: original.thread.preview, turns: structuredClone(original.thread.turns),
+        name: `${original.thread.name ?? (original.thread.preview || "Session")} (fork)`,
+      };
+      const record = addThread(thread, { loaded: true, settings: structuredClone(original.settings) });
+      const originalFile = original.thread.path;
+      if (originalFile !== null && existsSync(originalFile)) {
+        for (const line of readFileSync(originalFile, "utf8").split("\n").slice(1)) {
+          if (line.trim() === "") continue;
+          const entry = JSON.parse(line);
+          if (entry.type === "session_info" || (entry.type === "custom" && ["fake-omo.archived", "fake-omo.unarchived"].includes(entry.customType))) continue;
+          recordEntry(record, entry);
+        }
+      }
+      recordEntry(record, { type: "session_info", name: thread.name });
+      notify("thread/started", { thread: threadView(record, false) });
+      respond(id, sessionResult(record));
+      return;
+    }
     case "thread/resume": {
       const record = getThread(requireString(params, "threadId"));
       record.loaded = true;
@@ -1212,9 +1250,20 @@ function handleRequest(id, method, params) {
     case "thread/archive": {
       const record = getThread(requireString(params, "threadId"));
       record.archived = true;
+      record.loaded = false;
       recordEntry(record, { type: "custom", customType: "fake-omo.archived", data: {} });
       notify("thread/archived", { threadId: record.thread.id });
       respond(id, {});
+      return;
+    }
+    case "thread/unarchive": {
+      const record = getThread(requireString(params, "threadId"));
+      record.archived = false;
+      record.loaded = false;
+      record.thread.status = { type: "notLoaded" };
+      recordEntry(record, { type: "custom", customType: "fake-omo.unarchived", data: {} });
+      respond(id, { status: { type: "notLoaded" } });
+      notify("thread/unarchived", { threadId: record.thread.id });
       return;
     }
     case "thread/delete": {
@@ -1327,6 +1376,7 @@ function serveTree(file) {
         break;
       }
       case "extension_request": {
+        if (frame.name === "omo-ui.task.cancel") { reply({ cancelled: true }); break; }
         if (frame.name !== "omoui.tree.persist") {
           reject("Extension not found", "not_found");
           break;

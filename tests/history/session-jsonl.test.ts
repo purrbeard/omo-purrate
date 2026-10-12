@@ -26,6 +26,20 @@ function jsonl(entries: readonly unknown[]): string {
 }
 
 describe("parseSessionJsonl", () => {
+  it("reports the last model and thinking level on the active branch", () => {
+    const text = jsonl([
+      { type: "model_change", id: "m1", parentId: null, timestamp: ts(0), provider: "opencodex", modelId: "p2bc7fb/gpt-6.1-sol" },
+      { type: "thinking_level_change", id: "k1", parentId: "m1", timestamp: ts(1), thinkingLevel: "high" },
+      user("u1", "k1", 2, "hi"),
+      { type: "model_change", id: "m2", parentId: "u1", timestamp: ts(3), provider: "opencodex", modelId: "opencode-go/deepseek-v4.1-flash" },
+      { type: "model_change", id: "m3", parentId: "u1", timestamp: ts(4), provider: "opencodex", modelId: "abandoned/branch" },
+      { type: "thinking_level_change", id: "k2", parentId: "m2", timestamp: ts(5), thinkingLevel: "off" },
+    ]);
+
+    expect(parseSessionJsonl(text).model).toEqual({ provider: "opencodex", modelId: "opencode-go/deepseek-v4.1-flash", thinkingLevel: "off" });
+    expect(parseSessionJsonl(jsonl([user("u1", null, 0, "hi")])).model).toBeUndefined();
+  });
+
   it("rebuilds both turns of the probe session fixture", () => {
     const text = readFileSync(resolve(__dirname, "../fixtures/probe-session.jsonl"), "utf8");
 

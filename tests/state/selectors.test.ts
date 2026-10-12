@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Model } from "../../shared/protocol";
 import { resolveComposerModel } from "../../src/state";
+import { selectPinnedThreads } from "../../src/state/selectors";
 import { createInitialState, selectManagedThreadsByWorkspace, selectAgentThreadsByWorkspace, selectUnknownThreadsByWorkspace, selectThreadsByWorkspace, selectAgentChildren, selectMainThreadId } from "../../src/state";
 
 it("shows only managed IDs regardless of creator and leaves confirmed relations intact", () => {
@@ -27,6 +28,28 @@ const entry = (id: string, isDefault = false): Model => ({
 });
 
 const catalog = [entry("anthropic/claude-opus-4-8", true), entry("anthropic-subscription/claude-opus-5-5"), entry("openai/gpt-6.1-sol", true)];
+
+it("selects pinned sessions in preference order without missing or duplicate rows", () => {
+  const state = createInitialState();
+  const thread = (id: string) => ({ id, cwd: "/repo", path: null, preview: id, name: null, source: null, updatedAt: 1, status: { type: "idle" as const } });
+  state.threads = { first: thread("first"), second: thread("second") };
+  state.threadOrder = ["first", "second"];
+  expect(selectPinnedThreads(state, ["second", "gone", "first", "second"]).map(thread => thread.id)).toEqual(["second", "first"]);
+  expect(selectPinnedThreads(state, [])).toEqual([]);
+  state.threadLinks = [{ parentId: "first", childId: "second", title: "" }];
+  expect(selectPinnedThreads(state, ["first"])[0]?.children?.map(thread => thread.id)).toEqual(["second"]);
+});
+
+it("nests explicitly linked managed children instead of showing independent main rows", () => {
+  const state = createInitialState();
+  const thread = (id: string) => ({ id, cwd: "/repo", path: null, preview: id, name: null, source: null, updatedAt: 1, status: { type: "idle" as const } });
+  state.threads = { parent: thread("parent"), child: thread("child") };
+  state.threadOrder = ["child", "parent"];
+  state.threadLinks = [{ parentId: "parent", childId: "child", title: "" }];
+  const groups = selectManagedThreadsByWorkspace(state, ["parent", "child"]);
+  expect(groups[0]?.threads.map((item) => item.id)).toEqual(["parent"]);
+  expect(groups[0]?.threads[0]?.children?.map((item) => item.id)).toEqual(["child"]);
+});
 
 describe("thread ownership", () => {
   it("anchors nested native agents to the main session without claiming manual or unknown sessions", () => {

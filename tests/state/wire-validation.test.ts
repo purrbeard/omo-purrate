@@ -5,6 +5,17 @@ import { makeThread } from "./helpers";
 
 const started = (item: unknown) => ({ method: "item/started", params: { threadId: "T", turnId: "turn-1", item } });
 
+it("validates storage-only restore notifications and invalidates the inventory", () => {
+  const notification = { method: "thread/unarchived", params: { threadId: "restored" } };
+  expect(parseNotification(notification)).toEqual(notification);
+  expect(parseNotification({ method: "thread/unarchived", params: { threadId: 42 } })).toBeNull();
+  const state = createInitialState();
+  state.threadsLoaded = true;
+  const next = reduce(state, { type: "rpc/notification", notification, receivedAtMs: 1 });
+  expect(next.threadsLoaded).toBe(false);
+  expect(next.conversations["restored"]).toBeUndefined();
+});
+
 describe("wire item validation", () => {
   it.each([
     ["a userMessage with a null part", { type: "userMessage", id: "m", content: [null] }],

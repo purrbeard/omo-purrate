@@ -213,6 +213,8 @@ export function parseNotification(notification: RpcNotification): ServerNotifica
     }
     case "thread/archived":
       return isString(threadId) ? { method: "thread/archived", params: { threadId } } : null;
+    case "thread/unarchived":
+      return isString(threadId) ? { method: "thread/unarchived", params: { threadId } } : null;
     case "thread/deleted":
       return isString(threadId) ? { method: "thread/deleted", params: { threadId } } : null;
     case "turn/started": {

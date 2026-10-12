@@ -17,7 +17,7 @@ import type {
 } from "./protocol";
 import type { AndroidStatus } from "./android";
 import type { OpencodexAccounts } from "./opencodex";
-import type { WorkspaceFile, WorkspaceDocument } from "./workspace";
+import type { SessionWorktree, WorkspaceFile, WorkspaceDocument } from "./workspace";
 import type { DeviceOverview } from "./device-overview";
 import type { AppUpdateStatus } from "./app-update";
 import type { ModelRoutingInput, ModelRoutingSettings } from "./model-routing";
@@ -106,6 +106,8 @@ export interface ThreadCreatorEvidence {
 export interface Preferences {
   /** Thread ids explicitly managed by this app. */
   managedThreadIds: string[];
+  /** Sessions shown in the sidebar's pinned section. */
+  pinnedThreadIds: string[];
   /** Explicit ownership for related sessions; session files and cwd stay unchanged. */
   threadParents: Record<string, string>;
   /** Manual creator overrides keyed by thread ID, separate from creation evidence. */
@@ -146,6 +148,7 @@ export interface Preferences {
 /** Preferences every field resets to on "Restore device defaults" (Settings → General, top right). */
 export const DEFAULT_PREFERENCES: Preferences = {
   managedThreadIds: [],
+  pinnedThreadIds: [],
   threadParents: {},
   threadOrigins: {},
   threadCreators: {},
@@ -226,6 +229,8 @@ export interface SessionNotice {
 
 export interface HistoryResult {
   turns: HistoryTurn[];
+  /** The last model and thinking level recorded on the active branch. */
+  model?: { provider: string; modelId: string; thinkingLevel: string | null };
   todo: { phases: TodoPhase[] } | null;
   tasks: HistoricalTask[];
   /** Memory writes keyed by the memory tool call id. */
@@ -263,7 +268,10 @@ export interface ProxyInput {
   apiKey?: string;
 }
 
-export type MenuCommand = "new-session" | "settings" | "toggle-sidebar";
+/** Commands the application menu (electron/menu.ts) sends to the renderer; App.tsx routes each one. */
+export type MenuCommand =
+  | "new-session" | "settings" | "toggle-sidebar" | "command-palette" | "open-project"
+  | "toggle-agents" | "toggle-workflow" | "toggle-files" | "toggle-terminal" | "toggle-side-chat" | "keyboard-shortcuts";
 
 /** Where the header's Open button can open a thread's workspace; `finder` is always available. */
 export const OPEN_TARGET_IDS = ["vscode", "cursor", "terminal", "finder"] as const;
@@ -413,6 +421,8 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi {
   listWorkspaceFiles(cwd: string): Promise<WorkspaceFile[]>;
   readWorkspaceFile(cwd: string, relativePath: string): Promise<WorkspaceDocument>;
   getWorkspaceDiff(cwd: string, relativePath: string): Promise<string>;
+  /** Commits since `sinceMs` and other worktrees' uncommitted changes across the repository of `cwd`. */
+  listSessionWork(cwd: string, sinceMs: number): Promise<SessionWorktree[]>;
   importMcpConfig(): Promise<{ imported: string[] } | null>;
   readOpencodexAccounts(): Promise<OpencodexAccounts>;
   getAndroidStatus(): Promise<AndroidStatus>;
@@ -443,6 +453,9 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi {
   onInstallLog(listener: (line: InstallLogLine) => void): () => void;
   /** Parses the session JSONL at sessionPath, which must resolve inside the omo sessions directory. */
   loadHistory(sessionPath: string): Promise<HistoryResult>;
+  /** Follows one session file for writes by another omo process; null stops. Changes arrive through onHistoryChanged. */
+  watchHistory(sessionPath: string | null): Promise<void>;
+  onHistoryChanged(listener: (sessionPath: string) => void): () => void;
   /** Reads only tasks reachable through explicit child-session links in this workspace's native task store. */
   loadTaskWork(cwd: string, parentSessionId: string): Promise<TaskWork[]>;
   sendTaskMessage(parentSessionId: string, taskId: string, message: string): Promise<void>;
@@ -454,7 +467,6 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi {
   sessionTree(threadId: string, operation: SessionTreeOperation): Promise<SessionTreeResult>;
   /** Native folder picker; resolves null on cancel. The OMO_UI_QA_PICK_DIR variable short-circuits the dialog. */
   pickDirectory(defaultPath?: string | null): Promise<string | null>;
-  pickImages(): Promise<string[]>;
   /** Native picker for any files (multiple) or one folder; resolves an empty array on cancel. */
   pickAttachments(kind: "files" | "folder"): Promise<string[]>;
   imageFilePath(file: File): string;
@@ -473,6 +485,8 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi {
   readClipboardText(): Promise<string>;
   openExternal(url: string): Promise<void>;
   revealPath(path: string): Promise<void>;
+  /** Opens the app's log directory (main.log) in the system file manager. */
+  openLogsFolder(): Promise<void>;
   /** Installed Open targets in preference order (editors, Terminal, then Finder). */
   listOpenTargets(): Promise<OpenTarget[]>;
   /** Opens `cwd` (an absolute, existing directory) in `target`; with no target, the first installed editor, else Finder. Resolves the target used. */
@@ -506,6 +520,7 @@ export const IPC = {
   listWorkspaceFiles: "workspace:list-files",
   readWorkspaceFile: "workspace:read-file",
   getWorkspaceDiff: "workspace:diff",
+  listSessionWork: "workspace:session-work",
   importMcpConfig: "mcp:import-config",
   readOpencodexAccounts: "accounts:opencodex",
   getAndroidStatus: "android:get-status",
@@ -527,6 +542,8 @@ export const IPC = {
   install: "omo:install",
   installLog: "omo:install-log",
   loadHistory: "history:load",
+  watchHistory: "history:watch",
+  historyChanged: "history:changed",
   loadTaskWork: "history:task-work",
   sendTaskMessage: "history:task-message",
   branchSession: "history:branch",
@@ -534,7 +551,6 @@ export const IPC = {
   readAccountUsage: "accounts:usage",
   openAccountLogin: "accounts:login",
   pickDirectory: "dialog:pick-directory",
-  pickImages: "dialog:pick-images",
   pickAttachments: "dialog:pick-attachments",
   saveImage: "attachments:save-image",
   diagnostics: "app:diagnostics",
@@ -547,6 +563,7 @@ export const IPC = {
   readClipboardText: "app:read-clipboard-text",
   openExternal: "app:open-external",
   revealPath: "app:reveal-path",
+  openLogsFolder: "app:open-logs-folder",
   listOpenTargets: "app:list-open-targets",
   openWorkspace: "app:open-workspace",
   gitInfo: "git:info",
@@ -566,8 +583,6 @@ export const ENV = {
   omoBin: "OMO_UI_OMO_BIN",
   /** Directory returned by pickDirectory without opening the native dialog (tests and QA). */
   qaPickDir: "OMO_UI_QA_PICK_DIR",
-  /** JSON array of image paths returned without a native dialog. */
-  qaPickImages: "OMO_UI_QA_PICK_IMAGES",
   /** JSON array of absolute attachment paths returned without a native dialog; must match the requested kind. */
   qaPickAttachments: "OMO_UI_QA_PICK_ATTACHMENTS",
   /** Overrides Electron's userData directory (tests and QA). */

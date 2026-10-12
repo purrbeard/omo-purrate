@@ -124,6 +124,8 @@ export function applyNotification(state: AppState, notification: ServerNotificat
     case "thread/archived":
     case "thread/deleted":
       return forgetThread(removeThread(state, notification.params.threadId), notification.params.threadId);
+    case "thread/unarchived":
+      return { ...state, threadsLoaded: false }; // Actions reload the restored storage-only thread.
     case "turn/started": {
       const { threadId, turn } = notification.params;
       return updateConversation(state, threadId, (conversation) => {

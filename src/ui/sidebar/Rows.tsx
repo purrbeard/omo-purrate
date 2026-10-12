@@ -199,6 +199,9 @@ export function ThreadRow({ thread, active, searching = false, nowMs, onOpen, on
   }
 
   const items: MenuEntry[] = [
+    { id: "pin", label: t(preferences?.pinnedThreadIds.includes(thread.id) ? "shell.sidebar.unpin" : "shell.sidebar.pin") },
+    { id: "fork", label: t("shell.sidebar.fork") },
+    { id: "archive", label: t("shell.sidebar.archive") },
     ...(onSettle === undefined
       ? []
       : [{ id: "settle", label: settled ? t("shell.sidebar.unsettle") : t("shell.sidebar.settle") } as const]),
@@ -219,6 +222,15 @@ export function ThreadRow({ thread, active, searching = false, nowMs, onOpen, on
   const select = (id: string): void => {
     setMenuOpen(false);
     switch (id) {
+      case "pin":
+        void actions.pinThread(thread.id, !preferences?.pinnedThreadIds.includes(thread.id)).catch((error: unknown) => setLinkError(error instanceof Error ? error.message : String(error)));
+        break;
+      case "fork":
+        void actions.forkThread(thread.id).catch((error: unknown) => setLinkError(error instanceof Error ? error.message : String(error)));
+        break;
+      case "archive":
+        void actions.archiveThread(thread.id).catch((error: unknown) => setLinkError(error instanceof Error ? error.message : String(error)));
+        break;
       case "unmanage":
         void actions.manageThread(thread.id, false).catch((error: unknown) => setLinkError(error instanceof Error ? error.message : String(error)));
         break;

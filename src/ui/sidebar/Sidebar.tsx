@@ -16,6 +16,7 @@ import {
 import type { StateDotState } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { BridgeState, BridgeStatus } from "../../../shared/ipc";
 import { selectManagedThreadsByWorkspace } from "../../state";
+import { selectPinnedThreads } from "../../state/selectors";
 import type { ThreadSummary, WorkspaceGroup } from "../../state";
 import { useT } from "../../i18n";
 import { StoreContext, useActions, useAppSelector } from "../app-context";
@@ -47,6 +48,10 @@ const DOT_STATE: Record<BridgeState, StateDotState> = {
 const CLOCK_TICK_MS = 30_000;
 
 const PERIODS: readonly Exclude<ThreadPeriod, "any">[] = ["today", "week", "month"];
+
+function withoutPinned(threads: readonly ThreadSummary[], pinned: ReadonlySet<string>): ThreadSummary[] {
+  return threads.filter(thread => !pinned.has(thread.id)).map(thread => ({ ...thread, children: withoutPinned(thread.children ?? [], pinned) }));
+}
 
 function useNowMs(): number {
   const [now, setNow] = useState(() => Date.now());
@@ -119,6 +124,8 @@ export function Sidebar() {
   const { preferences } = useUiState();
   const state = useAppSelector(s => s);
   const groups = useMemo(() => selectManagedThreadsByWorkspace(state, preferences?.managedThreadIds ?? []), [state.threads, state.threadOrder, state.threadLinks, preferences?.managedThreadIds]);
+  const pinned = useMemo(() => selectPinnedThreads(state, preferences?.pinnedThreadIds ?? []), [state.threads, state.threadOrder, state.threadLinks, state.btw, preferences?.pinnedThreadIds]);
+  const pinnedIds = new Set(pinned.map(thread => thread.id));
   const [nativeOpen, setNativeOpen] = useState(false);
   const activeThreadId = useAppSelector((state) => state.activeThreadId);
   const threadsLoaded = useAppSelector((state) => state.threadsLoaded);
@@ -149,13 +156,15 @@ export function Sidebar() {
     }),
     [preferences?.autoSettle, preferences?.autoSettleDays, preferences?.settledThreads, preferences?.unsettledThreads, preferences],
   );
-  const split = useMemo(() => partitionSettled(groups, settleConfig, nowMs), [groups, settleConfig, nowMs]);
+  const split = useMemo(() => partitionSettled(groups.map(group => ({ ...group, threads: withoutPinned(group.threads, pinnedIds) })).filter(group => group.threads.length > 0), settleConfig, nowMs), [groups, pinned, settleConfig, nowMs]);
   const settledRef = useRef(split.settled);
   settledRef.current = split.settled;
   const settledGroup = useMemo<WorkspaceGroup>(() => ({ cwd: "settled", label: "", threads: split.settled }), [split]);
 
   const fallbackTitle = t("shell.newSession");
   const runningOf = useMemo(() => (thread: ThreadSummary) => isLiveRunning(thread, { bridge, conversations }), [bridge, conversations]);
+  const visiblePinned = filterGroups([{ cwd: "pinned", label: "", threads: pinned.map(thread => ({ ...thread, children: withoutPinned(thread.children ?? [], pinnedIds) })) }],
+    { query, runningOnly, period }, nowMs, thread => threadTitle(thread, fallbackTitle), runningOf)[0]?.threads ?? [];
   const visibleGroups = useMemo(
     () => filterGroups(split.groups, { query, runningOnly, period }, nowMs, (thread: ThreadSummary) => threadTitle(thread, fallbackTitle), runningOf),
     [split, query, runningOnly, period, nowMs, fallbackTitle, runningOf],
@@ -164,7 +173,7 @@ export function Sidebar() {
     () => filterGroups([settledGroup], { query, runningOnly, period }, nowMs, (thread: ThreadSummary) => threadTitle(thread, fallbackTitle), runningOf)[0]?.threads ?? [],
     [settledGroup, query, runningOnly, period, nowMs, fallbackTitle, runningOf],
   );
-  const runningCount = useMemo(() => split.groups.reduce((count, group) => count + group.threads.filter(runningOf).length, 0), [split, runningOf]);
+  const runningCount = useMemo(() => pinned.filter(runningOf).length + split.groups.reduce((count, group) => count + group.threads.filter(runningOf).length, 0), [split, pinned, runningOf]);
   const searching = query.trim() !== "";
   const filtering = runningOnly || period !== "any";
   const settledExpanded = settledOpen || searching;
@@ -330,13 +339,23 @@ export function Sidebar() {
       </div>
       <div className={css.region}>
         <div className={css.list}>
-          {threadsLoaded && groups.length === 0 && (
+          {visiblePinned.length > 0 && (
+            <section data-testid={TESTID.sidebarPinned} aria-label={t("shell.sidebar.pinned")}>
+              <h2 className={css.creatorHeading}>{t("shell.sidebar.pinned")}</h2>
+              {visiblePinned.map(thread => (
+                <ThreadRow key={thread.id} thread={thread} active={thread.id === activeThreadId} nowMs={nowMs} searching={searching}
+                  onOpen={id => void actions.openThread(id)} onRename={(id, name) => void actions.renameThread(id, name)}
+                  onRequestDelete={(threadId, title) => setDeleteTarget({ threadId, title })} onReveal={reveal} />
+              ))}
+            </section>
+          )}
+          {threadsLoaded && groups.length === 0 && pinned.length === 0 && (
             <div className={css.emptyState}>
               <IconQueueOutlineRegular size={24} />
               <div>{t("shell.noSessions")}</div>
             </div>
           )}
-          {(searching || filtering) && groups.length > 0 && visibleGroups.length === 0 && visibleSettled.length === 0 && (
+          {(searching || filtering) && (groups.length > 0 || pinned.length > 0) && visiblePinned.length === 0 && visibleGroups.length === 0 && visibleSettled.length === 0 && (
             <div className={css.emptyState} data-testid={TESTID.sidebarNoMatch} role="status">
               <div>{searching ? t("shell.search.noMatch", { query: query.trim() }) : t("shell.filter.noMatch")}</div>
               {filtering && (

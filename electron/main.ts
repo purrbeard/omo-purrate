@@ -4,11 +4,13 @@ import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, shell } from "electron";
 import { ENV, IPC } from "../shared/ipc";
 import type { MenuCommand } from "../shared/ipc";
+import { createAttentionTracker } from "./attention";
 import { IphoneBridge, loadIphoneToken } from "./iphone/bridge";
 import { AndroidBridge } from "./android/bridge";
 import { createSessionFileResolver, registerIpc } from "./ipc";
 import { registerWorkbenchIpc } from "./workbench-ipc";
 import { createWorkbenchHandlers } from "./workbench/create-handlers";
+import { initLogging } from "./logging";
 import { installApplicationMenu } from "./menu";
 import { OmoSupervisor } from "./omo/supervisor";
 import { PreferencesStore } from "./prefs";
@@ -22,6 +24,7 @@ if (userDataOverride) app.setPath("userData", userDataOverride);
 const devUrl = process.env[ENV.devUrl] || null;
 const indexPath = path.join(__dirname, "../dist/index.html");
 let mainWindow: BrowserWindow | null = null;
+const attention = createAttentionTracker({ window: () => mainWindow });
 
 function isAppUrl(url: string): boolean {
   let parsed: URL;
@@ -66,6 +69,7 @@ function createWindow(): BrowserWindow {
     },
   });
   window.once("ready-to-show", () => window.show());
+  window.on("focus", attention.onFocus);
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
   });
@@ -101,12 +105,35 @@ function sendMenuCommand(command: MenuCommand): void {
 }
 
 function run(): void {
+  const logger = initLogging(app.getPath("logs"));
+  logger.log("info", "app started", { version: app.getVersion(), platform: process.platform });
+  process.on("uncaughtException", (error) => {
+    logger.log("error", "uncaught exception", error);
+    console.error(error);
+    app.exit(1);
+  });
+  process.on("unhandledRejection", (reason: unknown) => {
+    logger.log("error", "unhandled rejection", reason);
+    console.error(reason);
+  });
   if (process.platform === "win32") app.setAppUserModelId("io.github.purrbeard.omoui.windows");
   const homeDir = os.homedir();
   const prefs = new PreferencesStore(app.getPath("userData"));
   const supervisor = new OmoSupervisor({
     homeDir, baseEnv: process.env, clientVersion: app.getVersion(),
     autoUpdate: { enabled: () => process.env[ENV.omoAutoUpdate] !== "0" && prefs.get().omoAutoUpdate !== false },
+  });
+  const unsubscribeNotification = supervisor.onNotification(attention.onNotification);
+  const unsubscribeServerRequest = supervisor.onServerRequest(attention.onServerRequest);
+  let previousState = supervisor.getStatus().state;
+  const unsubscribeStatus = supervisor.onStatus((status) => {
+    if (status.state === previousState) return;
+    previousState = status.state;
+    if (status.state === "exited" || status.state === "restarting" || status.state === "stopped") {
+      logger.log(status.state === "exited" ? "error" : "info", `app-server ${status.state}`, {
+        message: status.message, exitCode: status.exitCode, restartAttempt: status.restartAttempt,
+      });
+    }
   });
 
   const iphone = new IphoneBridge(supervisor, undefined, undefined, loadIphoneToken(app.getPath("userData")));
@@ -119,7 +146,7 @@ function run(): void {
 
   void app.whenReady().then(() => {
     if (!app.isPackaged) app.dock?.setIcon(path.join(__dirname, "../build/icon.png"));
-    installApplicationMenu(sendMenuCommand);
+    installApplicationMenu(sendMenuCommand, { openLogs: () => void shell.openPath(logger.dir) });
     registerIpc({ supervisor, iphone, android, prefs, getWindow: () => mainWindow, homeDir });
     registerWorkbenchIpc(workbench);
     createWindow();
@@ -141,6 +168,9 @@ function run(): void {
     event.preventDefault();
     if (quitPhase === "stopping") return;
     quitPhase = "stopping";
+    unsubscribeNotification();
+    unsubscribeServerRequest();
+    attention.dispose();
     iphone.stop();
     let timer: NodeJS.Timeout | undefined;
     const bounded = new Promise<void>((resolve) => {
@@ -154,6 +184,7 @@ function run(): void {
     });
     void Promise.race([stopped, bounded]).finally(() => {
       clearTimeout(timer);
+      unsubscribeStatus();
       quitPhase = "done";
       // With no omo child, stop() settles inside Electron's native before-quit dispatch (Cmd+Q, the Dock's Quit,
       // SIGTERM); an app.quit() made there is discarded with the prevented quit, so quit again from a new task.

@@ -16,11 +16,13 @@ import { branchSession, retryEntryId } from "./history/branch-session";
 import { runSessionTree, readSessionTree } from "./omo/session-tree";
 import type { ModelRung } from "../shared/ipc";
 import { parseSessionJsonl } from "./history/session-jsonl";
+import { createSessionWatcher } from "./history/session-watch";
 import { loadTaskWork, readTaskLinks } from "./history/task-work";
 import { loadHeaderLinks } from "./history/thread-links";
 import { loadThreadOrigins } from "./history/thread-origins";
 import { RpcRequestError } from "./omo/app-server-client";
 import { runInstaller } from "./omo/installer";
+import { unarchiveBySidecar } from "./omo/unarchive-fallback";
 import { applyProxySettings, getProxySettings } from "./omo/proxy";
 import { createGit } from "./git-info";
 import type { Git } from "./git-info";
@@ -36,7 +38,7 @@ import type { IphoneBridge } from "./iphone/bridge";
 import type { AndroidBridge } from "./android/bridge";
 import { discoverMcpConfigs, importMcpConfig, readConfiguredMcpServers } from "./omo/mcp-config";
 import { readOpencodexAccounts } from "./accounts/opencodex";
-import { listWorkspaceFiles, readWorkspaceFile, getWorkspaceDiff } from "./workspace-files";
+import { listWorkspaceFiles, readWorkspaceFile, getWorkspaceDiff, listSessionWork } from "./workspace-files";
 import { getDeviceOverview } from "./device-overview";
 import { AppUpdater } from "./app-update";
 import { readModelRouting, saveModelRouting } from "./omo/model-routing";
@@ -136,6 +138,22 @@ export function registerIpc(deps: IpcDeps): () => void {
   const proxyAgentDir = (): string => supervisor.initializeResult?.codexHome ?? process.env["OMO_CODING_AGENT_DIR"] ?? path.join(homeDir, ".omo", "agent");
   /** Resolves a renderer-supplied session path, refusing anything outside the omo sessions directory. */
   const sessionFile = createSessionFileResolver(supervisor, homeDir);
+  const sessionWatcher = createSessionWatcher((sessionPath) => send(IPC.historyChanged, sessionPath));
+
+  // omo 5.1.30 thread/unarchive misses sidecars in per-project session folders; restore the one thread/list reports.
+  const unarchiveArchivedThread = async (params: unknown): Promise<{ status: { type: "notLoaded" } } | null> => {
+    const threadId = typeof params === "object" && params !== null ? (params as { threadId?: unknown }).threadId : undefined;
+    if (typeof threadId !== "string") return null;
+    let thread: { path: string | null } | undefined;
+    let cursor: string | null = null;
+    do {
+      const listed: { data: Array<{ id: string; path: string | null }>; nextCursor: string | null } = await supervisor.request("thread/list", { archived: true, limit: 100, ...(cursor === null ? {} : { cursor }) });
+      thread = listed.data.find(candidate => candidate.id === threadId);
+      cursor = listed.nextCursor;
+    } while (thread === undefined && cursor !== null);
+    if (thread?.path == null || !(await unarchiveBySidecar(threadId, await sessionFile(thread.path)))) return null;
+    return { status: { type: "notLoaded" } };
+  };
 
   let treeBusy = false;
   const handlers: Record<string, (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown> = {
@@ -196,6 +214,10 @@ export function registerIpc(deps: IpcDeps): () => void {
     [IPC.listWorkspaceFiles]: (_event, cwd) => listWorkspaceFiles(requireString(cwd, "cwd")),
     [IPC.readWorkspaceFile]: (_event, cwd, file) => readWorkspaceFile(requireString(cwd, "cwd"), requireString(file, "relativePath")),
     [IPC.getWorkspaceDiff]: (_event, cwd, file) => getWorkspaceDiff(requireString(cwd, "cwd"), requireString(file, "relativePath")),
+    [IPC.listSessionWork]: (_event, cwd, sinceMs) => {
+      if (typeof sinceMs !== "number") throw new TypeError("sinceMs must be a number");
+      return listSessionWork(requireString(cwd, "cwd"), sinceMs);
+    },
     [IPC.readOpencodexAccounts]: () => readOpencodexAccounts(proxyAgentDir(), homeDir),
     [IPC.getAndroidStatus]: () => deps.android?.getStatus(),
     [IPC.refreshAndroid]: () => deps.android?.refresh(),
@@ -240,6 +262,10 @@ export function registerIpc(deps: IpcDeps): () => void {
         const result = await supervisor.request(method, params as ClientParams<ClientMethod>);
         return { ok: true, result };
       } catch (error) {
+        if (method === "thread/unarchive" && error instanceof RpcRequestError && /^thread not found:/.test(error.message)) {
+          const restored = await unarchiveArchivedThread(params);
+          if (restored !== null) return { ok: true, result: restored };
+        }
         if (error instanceof RpcRequestError) return { ok: false, error: { code: error.code, message: error.message } };
         return { ok: false, error: { code: INTERNAL_ERROR, message: error instanceof Error ? error.message : String(error) } };
       }
@@ -263,6 +289,10 @@ export function registerIpc(deps: IpcDeps): () => void {
     },
     [IPC.loadHistory]: async (_event, sessionPath): Promise<HistoryResult> =>
       parseSessionJsonl(await readFile(await sessionFile(sessionPath), "utf8")),
+    [IPC.watchHistory]: async (_event, sessionPath): Promise<void> => {
+      if (sessionPath === null) return sessionWatcher.set(null, null);
+      sessionWatcher.set(await sessionFile(sessionPath), requireString(sessionPath, "sessionPath"));
+    },
     [IPC.loadThreadOrigins]: (_event, paths) => {
       if (!Array.isArray(paths) || paths.some(file => typeof file !== "string" || !path.isAbsolute(file))) throw new Error("Invalid session paths");
       return loadThreadOrigins(paths as string[], sessionFile);
@@ -313,21 +343,6 @@ export function registerIpc(deps: IpcDeps): () => void {
       const window = getWindow();
       const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
       return picked.canceled ? null : (picked.filePaths[0] ?? null);
-    },
-    [IPC.pickImages]: async (): Promise<string[]> => {
-      const qa = process.env[ENV.qaPickImages];
-      if (qa) {
-        const paths: unknown = JSON.parse(qa);
-        if (!Array.isArray(paths) || !paths.every((entry) => typeof entry === "string" && path.isAbsolute(entry))) throw new Error("QA image paths must be an array of absolute paths");
-        return paths as string[];
-      }
-      const options: OpenDialogOptions = {
-        properties: ["openFile", "multiSelections"],
-        filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
-      };
-      const window = getWindow();
-      const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
-      return picked.canceled ? [] : picked.filePaths;
     },
     [IPC.pickAttachments]: async (_event, kind): Promise<string[]> => {
       if (kind !== "files" && kind !== "folder") throw new TypeError("kind must be files or folder");
@@ -389,6 +404,12 @@ export function registerIpc(deps: IpcDeps): () => void {
     [IPC.revealPath]: (_event, target) => {
       shell.showItemInFolder(requireString(target, "path"));
     },
+    [IPC.openLogsFolder]: async () => {
+      const dir = app.getPath("logs");
+      await mkdir(dir, { recursive: true });
+      const failure = await shell.openPath(dir);
+      if (failure !== "") throw new Error(failure);
+    },
     [IPC.listOpenTargets]: () => openWorkspace.listTargets(),
     [IPC.openWorkspace]: async (_event, cwd, target) => {
       if (target === null || target === undefined) return openWorkspace.openDefault(cwd);
@@ -419,5 +440,6 @@ export function registerIpc(deps: IpcDeps): () => void {
   return () => {
     for (const channel of Object.keys(handlers)) ipcMain.removeHandler(channel);
     for (const unsubscribe of unsubscribers) unsubscribe();
+    sessionWatcher.close();
   };
 }

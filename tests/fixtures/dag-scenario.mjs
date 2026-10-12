@@ -16,6 +16,8 @@ export function runDagScenario(record, turn, { home, notify, guard, background =
     return childIds.get(id);
   };
   let stage = 1;
+  // Task ids the UI cancelled: native reports them cancelled from then on, whatever stage the run reaches.
+  const cancelled = new Set();
   function emit() {
     const updatedAt = new Date().toISOString();
     const rows = [
@@ -29,7 +31,8 @@ export function runDagScenario(record, turn, { home, notify, guard, background =
     ];
     const tasks = [];
     const all = [];
-    function save(id, label, status, category, parent, depth, done = 0, total = 3, current = "Inspect source") {
+    function save(id, label, scriptedStatus, category, parent, depth, done = 0, total = 3, current = "Inspect source") {
+      const status = cancelled.has(`st_dag_${id}`) ? "cancelled" : scriptedStatus;
       const sessionId = childId(id);
       const task = {
         task_id: `st_dag_${id}`, task_summary: label, description: label, name: id, status,
@@ -108,6 +111,10 @@ export function runDagScenario(record, turn, { home, notify, guard, background =
       lastAssistantLine: stage === 1 ? "Run tests" : "Inspect screenshots", turns: 4, toolCalls: 9 });
   }
   emit();
+  record.cancelTask = (taskId) => {
+    cancelled.add(taskId);
+    emit();
+  };
   const progress = new Promise((resolve) => {
     record.advanceLive = () => {
       stage++;

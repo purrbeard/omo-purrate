@@ -34,7 +34,7 @@ import type { ClientMethod, ClientParams, ClientResult, RequestId, RpcNotificati
 import { stripRemoteMethodPrefix } from "./ipc-errors";
 import type { AndroidStatus } from "../shared/android";
 import type { OpencodexAccounts } from "../shared/opencodex";
-import type { WorkspaceFile, WorkspaceDocument } from "../shared/workspace";
+import type { SessionWorktree, WorkspaceFile, WorkspaceDocument } from "../shared/workspace";
 import type { DeviceOverview } from "../shared/device-overview";
 import type { AppUpdateStatus } from "../shared/app-update";
 import type { ModelRoutingInput, ModelRoutingSettings } from "../shared/model-routing";
@@ -55,6 +55,7 @@ const CHANNELS = {
   listWorkspaceFiles: "workspace:list-files",
   readWorkspaceFile: "workspace:read-file",
   getWorkspaceDiff: "workspace:diff",
+  listSessionWork: "workspace:session-work",
   importMcpConfig: "mcp:import-config",
   readOpencodexAccounts: "accounts:opencodex",
   getAndroidStatus: "android:get-status",
@@ -76,6 +77,8 @@ const CHANNELS = {
   install: "omo:install",
   installLog: "omo:install-log",
   loadHistory: "history:load",
+  watchHistory: "history:watch",
+  historyChanged: "history:changed",
   loadTaskWork: "history:task-work",
   sendTaskMessage: "history:task-message",
   loadThreadLinks: "history:thread-links",
@@ -85,7 +88,6 @@ const CHANNELS = {
   readAccountUsage: "accounts:usage",
   openAccountLogin: "accounts:login",
   pickDirectory: "dialog:pick-directory",
-  pickImages: "dialog:pick-images",
   pickAttachments: "dialog:pick-attachments",
   saveImage: "attachments:save-image",
   diagnostics: "app:diagnostics",
@@ -98,6 +100,7 @@ const CHANNELS = {
   readClipboardText: "app:read-clipboard-text",
   openExternal: "app:open-external",
   revealPath: "app:reveal-path",
+  openLogsFolder: "app:open-logs-folder",
   listOpenTargets: "app:list-open-targets",
   openWorkspace: "app:open-workspace",
   gitInfo: "git:info",
@@ -156,6 +159,7 @@ const api = {
   listWorkspaceFiles: (cwd: string): Promise<WorkspaceFile[]> => invoke(CHANNELS.listWorkspaceFiles, cwd),
   readWorkspaceFile: (cwd: string, relativePath: string): Promise<WorkspaceDocument> => invoke(CHANNELS.readWorkspaceFile, cwd, relativePath),
   getWorkspaceDiff: (cwd: string, relativePath: string): Promise<string> => invoke(CHANNELS.getWorkspaceDiff, cwd, relativePath),
+  listSessionWork: (cwd: string, sinceMs: number): Promise<SessionWorktree[]> => invoke(CHANNELS.listSessionWork, cwd, sinceMs),
   importMcpConfig: (): Promise<{ imported: string[] } | null> => invoke(CHANNELS.importMcpConfig),
   readOpencodexAccounts: (): Promise<OpencodexAccounts> => invoke(CHANNELS.readOpencodexAccounts),
   getAndroidStatus: (): Promise<AndroidStatus> => invoke(CHANNELS.getAndroidStatus),
@@ -181,6 +185,8 @@ const api = {
   install: (): Promise<InstallResult> => invoke(CHANNELS.install),
   onInstallLog: (listener: (line: InstallLogLine) => void) => subscribe(CHANNELS.installLog, listener),
   loadHistory: (sessionPath: string): Promise<HistoryResult> => invoke(CHANNELS.loadHistory, sessionPath),
+  watchHistory: (sessionPath: string | null): Promise<void> => invoke(CHANNELS.watchHistory, sessionPath),
+  onHistoryChanged: (listener: (sessionPath: string) => void) => subscribe(CHANNELS.historyChanged, listener),
   loadTaskWork: (cwd: string, parentSessionId: string): Promise<TaskWork[]> => invoke(CHANNELS.loadTaskWork, cwd, parentSessionId),
   sendTaskMessage: (parentSessionId: string, taskId: string, message: string): Promise<void> => invoke(CHANNELS.sendTaskMessage, parentSessionId, taskId, message),
   loadThreadLinks: (cwds: string[], paths?: string[]) => invoke(CHANNELS.loadThreadLinks, cwds, paths),
@@ -191,7 +197,6 @@ const api = {
   openAccountLogin: (provider: string): Promise<void> => invoke(CHANNELS.openAccountLogin, provider),
   pickDirectory: (defaultPath?: string | null): Promise<string | null> =>
     invoke(CHANNELS.pickDirectory, defaultPath ?? null),
-  pickImages: (): Promise<string[]> => invoke(CHANNELS.pickImages),
   pickAttachments: (kind: "files" | "folder"): Promise<string[]> => invoke(CHANNELS.pickAttachments, kind),
   imageFilePath: (file: File): string => webUtils.getPathForFile(file),
   saveImage: (dataUrl: string): Promise<string> => invoke(CHANNELS.saveImage, dataUrl),
@@ -205,6 +210,7 @@ const api = {
   readClipboardText: (): Promise<string> => invoke(CHANNELS.readClipboardText),
   openExternal: (url: string): Promise<void> => invoke(CHANNELS.openExternal, url),
   revealPath: (target: string): Promise<void> => invoke(CHANNELS.revealPath, target),
+  openLogsFolder: (): Promise<void> => invoke(CHANNELS.openLogsFolder),
   listOpenTargets: (): Promise<OpenTarget[]> => invoke(CHANNELS.listOpenTargets),
   openWorkspace: (cwd: string, target?: OpenTargetId | null): Promise<OpenTargetId> =>
     invoke(CHANNELS.openWorkspace, cwd, target ?? null),

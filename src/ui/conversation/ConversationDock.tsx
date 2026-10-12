@@ -9,7 +9,7 @@ import {
 import type { TodoPhase, WireGoal } from "../../../shared/protocol";
 import { useT, type MessageKey } from "../../i18n";
 import { selectGoal, selectThreadLiveState, selectTodo } from "../../state";
-import { useAppSelector } from "../app-context";
+import { useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
 import { currentTodo, goalVisible, todoCounts, todoDot, type TodoStatus } from "./activity-model";
 import { formatWholeSeconds } from "./format";
@@ -90,9 +90,24 @@ export function TodoDock({ phases, restored, live }: { phases: readonly TodoPhas
   );
 }
 
-/** Display-only goal strip; hidden while the goal is unknown (undefined) or absent (null). */
-export function GoalStrip({ goal }: { goal: WireGoal | null | undefined }) {
+/** Goal controls; hidden while the goal is unknown (undefined) or absent (null). */
+export function GoalStrip({ goal, threadId }: { goal: WireGoal | null | undefined; threadId: string }) {
   const t = useT();
+  const actions = useActions();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const change = async (status: "active" | "paused" | null): Promise<void> => {
+    setPending(true);
+    setError(null);
+    try {
+      if (status === null) await actions.clearGoal(threadId);
+      else await actions.setGoalStatus(threadId, status);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setPending(false);
+    }
+  };
   if (!goalVisible(goal)) return null;
   const elapsed = formatWholeSeconds(goal.timeUsedSeconds * 1000, t);
   return (
@@ -107,6 +122,12 @@ export function GoalStrip({ goal }: { goal: WireGoal | null | undefined }) {
       <span className={css.elapsed} aria-label={t("goal.elapsed", { duration: elapsed })}>
         {elapsed}
       </span>
+      <span className={css.goalActions}>
+        {goal.status === "active" && <button type="button" disabled={pending} data-testid={TESTID.goalPause} onClick={() => void change("paused")}>{t("goal.pause")}</button>}
+        {goal.status === "paused" && <button type="button" disabled={pending} data-testid={TESTID.goalResume} onClick={() => void change("active")}>{t("goal.resume")}</button>}
+        <button type="button" disabled={pending} data-testid={TESTID.goalClear} onClick={() => void change(null)}>{t("goal.clear")}</button>
+      </span>
+      {error !== null && <span className={css.goalError} data-testid={TESTID.goalError} role="alert">{error}</span>}
     </section>
   );
 }
@@ -121,7 +142,7 @@ export function ConversationDock() {
   return (
     <div className={css.dock}>
       {todo !== null && <TodoDock phases={todo.phases} restored={todo.source === "history"} live={live && todo.source === "live"} />}
-      <GoalStrip goal={goal} />
+      <GoalStrip key={threadId} goal={goal} threadId={threadId} />
     </div>
   );
 }

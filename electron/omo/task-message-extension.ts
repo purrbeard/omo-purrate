@@ -20,4 +20,15 @@ export default function taskMessageExtension(pi: Api): void {
     if (result.isError || failed) throw new Error(result.content.filter(part => part.type === "text").map(part => part.text ?? "").join("\n"));
     return { delivered: true };
   });
+  pi.rpc.handle("omo-ui.task.cancel", async (data) => {
+    if (typeof data !== "object" || data === null || !("taskId" in data)
+      || typeof data.taskId !== "string" || !data.taskId.trim()
+      || ("reason" in data && typeof data.reason !== "string")) {
+      throw new Error("Invalid child task cancellation");
+    }
+    const result = await pi.executeTool("task_cancel", { task_id: data.taskId, ...("reason" in data ? { reason: data.reason } : {}) }, { activateInactiveTool: true });
+    if (result.isError) throw new Error(result.content.filter(part => part.type === "text").map(part => part.text ?? "").join("\n"));
+    const status = typeof result.details === "object" && result.details !== null && "status" in result.details ? result.details.status : undefined;
+    return { cancelled: true, ...(status === undefined ? {} : { status }) };
+  });
 }

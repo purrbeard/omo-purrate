@@ -330,6 +330,7 @@ export interface ClientRequestMap {
     result: { data: McpServerStatus[]; nextCursor: string | null };
   };
   "thread/goal/get": { params: { threadId: string }; result: { goal: WireGoal | null } };
+  "thread/goal/clear": { params: { threadId: string }; result: Record<string, never> };
   "thread/compact/start": { params: { threadId: string }; result: Record<string, never> };
   "thread/goal/set": { params: { threadId: string; objective?: string | null; status?: "active" | "paused" | "complete"; tokenBudget?: number | null }; result: { goal: WireGoal } };
   extension_request: { params: { threadId: string; name: string; data?: unknown }; result: unknown };
@@ -358,10 +359,12 @@ export interface ClientRequestMap {
     result: { data: Thread[]; nextCursor: string | null };
   };
   "thread/start": { params: { cwd: string; model?: string | null }; result: ThreadSessionResult };
+  "thread/fork": { params: { threadId: string; cwd: string }; result: ThreadSessionResult };
   "thread/resume": { params: { threadId: string }; result: ThreadSessionResult };
   "thread/read": { params: { threadId: string; includeTurns?: boolean }; result: { thread: Thread } };
   "thread/name/set": { params: { threadId: string; name: string }; result: Record<string, never> };
   "thread/archive": { params: { threadId: string }; result: Record<string, never> };
+  "thread/unarchive": { params: { threadId: string }; result: { status: ThreadStatus } };
   "thread/delete": { params: { threadId: string }; result: Record<string, never> };
   /** omo takes a turn's model and effort from the thread settings; it drops the same fields on turn/start. */
   "thread/settings/update": { params: { threadId: string; model?: string; effort?: ReasoningEffort }; result: Record<string, never> };
@@ -390,6 +393,7 @@ export const CLIENT_METHODS = [
   "account/providerAccounts/remove",
   "mcpServerStatus/list",
   "thread/goal/get",
+  "thread/goal/clear",
   "thread/compact/start",
   "thread/goal/set",
   "extension_request",
@@ -399,11 +403,13 @@ export const CLIENT_METHODS = [
   "skills/list",
   "thread/list",
   "thread/start",
+  "thread/fork",
   "thread/resume",
   "thread/read",
   "thread/name/set",
   "thread/settings/update",
   "thread/archive",
+  "thread/unarchive",
   "thread/delete",
   "turn/start",
   "turn/steer",
@@ -419,6 +425,7 @@ export interface ServerNotificationMap {
   "thread/status/changed": { threadId: string; status: ThreadStatus };
   "thread/name/updated": { threadId: string; threadName?: string };
   "thread/archived": { threadId: string };
+  "thread/unarchived": { threadId: string };
   "thread/deleted": { threadId: string };
   "turn/started": { threadId: string; turn: Turn };
   "turn/completed": { threadId: string; turn: Turn };

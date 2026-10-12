@@ -10,6 +10,7 @@ import { threadTitle } from "./format";
 import type { ConversationTurn } from "../../state";
 import { TurnView } from "./TurnView";
 import { useTaskWork } from "./use-task-work";
+import { cancelChildTask } from "../../state/task-control";
 import { useStickToBottom } from "./use-stick-to-bottom";
 import css from "./AgentWorkspace.module.css";
 
@@ -64,6 +65,7 @@ function Workspace({ parentId, placement }: { parentId: string; placement: "dock
   // Native holds a message to a finished agent open until that agent has answered, so the wait is tracked per agent.
   const [sending, setSending] = useState<readonly string[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [stopping, setStopping] = useState<readonly string[]>([]);
   useEffect(() => {
     sessions.set(parentId, state);
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -110,6 +112,13 @@ function Workspace({ parentId, placement }: { parentId: string; placement: "dock
       setErrors(value => ({ ...value, [id]: cause instanceof Error ? cause.message : String(cause) }));
     } finally { setSending(value => value.filter(entry => entry !== id)); }
   };
+  const stop = async (taskId: string): Promise<void> => {
+    setStopping(value => [...value, taskId]);
+    setErrors(value => ({ ...value, [taskId]: "" }));
+    try { await cancelChildTask(parentId, taskId); }
+    catch (cause) { setErrors(value => ({ ...value, [taskId]: cause instanceof Error ? cause.message : String(cause) })); }
+    finally { setStopping(value => value.filter(entry => entry !== taskId)); }
+  };
   const tabKeys = (event: KeyboardEvent<HTMLDivElement>) => {
     const index = open.findIndex(task => task.task_id === selected?.task_id);
     const offset = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
@@ -139,7 +148,9 @@ function Workspace({ parentId, placement }: { parentId: string; placement: "dock
     </div>}
     {loadError !== null && <p className={css.error} role="alert">{loadError}</p>}
     {selected === undefined ? (linkedSessions.length === 0 && <p className={css.empty}>{t("activity.agentEmpty")}</p>) : <>
-      <div className={css.meta}><span>{selected.task_summary ?? selected.task_id}</span><span>{selected.status}</span></div>
+      <div className={css.meta} data-task-id={selected.task_id}><span>{selected.task_summary ?? selected.task_id}</span><span>{selected.status}</span>
+        {(selected.status === "running" || selected.status === "queued") && <button type="button" className={css.stop} data-testid="agent-stop"
+          aria-label={t("activity.stopAgent")} disabled={stopping.includes(selected.task_id)} onClick={() => void stop(selected.task_id)}>{t("activity.stop")}</button>}</div>
       <div ref={scroll.scrollRef} id="agent-chat-panel" role="tabpanel" aria-labelledby={`agent-tab-${selected.task_id}`} className={css.transcript} data-testid="agent-chat-history">
         <div ref={scroll.contentRef}>
         {turns.map(turn => <TurnView key={turn.id} turn={turn} cwd={cwd} />)}

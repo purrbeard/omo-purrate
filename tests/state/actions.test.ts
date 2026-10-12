@@ -84,6 +84,7 @@ class FakeBridge implements OmoBridgeApi {
   listWorkspaceFiles(): ReturnType<OmoBridgeApi["listWorkspaceFiles"]> { return Promise.resolve([]); }
   readWorkspaceFile(): ReturnType<OmoBridgeApi["readWorkspaceFile"]> { return Promise.resolve({ path: "", text: "", language: "text" }); }
   getWorkspaceDiff(): ReturnType<OmoBridgeApi["getWorkspaceDiff"]> { return Promise.resolve(""); }
+  listSessionWork(): ReturnType<OmoBridgeApi["listSessionWork"]> { return Promise.resolve([]); }
   importMcpConfig(): ReturnType<OmoBridgeApi["importMcpConfig"]> { return Promise.resolve(null); }
   readOpencodexAccounts(): ReturnType<OmoBridgeApi["readOpencodexAccounts"]> { return Promise.resolve({ baseUrl: "", accounts: [], error: null }); }
   getAndroidStatus(): ReturnType<OmoBridgeApi["getAndroidStatus"]> { return Promise.resolve({ adbAvailable: false, state: "disabled", devices: [], selectedSerial: null, url: null, message: null }); }
@@ -117,6 +118,20 @@ class FakeBridge implements OmoBridgeApi {
   readonly responses: Array<{ id: RequestId; result: unknown }> = [];
   readonly historyLoads: string[] = [];
   history: () => Promise<HistoryResult> = () => Promise.resolve({ turns: [], todo: null, tasks: [] });
+  readonly watched: Array<string | null> = [];
+  private readonly historyListeners = new Set<(sessionPath: string) => void>();
+  async watchHistory(sessionPath: string | null): Promise<void> { this.watched.push(sessionPath); }
+  onHistoryChanged(listener: (sessionPath: string) => void): () => void {
+    this.historyListeners.add(listener);
+    return () => this.historyListeners.delete(listener);
+  }
+  emitHistoryChanged(sessionPath: string): void {
+    for (const listener of this.historyListeners) listener(sessionPath);
+  }
+  /** Threads this fake omo reports as loaded, and the turns it holds for them when read with includeTurns. */
+  loadedThreads: string[] = [];
+  serverTurns: Turn[] | null = null;
+  restarts = 0;
   goal: () => Promise<ClientResult<"thread/goal/get">> = async () => ({ goal: null });
   private readonly notificationListeners = new Set<(notification: RpcNotification) => void>();
   readonly failing = new Set<ClientMethod>();
@@ -126,6 +141,7 @@ class FakeBridge implements OmoBridgeApi {
     }], errors: [] })),
   });
   threadList: () => unknown = () => ({ data: [makeThread(THREAD_ID, { path: SESSION_PATH })], nextCursor: null });
+  archivedList: (cursor?: string | null) => ClientResult<"thread/list"> = () => ({ data: [], nextCursor: null });
   started: (cwd: string) => unknown = (cwd) => ({
     thread: makeThread(THREAD_ID, { cwd }), model: "claude-fable-5", modelProvider: "anthropic", cwd, reasoningEffort: null,
   });
@@ -142,7 +158,14 @@ class FakeBridge implements OmoBridgeApi {
     } }),
     "model/list": () => ({ data: [model], nextCursor: null }),
     // Results cross a process boundary; the overrides let tests return malformed payloads.
-    "thread/list": () => this.threadList() as ClientResult<"thread/list">,
+    "thread/list": ({ archived, cursor }) => archived ? this.archivedList(cursor) : this.threadList() as ClientResult<"thread/list">,
+    "thread/archive": () => ({}),
+    "thread/unarchive": () => ({ status: { type: "notLoaded" } }),
+    "thread/goal/clear": () => ({}),
+    "thread/fork": ({ cwd, threadId }) => ({
+      thread: makeThread(BRANCH_ID, { cwd, forkedFromId: threadId, path: BRANCH_PATH }),
+      model: "claude-fable-5", modelProvider: "anthropic", cwd, reasoningEffort: null,
+    }),
     "thread/start": ({ cwd }) => this.started(cwd) as ClientResult<"thread/start">,
     "skills/list": ({ cwds }) => this.skills(cwds ?? []),
     "thread/resume": ({ threadId }) => ({
@@ -158,7 +181,8 @@ class FakeBridge implements OmoBridgeApi {
     "turn/interrupt": () => ({}),
     "thread/name/set": () => ({}),
     "thread/delete": () => ({}),
-    "thread/read": ({ threadId }) => ({ thread: makeThread(threadId) }),
+    "thread/read": ({ threadId }) => ({ thread: this.serverTurns === null ? makeThread(threadId) : { ...makeThread(threadId), turns: this.serverTurns } }),
+    "thread/loaded/list": () => ({ data: this.loadedThreads, nextCursor: null }),
     "account/providerAccounts/read": ({ provider }) => ({
       provider, accounts: provider === "anthropic-subscription" ? [{ name: "work", source: "login", blocked: false, pinned: true }] : [],
     }),
@@ -203,7 +227,7 @@ class FakeBridge implements OmoBridgeApi {
   async respond(id: RequestId, result: unknown): Promise<void> {
     this.responses.push({ id, result });
   }
-  async restart(): Promise<void> {}
+  async restart(): Promise<void> { this.restarts += 1; }
   async install(): Promise<{ ok: boolean; exitCode: number | null }> {
     return { ok: true, exitCode: 0 };
   }
@@ -236,7 +260,6 @@ class FakeBridge implements OmoBridgeApi {
   async pickDirectory(): Promise<string | null> {
     return null;
   }
-  async pickImages(): Promise<string[]> { return []; }
   async pickAttachments(): Promise<string[]> { return []; }
   async readClipboardText(): Promise<string> { return ""; }
   imageFilePath(): string { return ""; }
@@ -257,6 +280,7 @@ class FakeBridge implements OmoBridgeApi {
   async copyText(): Promise<void> {}
   async openExternal(): Promise<void> {}
   async revealPath(): Promise<void> {}
+  async openLogsFolder(): Promise<void> {}
   async listOpenTargets(): Promise<OpenTarget[]> {
     return [{ id: "finder" }];
   }
@@ -291,6 +315,97 @@ function setup() {
   const actions = createActions(store, bridge, { now: () => 5_000, newId: () => `id-${++counter}` });
   return { store, bridge, actions };
 }
+
+describe("session lifecycle", () => {
+  it("pins once, persists the preference and restores a pinned session outside the page", async () => {
+    const { actions, bridge, store } = setup();
+    await actions.pinThread("older", true);
+    await actions.pinThread("older", true);
+    expect(bridge.preferences.pinnedThreadIds).toEqual(["older"]);
+    await actions.refreshThreads();
+    expect(store.getState().threads["older"]?.id).toBe("older");
+    await actions.pinThread("older", false);
+    expect(bridge.preferences.pinnedThreadIds).toEqual([]);
+  });
+
+  it("archives the open session and excludes it from saved ID restoration", async () => {
+    const { actions, bridge, store } = setup();
+    await actions.newThread("/workspace");
+    await actions.pinThread(THREAD_ID, true);
+    await actions.archiveThread(THREAD_ID);
+    expect(store.getState().activeThreadId).toBeNull();
+    expect(store.getState().threads[THREAD_ID]).toBeUndefined();
+    bridge.threadList = () => ({ data: [], nextCursor: null });
+    bridge.archivedList = () => ({ data: [makeThread(THREAD_ID)], nextCursor: null });
+    const reads = bridge.calls.filter(call => call.method === "thread/read").length;
+    await actions.refreshThreads();
+    expect(bridge.calls.filter(call => call.method === "thread/read")).toHaveLength(reads);
+    expect(store.getState().threads[THREAD_ID]).toBeUndefined();
+    bridge.archivedList = () => ({ data: [], nextCursor: null });
+    bridge.threadList = () => ({ data: [makeThread(THREAD_ID, { status: { type: "notLoaded" } })], nextCursor: null });
+    await actions.unarchiveThread(THREAD_ID);
+    expect(store.getState().threads[THREAD_ID]?.status.type).toBe("notLoaded");
+    expect(store.getState().activeThreadId).toBeNull();
+    expect(bridge.methods()).not.toContain("thread/resume");
+  });
+
+  it("lists every archived page without replacing the live inventory", async () => {
+    const { actions, bridge, store } = setup();
+    await actions.refreshThreads();
+    bridge.archivedList = cursor => ({ data: [makeThread(cursor === "next" ? "second" : "first")], nextCursor: cursor === "next" ? null : "next" });
+    expect((await actions.listArchivedThreads()).map(thread => thread.id)).toEqual(["first", "second"]);
+    expect(store.getState().threadOrder).toEqual([THREAD_ID]);
+  });
+
+  it("forks in the source workspace, opens it loaded and keeps the original", async () => {
+    const { actions, bridge, store } = setup();
+    await actions.newThread("/source");
+    expect(await actions.forkThread(THREAD_ID)).toBe(BRANCH_ID);
+    expect(bridge.calls).toContainEqual({ method: "thread/fork", params: { threadId: THREAD_ID, cwd: "/source" } });
+    expect(store.getState().activeThreadId).toBe(BRANCH_ID);
+    expect(store.getState().conversations[BRANCH_ID]?.resumed).toBe(true);
+    expect(store.getState().threads[THREAD_ID]).toBeDefined();
+    expect(bridge.preferences.managedThreadIds).toContain(BRANCH_ID);
+    expect(bridge.historyLoads).toContain(BRANCH_PATH);
+  });
+
+  it("pauses, resumes, completes and clears goals, propagating errors to controls", async () => {
+    const { actions, bridge, store } = setup();
+    await actions.newThread("/source");
+    for (const status of ["paused", "active", "complete"] as const) {
+      await actions.setGoalStatus(THREAD_ID, status);
+      expect(store.getState().conversations[THREAD_ID]?.live.goal?.status).toBe(status);
+      expect(bridge.calls).toContainEqual({ method: "thread/goal/set", params: { threadId: THREAD_ID, status } });
+    }
+    bridge.failing.add("thread/goal/clear");
+    await expect(actions.clearGoal(THREAD_ID)).rejects.toThrow("thread/goal/clear failed");
+    expect(store.getState().conversations[THREAD_ID]?.live.goal?.status).toBe("complete");
+    bridge.failing.delete("thread/goal/clear");
+    await actions.clearGoal(THREAD_ID);
+    expect(store.getState().conversations[THREAD_ID]?.live.goal).toBeNull();
+  });
+
+  it("refreshes restored threads announced by another client", async () => {
+    const { actions, bridge, store } = setup();
+    const disconnect = actions.connect();
+    bridge.threadList = () => ({ data: [makeThread("restored")], nextCursor: null });
+    const restored = waitForState(store, state => state.threads["restored"] !== undefined);
+    bridge.emitNotification("thread/unarchived", { threadId: "restored" });
+    await restored;
+    disconnect();
+  });
+});
+
+it("reloads saved linked children outside the first thread page", async () => {
+  const { bridge, actions } = setup();
+  bridge.preferences.threadParents = { oldChild: "oldParent" };
+  bridge.preferences.managedThreadIds = ["oldParent"];
+  await actions.refreshThreads();
+  expect(bridge.calls.filter((call) => call.method === "thread/read").map((call) => call.params)).toEqual(expect.arrayContaining([
+    { threadId: "oldChild", includeTurns: false },
+    { threadId: "oldParent", includeTurns: false },
+  ]));
+});
 
 function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
   let settle: (value: T) => void = () => { throw new Error("not initialized"); };
@@ -452,7 +567,16 @@ describe("createActions", () => {
     expect(context.store.getState().conversations[THREAD_ID]?.live).toMatchObject({
       freshness: "unattached", todo: { source: "history", phases: [] }, historicalTasks: [{ task_id: "old", source: "history" }], runs: {}, tasks: {},
     });
-    expect(context.bridge.methods()).not.toContain("thread/goal/get");
+    // Opening reads the native goal (it is not in the session file) but never resumes the thread.
+    expect(context.bridge.methods().filter((method) => method === "thread/goal/get")).toHaveLength(1);
+    expect(context.bridge.methods()).not.toContain("thread/resume");
+  });
+  it("shows a goal native kept across an app restart when the session is opened", async () => {
+    const context = setup();
+    await listThread(context);
+    context.bridge.goal = async () => ({ goal: { ...activeGoal, status: "paused" } });
+    await context.actions.openThread(THREAD_ID);
+    expect(context.store.getState().conversations[THREAD_ID]?.live.goal).toMatchObject({ objective: "ship", status: "paused" });
   });
   const providerError = { message: "402: Insufficient Balance" };
   const failedHistory = (completedAt: number | null = 5_000): HistoryTurn => ({
@@ -596,7 +720,7 @@ describe("createActions", () => {
     await listThread(context);
     await context.actions.openThread(THREAD_ID);
     expect(await context.actions.sendMessage("hello")).toBe(true);
-    expect(context.bridge.methods()).toEqual(["skills/list", "thread/resume", "thread/goal/get", "skills/list", "turn/start"]);
+    expect(context.bridge.methods()).toEqual(["skills/list", "thread/goal/get", "thread/resume", "thread/goal/get", "skills/list", "turn/start"]);
     expect(context.bridge.calls.at(-1)?.params).toEqual({
       threadId: THREAD_ID,
       input: [{ type: "text", text: "hello", text_elements: [] }],
@@ -652,6 +776,7 @@ describe("createActions", () => {
     expect(await context.actions.sendMessage("also this")).toBe(true);
     expect(context.bridge.calls).toEqual([
       { method: "skills/list", params: { cwds: ["/tmp/work/project"] } },
+      { method: "thread/goal/get", params: { threadId: THREAD_ID } },
       {
         method: "turn/steer",
         params: { threadId: THREAD_ID, expectedTurnId: "turn-9", input: [{ type: "text", text: "also this", text_elements: [] }] },
@@ -869,7 +994,7 @@ describe("skill catalog actions", () => {
     await listThread(context);
     await context.actions.openThread(THREAD_ID);
     expect(await context.actions.sendMessage("/skill:ulw-loop /skill:plan do work")).toBe(true);
-    expect(context.bridge.methods()).toEqual(["skills/list", "thread/resume", "thread/goal/get", "skills/list", "turn/start"]);
+    expect(context.bridge.methods()).toEqual(["skills/list", "thread/goal/get", "thread/resume", "thread/goal/get", "skills/list", "turn/start"]);
     expect(context.bridge.calls.at(-1)?.params).toMatchObject({
       input: [{ type: "text", text: "/skill:ulw-loop /skill:plan do work", text_elements: [] }],
     });
@@ -1313,5 +1438,160 @@ describe("account actions", () => {
     context.bridge.failing.add("account/providerAccounts/remove");
     await expect(context.actions.removeAccount("anthropic-subscription", "work")).resolves.toBe(false);
     expect(selectToastNotice(context.store.getState())).toMatchObject({ level: "error" });
+  });
+});
+
+describe("sessions changed by another omo process", () => {
+  const userTurn = (id: string, text: string): HistoryTurn => ({
+    id, status: "completed", error: null, startedAt: 1, completedAt: 2,
+    items: [{ type: "userMessage", id: `${id}-user`, clientId: null, content: [{ type: "text", text, text_elements: [] }] }],
+  });
+  const serverTurn = (id: string, text: string): Turn => ({
+    id, status: "completed", error: null,
+    items: [{ type: "userMessage", id: `${id}-user`, clientId: null, content: [{ type: "text", text, text_elements: [] }] }],
+  });
+
+  async function opened() {
+    const context = setup();
+    const disconnect = context.actions.connect();
+    await listThread(context);
+    context.bridge.history = async () => historyOf([userTurn("t1", "first")]);
+    await context.actions.openThread(THREAD_ID);
+    return { ...context, disconnect };
+  }
+
+  it("follows outside changes to a session this app created", async () => {
+    const context = setup();
+    context.bridge.started = (cwd) => ({ thread: makeThread(THREAD_ID, { cwd, path: SESSION_PATH }), model: "claude-fable-5", modelProvider: "anthropic", cwd, reasoningEffort: null });
+    const disconnect = context.actions.connect();
+    expect(await context.actions.newThread("/tmp/work/project")).toBe(THREAD_ID);
+    // The app's own first turn writes the file; reading it then sets the baseline and is not an outside change.
+    const baselineRead = deferred<void>();
+    context.bridge.history = async () => {
+      baselineRead.resolve();
+      return historyOf([userTurn("turn-9", "sent here")]);
+    };
+    context.bridge.emitNotification("turn/started", { threadId: THREAD_ID, turn: runningTurn });
+    context.bridge.emitNotification("turn/completed", { threadId: THREAD_ID, turn: { ...runningTurn, status: "completed" } });
+    await baselineRead.promise;
+    await waitForState(context.store, () => context.bridge.watched.at(-1) === SESSION_PATH);
+    // Rereads run one at a time, so this outside change is read only after the baseline read has finished.
+    context.bridge.history = async () => historyOf([userTurn("turn-9", "sent here"), userTurn("t2", "from the terminal")]);
+    context.bridge.emitHistoryChanged(SESSION_PATH);
+    await waitForState(context.store, (next) => next.conversations[THREAD_ID]?.turns.some((turn) => turn.id === "t2") === true);
+    expect(context.store.getState().notices.filter((notice) => notice.code === "sessionChangedElsewhere")).toHaveLength(1);
+    disconnect();
+  });
+
+  it("watches the open session and shows turns another process appended", async () => {
+    const context = await opened();
+    expect(context.bridge.watched.at(-1)).toBe(SESSION_PATH);
+    context.bridge.history = async () => historyOf([userTurn("t1", "first"), userTurn("t2", "from the terminal")]);
+    context.bridge.emitHistoryChanged(SESSION_PATH);
+    await waitForState(context.store, (next) => next.conversations[THREAD_ID]?.turns.length === 2
+      && next.notices.some((notice) => notice.code === "sessionChangedElsewhere"));
+    context.disconnect();
+    expect(context.bridge.watched.at(-1)).toBeNull();
+  });
+
+  it("takes what its own turn wrote as its own, then follows outside changes again", async () => {
+    const context = await opened();
+    context.bridge.emitNotification("turn/started", { threadId: THREAD_ID, turn: runningTurn });
+    context.bridge.history = async () => historyOf([userTurn("t1", "first"), userTurn("turn-9", "sent here")]);
+    context.bridge.emitHistoryChanged(SESSION_PATH);
+    const ownRead = deferred<void>();
+    context.bridge.history = async () => {
+      ownRead.resolve();
+      return historyOf([userTurn("t1", "first"), userTurn("turn-9", "sent here")]);
+    };
+    context.bridge.emitNotification("turn/completed", { threadId: THREAD_ID, turn: { ...runningTurn, status: "completed" } });
+    await ownRead.promise;
+
+    // Rereads run one at a time, so this outside change is read only after the reread of the app's own write has
+    // finished. Had that reread counted as an outside change, it would have taken the one notice of this run of changes.
+    context.bridge.history = async () => historyOf([userTurn("t1", "first"), userTurn("turn-9", "sent here"), userTurn("t3", "from the terminal")]);
+    context.bridge.emitHistoryChanged(SESSION_PATH);
+    await waitForState(context.store, (next) => next.conversations[THREAD_ID]?.turns.some((turn) => turn.id === "t3") === true);
+    expect(context.store.getState().notices.filter((notice) => notice.code === "sessionChangedElsewhere")).toHaveLength(1);
+    context.disconnect();
+  });
+
+  it("finishes a slow reread and reads once more when the file keeps changing", async () => {
+    const context = await opened();
+    const first = deferred<HistoryResult>();
+    let reads = 0;
+    context.bridge.history = () => {
+      reads += 1;
+      return reads === 1 ? first.promise : Promise.resolve(historyOf([userTurn("t1", "first"), userTurn("t2", "a"), userTurn("t3", "b")]));
+    };
+    context.bridge.emitHistoryChanged(SESSION_PATH);
+    context.bridge.emitHistoryChanged(SESSION_PATH);
+    context.bridge.emitHistoryChanged(SESSION_PATH);
+    first.resolve(historyOf([userTurn("t1", "first"), userTurn("t2", "a")]));
+    await waitForState(context.store, (next) => next.conversations[THREAD_ID]?.turns.length === 3);
+    expect(reads).toBe(2);
+    context.disconnect();
+  });
+
+  it("waits for a running turn to settle before rereading the file", async () => {
+    const context = await opened();
+    context.bridge.emitNotification("turn/started", { threadId: THREAD_ID, turn: runningTurn });
+    const reread = deferred<void>();
+    context.bridge.history = async () => {
+      reread.resolve();
+      return historyOf([userTurn("t1", "first"), userTurn("turn-9", "sent here")]);
+    };
+    let readWhileRunning = false;
+    void reread.promise.then(() => { readWhileRunning = context.store.getState().conversations[THREAD_ID]?.activeTurnId != null; });
+    const loadsBefore = context.bridge.historyLoads.length;
+    context.bridge.emitHistoryChanged(SESSION_PATH);
+    // The change arrives while the turn runs: it is deferred without a read, not read and discarded.
+    expect(context.bridge.historyLoads.length).toBe(loadsBefore);
+    context.bridge.emitNotification("turn/completed", { threadId: THREAD_ID, turn: { ...runningTurn, status: "completed" } });
+    await reread.promise;
+    expect(readWhileRunning).toBe(false);
+    context.disconnect();
+  });
+
+  it("shows the model another process switched the session to", async () => {
+    const context = await opened();
+    await context.actions.refreshModels();
+    context.bridge.history = async () => ({ ...historyOf([userTurn("t1", "first")]), model: { provider: "anthropic", modelId: "claude-fable-5", thinkingLevel: "medium" } });
+    context.bridge.emitHistoryChanged(SESSION_PATH);
+    const state = await waitForState(context.store, (next) => next.composer.modelId === "anthropic/claude-fable-5");
+    expect(state.composer.effort).toBe("medium");
+    expect(state.conversations[THREAD_ID]?.session).toEqual({ modelProvider: "anthropic", model: "claude-fable-5", reasoningEffort: "medium" });
+    context.disconnect();
+  });
+
+  it("reconnects omo before sending into a session it holds a stale copy of", async () => {
+    const context = await opened();
+    context.bridge.loadedThreads = [THREAD_ID];
+    context.bridge.serverTurns = [serverTurn("t1", "first")];
+    context.bridge.history = async () => historyOf([userTurn("t1", "first"), userTurn("t2", "from the terminal")]);
+    context.bridge.emitHistoryChanged(SESSION_PATH);
+    await waitForState(context.store, (next) => next.conversations[THREAD_ID]?.turns.length === 2);
+    context.bridge.calls.length = 0;
+    expect(await context.actions.sendMessage("continue")).toBe(true);
+    expect(context.bridge.restarts).toBe(1);
+    expect(context.bridge.methods()).toEqual(expect.arrayContaining(["thread/loaded/list", "thread/resume", "turn/start"]));
+    expect(context.bridge.methods().indexOf("thread/resume")).toBeLessThan(context.bridge.methods().indexOf("turn/start"));
+    context.disconnect();
+  });
+
+  it("does not reconnect while another turn runs, and says so", async () => {
+    const context = await opened();
+    context.bridge.loadedThreads = [THREAD_ID];
+    context.bridge.serverTurns = [serverTurn("t1", "first")];
+    context.bridge.history = async () => historyOf([userTurn("t1", "first"), userTurn("t2", "from the terminal")]);
+    context.bridge.emitHistoryChanged(SESSION_PATH);
+    await waitForState(context.store, (next) => next.conversations[THREAD_ID]?.turns.length === 2);
+    context.bridge.emitNotification("turn/started", { threadId: "other", turn: { ...runningTurn, id: "other-turn" } });
+    await waitForState(context.store, (next) => next.conversations["other"]?.activeTurnId != null);
+    expect(await context.actions.sendMessage("continue")).toBe(false);
+    expect(context.bridge.restarts).toBe(0);
+    expect(context.bridge.methods()).not.toContain("turn/start");
+    expect(context.store.getState().notices.map((notice) => notice.code)).toContain("sessionReloadBusy");
+    context.disconnect();
   });
 });

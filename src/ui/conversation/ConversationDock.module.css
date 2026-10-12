@@ -192,9 +192,10 @@
 
 .goal {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  height: 36px;
+  min-height: 36px;
   padding: 4px 12px;
   border-radius: var(--dsw-radius-md);
 }
@@ -216,4 +217,34 @@
   font-size: 12px;
   line-height: 18px;
   font-variant-numeric: tabular-nums;
+}
+
+.goalActions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.goalActions button {
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  padding: 2px 6px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.goalActions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.goalError {
+  flex-basis: 100%;
+  color: var(--dsw-alias-label-error);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }

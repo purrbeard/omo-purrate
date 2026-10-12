@@ -184,7 +184,10 @@ test("custom profile models persist, drive previews and turns, and restore Autom
     await byTestId(page, TESTID.composerInput).fill("SCENARIO:echo custom normal profile");
     await byTestId(page, TESTID.composerSend).click();
     await expect(byTestId(page, TESTID.noticeToast)).toContainText("GPT-6 Astra");
+    // The held message adds no turn; wait for the new turn itself so the earlier completed turn cannot satisfy the check.
+    const turnsBefore = await byTestId(page, TESTID.turn).count();
     await send(page, "SCENARIO:echo custom normal profile");
+    await expect(byTestId(page, TESTID.turn)).toHaveCount(turnsBefore + 1);
     await expect(byTestId(page, TESTID.turn).last()).toHaveAttribute("data-status", "completed");
     expect(launched.readFakeLog()).toContainEqual(expect.objectContaining({
       method: "turn/start",

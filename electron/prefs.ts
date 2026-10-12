@@ -86,6 +86,9 @@ function merge(current: Preferences, patch: unknown): Preferences {
     managedThreadIds: Array.isArray(patch["managedThreadIds"])
       ? [...new Set(patch["managedThreadIds"].filter((id): id is string => typeof id === "string" && id !== ""))]
       : current.managedThreadIds,
+    pinnedThreadIds: Array.isArray(patch["pinnedThreadIds"])
+      ? [...new Set(patch["pinnedThreadIds"].filter((id): id is string => typeof id === "string" && id !== ""))]
+      : current.pinnedThreadIds,
     threadParents: isRecord(patch["threadParents"])
       ? Object.fromEntries(Object.entries(patch["threadParents"]).filter(([child, parent]) => typeof parent === "string" && child !== parent)) as Record<string, string>
       : current.threadParents,

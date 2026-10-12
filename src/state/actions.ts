@@ -1,5 +1,5 @@
-import type { AccountUsage, BridgeStatus, OmoBridgeApi } from "../../shared/ipc";
-import type { ApprovalDecision, ProviderAccount, ReasoningEffort, RequestId, RpcNotification, ThreadSessionResult } from "../../shared/protocol";
+import type { AccountUsage, BridgeStatus, HistoryResult, OmoBridgeApi } from "../../shared/ipc";
+import type { ApprovalDecision, ProviderAccount, ReasoningEffort, RequestId, RpcNotification, Thread, ThreadSessionResult } from "../../shared/protocol";
 import { messageInput, type ImageInput } from "../ui/composer/attachments";
 import { normalizeModel, resolveEffort } from "../ui/composer/model-groups";
 import { resendOf, storedText } from "../ui/conversation/resend";
@@ -8,12 +8,26 @@ import type { AppStore } from "./store";
 import type { AppState, NoticeCode, SessionModel, SideChat } from "./types";
 import { parseStoredSides, selectSidesOf, sideDraftKey, sideName } from "./btw";
 import { isModel, isSkill, isSkillError, isThread, parseNotification } from "./wire";
-import { resolveComposerModel, selectSkillCatalog } from "./selectors";
+import { resolveComposerModel, selectIsTurnActive, selectSkillCatalog } from "./selectors";
 import { object, parseGoal } from "./live-wire";
 
 import { normalizeMcpPage, type McpServer } from "./mcp";
 
 const THREAD_PAGE_SIZE = 50;
+const EFFORTS: ReadonlySet<string> = new Set<ReasoningEffort>(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
+
+/** omo records thinking levels; "off" is the effort the protocol calls "none". */
+function effortOf(level: string | null): ReasoningEffort | null {
+  if (level === "off") return "none";
+  return level !== null && EFFORTS.has(level) ? level as ReasoningEffort : null;
+}
+
+function historySignature(history: HistoryResult): string {
+  const last = history.turns.at(-1);
+  return JSON.stringify([history.turns.length, last?.id ?? null, last?.items.length ?? 0, last?.status ?? null]);
+}
+
+
 const RECENT_WORKSPACE_LIMIT = 10;
 
 export interface ActionOptions {
@@ -72,7 +86,7 @@ export interface AccountsSnapshot {
   usageError: string | null;
 }
 
-/** Async operations over the bridge. Every promise resolves; bridge failures become error notices. */
+/** Async operations over the bridge; controls with inline errors receive rejected mutation promises. */
 export interface AppActions {
   loadAccounts(): Promise<AccountsSnapshot>;
   /** `name: null` clears the provider's pin. */
@@ -107,6 +121,13 @@ export interface AppActions {
   switchBranch(threadId: string, entryId: string, expectedLeafId: string | null): Promise<boolean>;
   renameThread(threadId: string, name: string): Promise<void>;
   deleteThread(threadId: string): Promise<void>;
+  archiveThread(threadId: string): Promise<void>;
+  unarchiveThread(threadId: string): Promise<void>;
+  listArchivedThreads(): Promise<Thread[]>;
+  forkThread(threadId: string): Promise<string>;
+  pinThread(threadId: string, pinned: boolean): Promise<void>;
+  setGoalStatus(threadId: string, status: "active" | "paused" | "complete"): Promise<void>;
+  clearGoal(threadId: string): Promise<void>;
   answerApproval(id: RequestId, decision: ApprovalDecision, reason?: string): Promise<void>;
   answerUserInput(id: RequestId, answers: Record<string, string[]>, comment?: string): Promise<void>;
   selectModel(modelId: string | null, effort: ReasoningEffort | null, profile?: import("../../shared/ipc").ModelProfile): Promise<void>;
@@ -230,6 +251,96 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     }
   };
 
+  // Another omo process (a terminal session) can append to a session this app has open. The omo this app runs keeps
+  // its own copy of a loaded thread and never rereads the file, so a change it did not write is one made elsewhere.
+  const historySignatures = new Map<string, string>();
+  const fileModels = new Map<string, string | null>();
+  const changedElsewhere = new Set<string>();
+  const deferredSyncs = new Set<string>();
+  // Threads this app's omo wrote to since their file was last read: its turns, wakes and settings. The next reread
+  // takes their changes as its own; omo's turn count is not comparable with the file's, so it cannot tell them apart.
+  const ownWrites = new Set<string>();
+  // Sessions this app created whose file has not been read yet: the first read is taken as the baseline, not a change.
+  const adoptBaseline = new Set<string>();
+  const rememberHistory = (threadId: string, history: HistoryResult): void => {
+    historySignatures.set(threadId, historySignature(history));
+    fileModels.set(threadId, history.model === undefined ? null : JSON.stringify(history.model));
+  };
+  const replaceHistory = (threadId: string, history: HistoryResult): void => {
+    rememberHistory(threadId, history);
+    store.dispatch({ type: "history/replaced", threadId, ...history });
+  };
+  /** Shows the model the session file names when it differs from the one shown; false when nothing changed. */
+  const applyFileModel = (threadId: string, model: NonNullable<HistoryResult["model"]>, session: SessionModel | undefined): boolean => {
+    const id = `${model.provider}/${model.modelId}`;
+    const entry = store.getState().models.find((candidate) => candidate.id === id);
+    const name = entry?.model ?? model.modelId;
+    const effort = effortOf(model.thinkingLevel);
+    if (session?.modelProvider === model.provider && session.model === name && (effort === null || session.reasoningEffort === effort)) return false;
+    store.dispatch({ type: "thread/sessionUpdated", threadId, session: { modelProvider: model.provider, model: name, reasoningEffort: effort } });
+    if (store.getState().activeThreadId === threadId && entry !== undefined) {
+      store.dispatch({ type: "composer/modelSelected", modelId: id, effort, profile: store.getState().composer.profile ?? null });
+    }
+    return true;
+  };
+  // Rereading a long session takes a while and another process may keep writing meanwhile, so one read runs at a time
+  // and changes that arrive during it trigger exactly one more read; superseding reads would never finish under load.
+  const syncing = new Set<string>();
+  const syncAgain = new Set<string>();
+  const syncExternal = async (threadId: string): Promise<void> => {
+    if (syncing.has(threadId)) {
+      syncAgain.add(threadId);
+      return;
+    }
+    syncing.add(threadId);
+    try {
+      await syncOnce(threadId);
+    } finally {
+      syncing.delete(threadId);
+    }
+    if (syncAgain.delete(threadId)) await syncExternal(threadId);
+  };
+  const syncOnce = async (threadId: string): Promise<void> => {
+    const state = store.getState();
+    const path = state.threads[threadId]?.path;
+    if (path == null || !(historySignatures.has(threadId) || adoptBaseline.has(threadId)) || state.conversations[threadId]?.historyState !== "loaded") return;
+    // A running turn writes the file itself; its changes are read once it settles.
+    if (selectIsTurnActive(state, threadId)) {
+      deferredSyncs.add(threadId);
+      return;
+    }
+    try {
+      const history = await bridge.loadHistory(path);
+      if (selectIsTurnActive(store.getState(), threadId)) {
+        deferredSyncs.add(threadId);
+        return;
+      }
+      if (adoptBaseline.delete(threadId)) {
+        ownWrites.delete(threadId);
+        rememberHistory(threadId, history);
+        return;
+      }
+      const turnsChanged = !ownWrites.delete(threadId) && historySignature(history) !== historySignatures.get(threadId);
+      const modelChanged = history.model !== undefined && JSON.stringify(history.model) !== fileModels.get(threadId);
+      const session = store.getState().conversations[threadId]?.session;
+      rememberHistory(threadId, history);
+      const firstChange = !changedElsewhere.has(threadId);
+      if (turnsChanged) {
+        store.dispatch({ type: "history/replaced", threadId, ...history });
+        if (session !== undefined) store.dispatch({ type: "thread/sessionUpdated", threadId, session });
+        changedElsewhere.add(threadId);
+        void readGoal(threadId);
+      }
+      const modelApplied = modelChanged && history.model !== undefined && applyFileModel(threadId, history.model, session);
+      // One notice per run of outside changes; a terminal session writing steadily would otherwise toast every entry.
+      if ((turnsChanged && firstChange) || modelApplied) {
+        notify("info", "Updated with what another omo process saved to this session.", threadId, "sessionChangedElsewhere");
+      }
+    } catch (error) {
+      console.warn("Could not reread a session changed on disk", error);
+    }
+  };
+
   const loadMcpServers = async (): Promise<void> => {
     const request = ++mcpRead;
     const threadId = store.getState().activeThreadId;
@@ -264,6 +375,18 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       store.dispatch({ type: "models/loaded", models: result.data.filter(isModel).map(normalizeModel) });
     });
 
+  const listArchivedThreads = async (): Promise<Thread[]> => {
+    const threads: Thread[] = [];
+    let cursor: string | null = null;
+    do {
+      const result: { data: Thread[]; nextCursor: string | null } = await bridge.request("thread/list", { archived: true, limit: THREAD_PAGE_SIZE, ...(cursor === null ? {} : { cursor }) });
+      if (!Array.isArray(result.data)) throw new Error("omo returned a malformed thread/list result");
+      threads.push(...result.data.filter(isThread));
+      cursor = result.nextCursor;
+    } while (cursor !== null);
+    return threads;
+  };
+
   const refreshThreads = (append = false): Promise<void> =>
     guarded(async () => {
       const cursor = store.getState().threadsCursor;
@@ -276,8 +399,11 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       const nextCursor = typeof result.nextCursor === "string" ? result.nextCursor : null;
       store.dispatch({ type: "threads/listed", threads: result.data.filter(isThread), nextCursor, append });
       const preferences = await bridge.getPreferences();
-      if (!append) for (const threadId of preferences.managedThreadIds) {
-        if (store.getState().threads[threadId] !== undefined) continue;
+      const restoreIds = new Set([...preferences.managedThreadIds, ...preferences.pinnedThreadIds, ...Object.keys(preferences.threadParents), ...Object.values(preferences.threadParents)]);
+      const missing = [...restoreIds].filter(id => store.getState().threads[id] === undefined);
+      const archived = !append && missing.length > 0 ? new Set((await listArchivedThreads()).map(thread => thread.id)) : new Set<string>();
+      if (!append) for (const threadId of restoreIds) {
+        if (store.getState().threads[threadId] !== undefined || archived.has(threadId)) continue;
         const { thread } = await bridge.request("thread/read", { threadId, includeTurns: false });
         store.dispatch({ type: "threads/listed", threads: [thread], nextCursor, append: true });
       }
@@ -361,6 +487,34 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
 
   const ensureResumed = async (threadId: string): Promise<void> => {
     if (store.getState().conversations[threadId]?.resumed === true) return;
+    await resumeThread(threadId);
+  };
+
+  /**
+   * Before sending into a session another omo process changed, this app's omo must drop its stale copy; otherwise the
+   * turn continues from the old branch. omo has no way to unload one thread, so it is restarted while nothing runs.
+   */
+  const reloadChangedSession = async (threadId: string): Promise<boolean> => {
+    try {
+      const loaded = (await bridge.request("thread/loaded/list", {})).data;
+      if (loaded.includes(threadId)) {
+        const state = store.getState();
+        if (Object.keys(state.conversations).some((id) => selectIsTurnActive(state, id))) {
+          notify("error", "Another omo process changed this session. Send again once the turns running here finish.", threadId, "sessionReloadBusy");
+          return false;
+        }
+        await bridge.restart();
+      }
+      changedElsewhere.delete(threadId);
+      await resumeThread(threadId);
+      return true;
+    } catch (error) {
+      fail(error, threadId);
+      return false;
+    }
+  };
+
+  const resumeThread = async (threadId: string): Promise<void> => {
     const resumed = await bridge.request("thread/resume", { threadId });
     if (!isThread(resumed.thread)) throw new Error("omo returned a malformed thread/resume result");
     store.dispatch({ type: "thread/opened", thread: resumed.thread, resumed: true, session: sessionOf(resumed) });
@@ -413,6 +567,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         store.dispatch({ type: "turn/settled", threadId, status: "completed", settledAtMs: now() });
       }
     }
+    if (changedElsewhere.has(threadId) && !(await reloadChangedSession(threadId))) return false;
     const clientId = newId();
     try {
       await ensureResumed(threadId);
@@ -421,6 +576,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       const { modelId, effort: chosenEffort } = selection ?? store.getState().composer;
       // The same resolution the composer shows, so the level on screen is the level the turn runs with.
       const effort = resolveEffort(store.getState().models.find((model) => model.id === modelId) ?? null, chosenEffort);
+      ownWrites.add(threadId);
       await applyThreadSettings(threadId, modelId, effort);
       await bridge.request("turn/start", {
         threadId,
@@ -543,8 +699,22 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
           if (mcpSectionOpen) void loadMcpServers();
         }
       };
+      let watchedPath: string | null = null;
+      const followActive = (force = false): void => {
+        const state = store.getState();
+        const path = state.activeThreadId === null ? null : state.threads[state.activeThreadId]?.path ?? null;
+        if (path === watchedPath && !force) return;
+        watchedPath = path;
+        bridge.watchHistory(path).catch((error: unknown) => console.warn("Could not watch the session file", error));
+      };
       const unsubscribers = [
         store.subscribe(persistSides),
+        store.subscribe(() => followActive()),
+        bridge.onHistoryChanged((path) => {
+          const { threads } = store.getState();
+          const threadId = Object.keys(threads).find((id) => threads[id]?.path === path);
+          if (threadId !== undefined) void syncExternal(threadId);
+        }),
         bridge.onStatus((status) => {
           statusPushed = true;
           applyStatus(status);
@@ -553,9 +723,15 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
           if (!active) return;
           store.dispatch({ type: "rpc/notification", notification, receivedAtMs: now() });
           const parsed = parseNotification(notification);
+          if (parsed?.method === "thread/unarchived") void refreshThreads();
           if (parsed?.method === "mcpServer/startupStatus/updated" && mcpSectionOpen) void loadMcpServers();
+          if (parsed?.method === "turn/started") ownWrites.add(parsed.params.threadId);
           if (parsed?.method === "turn/completed") {
-            void readGoal(parsed.params.threadId);
+            const completed = parsed.params.threadId;
+            void readGoal(completed);
+            if (deferredSyncs.delete(completed) || adoptBaseline.has(completed)) void syncExternal(completed);
+            // A new thread's file appears with its first turn, so watching it may only start now.
+            if (completed === store.getState().activeThreadId) followActive(true);
             if (parsed.params.turn.items.some((item) => item.type === "dynamicToolCall" && item.tool === "memory")) {
               void refreshAnnotations(parsed.params.threadId);
             }
@@ -591,10 +767,12 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
           if (active) fail(error);
         },
       );
+      followActive();
       return () => {
         active = false;
         connectionRevision += 1;
         for (const unsubscribe of unsubscribers) unsubscribe();
+        bridge.watchHistory(null).catch((error: unknown) => console.warn("Could not stop watching the session file", error));
       };
     },
 
@@ -606,6 +784,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     setMcpSectionOpen(open) { mcpSectionOpen = open; },
     refreshModels,
     refreshThreads,
+    listArchivedThreads,
     loadSkills,
     ensureSkills,
 
@@ -621,11 +800,14 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       try {
         const history = path === null ? { turns: [], todo: null, tasks: [] } : await bridge.loadHistory(path);
         store.dispatch({ type: "history/loaded", threadId, ...history });
+        rememberHistory(threadId, history);
       } catch (error) {
         store.dispatch({ type: "history/failed", threadId, message: errorMessage(error) });
         fail(error, threadId);
         return;
       }
+      // A goal lives in native, not in the session file; after a relaunch nothing else reads it until a turn completes.
+      await readGoal(threadId);
       const live = store.getState().conversations[threadId]?.live;
       if (cwd !== undefined && live !== undefined && live.runOrder.length === 0 && live.runsSource !== "live") {
         await guarded(async () => {
@@ -661,6 +843,46 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       const preferences = await bridge.getPreferences();
       uiState.setPreferences(await bridge.setPreferences({ managedThreadIds: managed ? [...new Set([...preferences.managedThreadIds, threadId])] : preferences.managedThreadIds.filter(id => id !== threadId) }));
     },
+    async pinThread(threadId, pinned) {
+      const preferences = await bridge.getPreferences();
+      uiState.setPreferences(await bridge.setPreferences({ pinnedThreadIds: pinned ? [...new Set([...preferences.pinnedThreadIds, threadId])] : preferences.pinnedThreadIds.filter(id => id !== threadId) }));
+    },
+    async archiveThread(threadId) {
+      await bridge.request("thread/archive", { threadId });
+      store.dispatch({ type: "rpc/notification", notification: { method: "thread/archived", params: { threadId } }, receivedAtMs: now() });
+    },
+    async unarchiveThread(threadId) {
+      await bridge.request("thread/unarchive", { threadId });
+      await refreshThreads();
+    },
+    async forkThread(threadId) {
+      const thread = store.getState().threads[threadId];
+      if (thread === undefined) throw new Error(`Unknown session: ${threadId}`);
+      const result = await bridge.request("thread/fork", { threadId, cwd: thread.cwd });
+      if (!isThread(result.thread)) throw new Error("omo returned a malformed thread/fork result");
+      const preferences = await bridge.getPreferences();
+      uiState.setPreferences(await bridge.setPreferences({ managedThreadIds: [...new Set([...preferences.managedThreadIds, result.thread.id])] }));
+      store.dispatch({ type: "thread/opened", thread: result.thread, resumed: true, session: sessionOf(result) });
+      store.dispatch({ type: "thread/activated", threadId: result.thread.id });
+      if (result.thread.path !== null) {
+        const history = await bridge.loadHistory(result.thread.path);
+        store.dispatch({ type: "history/loaded", threadId: result.thread.id, ...history });
+        rememberHistory(result.thread.id, history);
+      }
+      await readGoal(result.thread.id);
+      await loadSkills(result.thread.cwd, { force: true });
+      return result.thread.id;
+    },
+    async setGoalStatus(threadId, status) {
+      const result = await bridge.request("thread/goal/set", { threadId, status });
+      const goal = parseGoal(result.goal);
+      if (goal === null || goal.threadId !== threadId) throw new Error("omo returned a malformed thread/goal/set result");
+      store.dispatch({ type: "rpc/notification", notification: { method: "thread/goal/updated", params: { threadId, turnId: null, goal } }, receivedAtMs: now() });
+    },
+    async clearGoal(threadId) {
+      await bridge.request("thread/goal/clear", { threadId });
+      store.dispatch({ type: "rpc/notification", notification: { method: "thread/goal/cleared", params: { threadId } }, receivedAtMs: now() });
+    },
     async newThread(cwd, parentId) {
       const { modelId } = store.getState().composer;
       try {
@@ -676,6 +898,9 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         store.dispatch({ type: "thread/opened", thread: result.thread, resumed: true, session: sessionOf(result) });
         store.dispatch({ type: "thread/activated", threadId });
         store.dispatch({ type: "history/loaded", threadId, turns: [] });
+        // Its file appears with the first turn this app runs; that file becomes the baseline outside changes are
+        // measured against, so a terminal turn appended later is read like one in a session opened from disk.
+        adoptBaseline.add(threadId);
         await readGoal(threadId);
         await loadSkills(result.thread.cwd, { force: true });
         await rememberWorkspace(cwd);
@@ -715,7 +940,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         if (result.outcome === "cancelled") return false;
         const path = store.getState().threads[threadId]?.path;
         if (!path) return false;
-        store.dispatch({ type: "history/replaced", threadId, ...(await bridge.loadHistory(path)) });
+        replaceHistory(threadId, await bridge.loadHistory(path));
         return true;
       } catch (error) {
         fail(error, threadId);
@@ -759,7 +984,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         const occurrence = stored.slice(0, stored.indexOf(target)).filter((item) => storedText(item.content) === raw).length;
         const moved = await bridge.sessionTree(threadId, { type: "retry", point: { text: raw, occurrence } });
         if (moved.outcome === "cancelled") return false;
-        store.dispatch({ type: "history/replaced", threadId, ...(await bridge.loadHistory(path)) });
+        replaceHistory(threadId, await bridge.loadHistory(path));
       } catch (error) {
         fail(error, threadId);
         return false;

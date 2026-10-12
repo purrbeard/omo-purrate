@@ -1,5 +1,8 @@
 export const messages = {
   en: {
+    "goal.pause": "Pause",
+    "goal.resume": "Resume",
+    "goal.clear": "Clear",
     "conversation.region": "Conversation",
     "conversation.header.newSession": "New thread",
     "conversation.header.breadcrumb": "Current thread",
@@ -173,6 +176,9 @@ export const messages = {
     "conversation.question.incomplete": "Answer every question to submit.",
   },
   ko: {
+    "goal.pause": "일시 정지",
+    "goal.resume": "재개",
+    "goal.clear": "지우기",
     "conversation.region": "대화",
     "conversation.header.newSession": "새 스레드",
     "conversation.header.breadcrumb": "현재 스레드",
