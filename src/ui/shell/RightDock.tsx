@@ -29,6 +29,9 @@ export function RightDock({ tab, placement, children }: { tab: RightTab; placeme
   const tabs = useRef<Partial<Record<RightTab, HTMLButtonElement | null>>>({});
   const { tabOrder, dockSide } = useUiState();
   const [dragged, setDragged] = useState<RightTab | null>(null);
+  // dragover can fire before React re-renders after dragstart, so the handlers read the dragged tab from a ref.
+  const draggedRef = useRef<RightTab | null>(null);
+  const endDrag = (): void => { draggedRef.current = null; setDragged(null); setDropTarget(null); };
   const [dropTarget, setDropTarget] = useState<RightTab | null>(null);
   const select = (next: RightTab): void => {
     if (next === "btw") actions.setSidePanel(true);
@@ -58,11 +61,11 @@ export function RightDock({ tab, placement, children }: { tab: RightTab; placeme
             <button key={id} ref={(node) => { tabs.current[id] = node; }} type="button" role="tab" className={css.tab} title={t(LABELS[id])}
               data-testid={`right-tab-${id}`} aria-selected={id === tab} tabIndex={id === tab ? 0 : -1} onClick={() => select(id)}
               draggable data-dragging={dragged === id || undefined} data-drop-target={dropTarget === id && dragged !== id || undefined}
-              onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", id); setDragged(id); }}
-              onDragOver={(event) => { if (dragged === null) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropTarget(id); }}
+              onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", id); draggedRef.current = id; setDragged(id); }}
+              onDragOver={(event) => { if (draggedRef.current === null) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropTarget(id); }}
               onDragLeave={() => setDropTarget((current) => (current === id ? null : current))}
-              onDrop={(event) => { event.preventDefault(); if (dragged !== null) uiState.moveTab(dragged, id); setDragged(null); setDropTarget(null); }}
-              onDragEnd={() => { setDragged(null); setDropTarget(null); }}>
+              onDrop={(event) => { event.preventDefault(); const source = draggedRef.current; if (source !== null) uiState.moveTab(source, id); endDrag(); }}
+              onDragEnd={endDrag}>
               <Icon size={14} className={css.tabIcon} />
               <span className={css.tabLabel}>{t(LABELS[id])}</span>
             </button>
