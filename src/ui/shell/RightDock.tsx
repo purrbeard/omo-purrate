@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ComponentType, KeyboardEvent, ReactNode } from "react";
+import { IconPanelLeftOutlineRegular, IconAgentPresetOutlineRegular, IconBranchOutlineRegular, IconCodeOutlineRegular, IconFolderOpenOutlineRegular, IconNewChatOutlineRegular } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useT } from "../../i18n";
 import { useActions } from "../app-context";
-import { RIGHT_TABS, uiState } from "../ui-state";
+import { uiState, useUiState } from "../ui-state";
 import type { RightTab } from "../ui-state";
 import css from "./RightDock.module.css";
 
@@ -14,19 +15,30 @@ const LABELS = {
   files: "shell.workspace.files",
 } as const;
 
+const ICONS: Record<RightTab, ComponentType<{ size?: number; className?: string }>> = {
+  agents: IconAgentPresetOutlineRegular,
+  btw: IconNewChatOutlineRegular,
+  terminal: IconCodeOutlineRegular,
+  workflow: IconBranchOutlineRegular,
+  files: IconFolderOpenOutlineRegular,
+};
+
 export function RightDock({ tab, placement, children }: { tab: RightTab; placement: "docked" | "overlay"; children: ReactNode }) {
   const t = useT();
   const actions = useActions();
   const tabs = useRef<Partial<Record<RightTab, HTMLButtonElement | null>>>({});
+  const { tabOrder, dockSide } = useUiState();
+  const [dragged, setDragged] = useState<RightTab | null>(null);
+  const [dropTarget, setDropTarget] = useState<RightTab | null>(null);
   const select = (next: RightTab): void => {
     if (next === "btw") actions.setSidePanel(true);
     else uiState.setRightTab(next);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    const index = RIGHT_TABS.indexOf(tab);
+    const index = tabOrder.indexOf(tab);
     const delta = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-    const target = delta !== 0 ? RIGHT_TABS[(index + delta + RIGHT_TABS.length) % RIGHT_TABS.length]
-      : event.key === "Home" ? RIGHT_TABS[0] : event.key === "End" ? RIGHT_TABS.at(-1) : undefined;
+    const target = delta !== 0 ? tabOrder[(index + delta + tabOrder.length) % tabOrder.length]
+      : event.key === "Home" ? tabOrder[0] : event.key === "End" ? tabOrder.at(-1) : undefined;
     if (target === undefined) return;
     event.preventDefault();
     select(target);
@@ -40,13 +52,28 @@ export function RightDock({ tab, placement, children }: { tab: RightTab; placeme
     <div className={css.dock} data-testid="right-dock" data-placement={placement} data-tab={tab}>
       <div className={css.bar}>
       <div className={css.strip} role="tablist" aria-label={t("shell.dock.tabs")} onKeyDown={onKeyDown}>
-        {RIGHT_TABS.map((id) => (
-          <button key={id} ref={(node) => { tabs.current[id] = node; }} type="button" role="tab" className={css.tab}
-            data-testid={`right-tab-${id}`} aria-selected={id === tab} tabIndex={id === tab ? 0 : -1} onClick={() => select(id)}>
-            {t(LABELS[id])}
-          </button>
-        ))}
+        {tabOrder.map((id) => {
+          const Icon = ICONS[id];
+          return (
+            <button key={id} ref={(node) => { tabs.current[id] = node; }} type="button" role="tab" className={css.tab} title={t(LABELS[id])}
+              data-testid={`right-tab-${id}`} aria-selected={id === tab} tabIndex={id === tab ? 0 : -1} onClick={() => select(id)}
+              draggable data-dragging={dragged === id || undefined} data-drop-target={dropTarget === id && dragged !== id || undefined}
+              onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", id); setDragged(id); }}
+              onDragOver={(event) => { if (dragged === null) return; event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropTarget(id); }}
+              onDragLeave={() => setDropTarget((current) => (current === id ? null : current))}
+              onDrop={(event) => { event.preventDefault(); if (dragged !== null) uiState.moveTab(dragged, id); setDragged(null); setDropTarget(null); }}
+              onDragEnd={() => { setDragged(null); setDropTarget(null); }}>
+              <Icon size={14} className={css.tabIcon} />
+              <span className={css.tabLabel}>{t(LABELS[id])}</span>
+            </button>
+          );
+        })}
       </div>
+      <button type="button" className={css.close} data-testid="right-dock-side" data-side={dockSide}
+        aria-label={t(dockSide === "right" ? "shell.dock.moveLeft" : "shell.dock.moveRight")} title={t(dockSide === "right" ? "shell.dock.moveLeft" : "shell.dock.moveRight")}
+        onClick={() => uiState.setDockSide(dockSide === "right" ? "left" : "right")}>
+        <IconPanelLeftOutlineRegular size={14} className={dockSide === "left" ? css.mirrored : undefined} />
+      </button>
       <button type="button" className={css.close} data-testid="right-dock-close" aria-label={t("shell.dock.close")} onClick={close}>×</button>
       </div>
       <div className={css.body}>{children}</div>

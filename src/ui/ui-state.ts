@@ -9,7 +9,38 @@ export const WORKFLOW_PANEL_WIDTHS = { normal: 580, wide: 720, maximized: 840 } 
 export type WorkflowPanelSize = keyof typeof WORKFLOW_PANEL_WIDTHS;
 export type RightTab = "agents" | "btw" | "terminal" | "workflow" | "files";
 export const RIGHT_TABS: readonly RightTab[] = ["agents", "btw", "terminal", "workflow", "files"];
-export type SettingsSection = "general" | "appearance" | "keybindings" | "model" | "skills" | "omo" | "accounts" | "mcp" | "android" | "iphone" | "devices" | "about";
+export type DockSide = "left" | "right";
+const DOCK_LAYOUT_KEY = "omo-ui.dock-layout.v1";
+
+/** @returns the stored tab order (every tab exactly once) and panel side, falling back to the defaults */
+export function parseDockLayout(raw: string | null): { tabOrder: RightTab[]; dockSide: DockSide } {
+  const fallback = { tabOrder: [...RIGHT_TABS], dockSide: "right" as DockSide };
+  if (raw === null) return fallback;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (typeof value !== "object" || value === null) return fallback;
+    const { tabOrder, dockSide } = value as { tabOrder?: unknown; dockSide?: unknown };
+    const order = Array.isArray(tabOrder) && tabOrder.length === RIGHT_TABS.length && RIGHT_TABS.every((tab) => tabOrder.includes(tab))
+      ? tabOrder as RightTab[] : fallback.tabOrder;
+    return { tabOrder: order, dockSide: dockSide === "left" ? "left" : "right" };
+  } catch { return fallback; }
+}
+
+/** @returns the order with `tab` moved to the position of `target` */
+export function moveTab(order: readonly RightTab[], tab: RightTab, target: RightTab): RightTab[] {
+  if (tab === target) return [...order];
+  const rest = order.filter((entry) => entry !== tab);
+  const index = rest.indexOf(target) + (order.indexOf(tab) < order.indexOf(target) ? 1 : 0);
+  return [...rest.slice(0, index), tab, ...rest.slice(index)];
+}
+
+const storedLayout = (): { tabOrder: RightTab[]; dockSide: DockSide } => {
+  try { return parseDockLayout(window.localStorage.getItem(DOCK_LAYOUT_KEY)); } catch { return parseDockLayout(null); }
+};
+const saveLayout = (): void => {
+  try { window.localStorage.setItem(DOCK_LAYOUT_KEY, JSON.stringify({ tabOrder: state.tabOrder, dockSide: state.dockSide })); } catch { /* storage unavailable */ }
+};
+export type SettingsSection = "general" | "appearance" | "keybindings" | "model" | "skills" | "omo" | "accounts" | "mcp" | "android" | "iphone" | "devices" | "archived" | "about";
 
 export interface UiState {
   rightTab: RightTab | null;
@@ -27,6 +58,12 @@ export interface UiState {
   onboardingOpen: boolean;
   sidebarVisible: boolean;
   sidebarWidth: number;
+  /** Docked right panel widths the user dragged, per tab; a missing tab uses its default width. */
+  rightWidths: Partial<Record<RightTab, number>>;
+  /** User-arranged order of the side panel tabs. */
+  tabOrder: RightTab[];
+  /** Which side of the conversation the side panel docks on. */
+  dockSide: DockSide;
   /** Last preferences read from or written through the bridge; null until the first load. */
   preferences: Preferences | null;
 }
@@ -44,6 +81,8 @@ let state: UiState = {
   onboardingOpen: false,
   sidebarVisible: true,
   sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
+  rightWidths: {},
+  ...storedLayout(),
   preferences: null,
 };
 const listeners = new Set<() => void>();
@@ -87,6 +126,9 @@ export const uiState = {
   setSidebarVisible: (sidebarVisible: boolean): void => update({ sidebarVisible }),
   toggleSidebar: (): void => update({ sidebarVisible: !state.sidebarVisible }),
   setSidebarWidth: (width: number): void => update({ sidebarWidth: clampSidebarWidth(width) }),
+  setRightWidth: (tab: RightTab, width: number): void => update({ rightWidths: { ...state.rightWidths, [tab]: Math.round(width) } }),
+  moveTab: (tab: RightTab, target: RightTab): void => { update({ tabOrder: moveTab(state.tabOrder, tab, target) }); saveLayout(); },
+  setDockSide: (dockSide: DockSide): void => { update({ dockSide }); saveLayout(); },
   /** Records preferences loaded from the bridge or returned by `setPreferences`; App.tsx re-applies theme and locale from it. */
   setPreferences: (preferences: Preferences): void => update({ preferences }),
 };

@@ -62,6 +62,23 @@
   animation: overlayIn var(--ds-transition-duration) var(--ds-ease-in-out);
 }
 
+.rightCol[data-side="left"] {
+  padding: 8px 0 8px 8px;
+}
+
+.rightOverlay[data-side="left"] {
+  right: auto;
+  left: 8px;
+  animation-name: overlayInLeft;
+}
+
+@keyframes overlayInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+
 @keyframes overlayIn {
   from {
     opacity: 0;
@@ -177,6 +194,11 @@
   z-index: 11;
   touch-action: none;
   -webkit-app-region: no-drag;
+}
+
+.handle:hover,
+.handle[data-dragging] {
+  background: linear-gradient(to right, transparent 3px, var(--dsw-alias-border-l2) 3px, var(--dsw-alias-border-l2) 5px, transparent 5px);
 }
 
 .frame[data-animating] .handle {
