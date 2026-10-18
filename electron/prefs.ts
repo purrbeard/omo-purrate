@@ -1,6 +1,8 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_PREFERENCES } from "../shared/ipc";
+import { THREAD_STATE_KEYS, ThreadDb } from "./store/thread-db";
+import type { ImportRecord, ThreadState } from "./store/thread-db";
 import type { LocalePreference, ModelProfile, PalettePreference, Preferences, ThemePreference, ThreadCreatorEvidence, ThreadNotificationPreference, ThreadOrigin, TimeFormatPreference } from "../shared/ipc";
 
 export { DEFAULT_PREFERENCES };
@@ -127,13 +129,56 @@ function merge(current: Preferences, patch: unknown): Preferences {
   };
 }
 
-/** Preferences persisted as <dir>/preferences.json; every write goes through a temp file and rename. */
+function threadState(preferences: Preferences): ThreadState {
+  return {
+    managedThreadIds: preferences.managedThreadIds, pinnedThreadIds: preferences.pinnedThreadIds, threadParents: preferences.threadParents,
+    threadOrigins: preferences.threadOrigins ?? {}, threadCreators: preferences.threadCreators ?? {},
+    settledThreads: preferences.settledThreads, unsettledThreads: preferences.unsettledThreads,
+  };
+}
+
+function withoutThreadState(preferences: Preferences): Record<string, unknown> {
+  const rest: Record<string, unknown> = { ...preferences };
+  for (const key of THREAD_STATE_KEYS) delete rest[key];
+  return rest;
+}
+
+function parse(text: string): Record<string, unknown> | null {
+  try {
+    const value: unknown = JSON.parse(text);
+    return isRecord(value) ? value : null;
+  } catch (error) {
+    void error;
+    return null;
+  }
+}
+
+function readText(file: string): string | null {
+  try {
+    return readFileSync(file, "utf8");
+  } catch (error) {
+    // ENOENT on first launch; any other read failure also starts from defaults.
+    void error;
+    return null;
+  }
+}
+
+/**
+ * Preferences in <dir>/preferences.json and the thread state (managed, pinned, related, origins, creators, settled) in
+ * <dir>/omo-ui.sqlite. The first open copies thread state out of preferences.json, after saving the original as
+ * preferences.json.pre-sqlite.bak; a database that cannot be read is set aside and rebuilt from that backup.
+ */
 export class PreferencesStore {
   private readonly file: string;
+  private readonly backup: string;
+  private readonly dbFile: string;
   private cache: Preferences | null = null;
+  private recovered: string | null = null;
 
   constructor(private readonly dir: string) {
     this.file = path.join(dir, "preferences.json");
+    this.backup = `${this.file}.pre-sqlite.bak`;
+    this.dbFile = path.join(dir, "omo-ui.sqlite");
   }
 
   get(): Preferences {
@@ -144,29 +189,60 @@ export class PreferencesStore {
   /** Validates patch (which crosses the IPC boundary untyped), persists, and returns the stored preferences. */
   set(patch: unknown): Preferences {
     const next = merge(this.get(), patch);
-    mkdirSync(this.dir, { recursive: true });
-    const temp = `${this.file}.${process.pid}.tmp`;
-    writeFileSync(temp, `${JSON.stringify(next, null, 2)}\n`, "utf8");
-    renameSync(temp, this.file);
+    this.withDb(db => db.write(threadState(next)));
+    this.writeJson(withoutThreadState(next));
     this.cache = next;
     return next;
   }
 
+  recordImports(records: readonly ImportRecord[]): void {
+    if (records.length > 0) this.withDb(db => db.recordImports(records));
+  }
+
+  imports(): ImportRecord[] {
+    return this.withDb(db => db.imports());
+  }
+
+  /** Set when this process found an unreadable database and moved it to this path. */
+  get recoveredDatabase(): string | null {
+    return this.recovered;
+  }
+
+  /** Each use opens and closes the database, so no handle keeps the file locked between writes. */
+  private withDb<T>(work: (db: ThreadDb) => T): T {
+    mkdirSync(this.dir, { recursive: true });
+    const db = ThreadDb.open(this.dbFile);
+    if (db.recoveredFrom !== null) this.recovered = db.recoveredFrom;
+    try {
+      return work(db);
+    } finally {
+      db.close();
+    }
+  }
+
+  private writeJson(value: Record<string, unknown>): void {
+    mkdirSync(this.dir, { recursive: true });
+    const temp = `${this.file}.${process.pid}.tmp`;
+    writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    renameSync(temp, this.file);
+  }
+
   private load(): Preferences {
-    let text: string;
-    try {
-      text = readFileSync(this.file, "utf8");
-    } catch (error) {
-      // ENOENT on first launch; any other read failure also starts from defaults.
-      void error;
-      return { ...DEFAULT_PREFERENCES, recentWorkspaces: [] };
-    }
-    try {
-      return merge(DEFAULT_PREFERENCES, JSON.parse(text));
-    } catch (error) {
-      // A corrupt preferences file is replaced on the next set().
-      void error;
-      return { ...DEFAULT_PREFERENCES, recentWorkspaces: [] };
-    }
+    const text = readText(this.file);
+    const raw = text === null ? null : parse(text);
+    // A corrupt preferences file is replaced on the next set().
+    const preferences = raw === null ? { ...DEFAULT_PREFERENCES, recentWorkspaces: [] } : merge(DEFAULT_PREFERENCES, raw);
+    return this.withDb(db => {
+      if (!db.migrated) {
+        const holdsThreads = raw !== null && THREAD_STATE_KEYS.some(key => key in raw);
+        if (holdsThreads && !existsSync(this.backup)) copyFileSync(this.file, this.backup);
+        const backupText = holdsThreads ? null : readText(this.backup);
+        const backup = backupText === null ? null : parse(backupText);
+        const source = holdsThreads || backup === null ? preferences : merge(DEFAULT_PREFERENCES, backup);
+        db.write(threadState(source), { migrated: true });
+        if (holdsThreads) this.writeJson(withoutThreadState(preferences));
+      }
+      return { ...preferences, ...db.read() };
+    });
   }
 }

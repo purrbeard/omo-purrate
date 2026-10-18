@@ -315,7 +315,12 @@ export function registerIpc(deps: IpcDeps): () => void {
       }
       const wanted = new Set(sessionPaths as string[]);
       const places = { homeDir, tmpDir: app.getPath("temp") };
-      const imported = (await catalogIndex().list()).filter(record => wanted.has(record.sessionPath) && toCandidate(record, places).importable).map(record => record.id);
+      const chosen = (await catalogIndex().list()).map(record => toCandidate(record, places)).filter(candidate => wanted.has(candidate.sessionPath) && candidate.importable);
+      const importedAtMs = Date.now();
+      prefs.recordImports(chosen.map(candidate => ({
+        threadId: candidate.id, sessionPath: candidate.sessionPath, sizeBytes: candidate.sizeBytes, mtimeMs: candidate.updatedAtMs, evidence: candidate.evidence, importedAtMs,
+      })));
+      const imported = chosen.map(candidate => candidate.id);
       const current = prefs.get();
       prefs.set({ managedThreadIds: [...new Set([...current.managedThreadIds, ...imported])], sessionImportCompleted: true });
       return { imported };

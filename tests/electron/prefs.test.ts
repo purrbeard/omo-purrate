@@ -211,9 +211,53 @@ describe("PreferencesStore", () => {
     expect(store.set({ unsettledThreads: ["u", "u"] }).unsettledThreads).toEqual(["u"]);
   });
 
+  it("moves thread state out of preferences.json into the database once, keeping the original as a backup", async () => {
+    const legacy = {
+      theme: "dark", managedThreadIds: ["b", "a"], pinnedThreadIds: ["a"], threadParents: { child: "a" },
+      threadOrigins: { b: "dori" }, threadCreators: { a: { origin: "user", source: "ui-new-session" } }, settledThreads: ["s"], unsettledThreads: ["u"],
+    };
+    const text = JSON.stringify(legacy);
+    await writeFile(path.join(dir, "preferences.json"), text);
+    const loaded = new PreferencesStore(dir).get();
+    expect(loaded).toMatchObject(legacy);
+    expect(await readFile(path.join(dir, "preferences.json.pre-sqlite.bak"), "utf8")).toBe(text);
+    const json = JSON.parse(await readFile(path.join(dir, "preferences.json"), "utf8")) as Record<string, unknown>;
+    expect(json["theme"]).toBe("dark");
+    for (const key of ["managedThreadIds", "pinnedThreadIds", "threadParents", "threadOrigins", "threadCreators", "settledThreads", "unsettledThreads"]) expect(json).not.toHaveProperty(key);
+    const reopened = new PreferencesStore(dir);
+    expect(reopened.get()).toEqual(loaded);
+    reopened.set({ managedThreadIds: ["c", "b", "a"] });
+    expect(new PreferencesStore(dir).get().managedThreadIds).toEqual(["c", "b", "a"]);
+    expect(await readFile(path.join(dir, "preferences.json.pre-sqlite.bak"), "utf8")).toBe(text);
+  });
+
+  it("does not re-import stale thread fields once migrated", async () => {
+    new PreferencesStore(dir).set({ managedThreadIds: ["kept"] });
+    const json = JSON.parse(await readFile(path.join(dir, "preferences.json"), "utf8")) as Record<string, unknown>;
+    await writeFile(path.join(dir, "preferences.json"), JSON.stringify({ ...json, managedThreadIds: ["stale"] }));
+    expect(new PreferencesStore(dir).get().managedThreadIds).toEqual(["kept"]);
+  });
+
+  it("sets an unreadable database aside and rebuilds thread state from the migration backup", async () => {
+    await writeFile(path.join(dir, "preferences.json"), JSON.stringify({ managedThreadIds: ["m"], pinnedThreadIds: ["m"] }));
+    new PreferencesStore(dir).get();
+    await writeFile(path.join(dir, "omo-ui.sqlite"), "this is not a database");
+    const prefs = new PreferencesStore(dir);
+    expect(prefs.get()).toMatchObject({ managedThreadIds: ["m"], pinnedThreadIds: ["m"] });
+    expect(prefs.recoveredDatabase).toMatch(/omo-ui\.sqlite\.corrupt-\d+$/);
+    expect(await readFile(prefs.recoveredDatabase!, "utf8")).toBe("this is not a database");
+  });
+
+  it("records which sessions the first-run import added", () => {
+    const prefs = new PreferencesStore(dir);
+    const record = { threadId: "t", sessionPath: "/s/t.jsonl", sizeBytes: 12, mtimeMs: 5.5, evidence: "terminal" as const, importedAtMs: 9 };
+    prefs.recordImports([record]);
+    expect(new PreferencesStore(dir).imports()).toEqual([record]);
+  });
+
   it("persists atomically so a new store reads the saved values", async () => {
     new PreferencesStore(dir).set({ theme: "light", locale: "ko", lastWorkspace: "/repo", modelId: null });
-    expect(await readdir(dir)).toEqual(["preferences.json"]);
+    expect((await readdir(dir)).sort()).toEqual(["omo-ui.sqlite", "preferences.json"]);
     expect(JSON.parse(await readFile(path.join(dir, "preferences.json"), "utf8"))).toMatchObject({ theme: "light", locale: "ko" });
     expect(new PreferencesStore(dir).get()).toEqual({
       ...DEFAULT_PREFERENCES,
