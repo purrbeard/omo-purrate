@@ -7,7 +7,7 @@ const common = {
   format: "cjs",
   mainFields: ["module", "main"],
   sourcemap: true,
-  external: ["electron"],
+  external: ["electron", "node-pty"],
   logLevel: "warning",
 };
 
