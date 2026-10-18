@@ -68,6 +68,8 @@ export interface UiState {
   settingsSection: SettingsSection;
   /** First-run wizard visibility; opens on launch until the onboardingCompleted preference is true. */
   onboardingOpen: boolean;
+  /** First-run session import; opens after onboarding until the sessionImportCompleted preference is true. */
+  sessionImportOpen: boolean;
   sidebarVisible: boolean;
   sidebarWidth: number;
   /** Docked right panel widths the user dragged, per tab; a missing tab uses its default width. */
@@ -94,6 +96,7 @@ let state: UiState = {
   settingsOpen: false,
   settingsSection: "general",
   onboardingOpen: false,
+  sessionImportOpen: false,
   sidebarVisible: true,
   sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
   rightWidths: {},
@@ -153,6 +156,7 @@ export const uiState = {
   setSettingsOpen: (settingsOpen: boolean, settingsSection?: SettingsSection): void => update({ settingsOpen, ...(settingsSection === undefined ? {} : { settingsSection }) }),
   setSettingsSection: (settingsSection: SettingsSection): void => update({ settingsSection }),
   setOnboardingOpen: (onboardingOpen: boolean): void => update({ onboardingOpen }),
+  setSessionImportOpen: (sessionImportOpen: boolean): void => update({ sessionImportOpen }),
   setSidebarVisible: (sidebarVisible: boolean): void => update({ sidebarVisible }),
   toggleSidebar: (): void => update({ sidebarVisible: !state.sidebarVisible }),
   setSidebarWidth: (width: number): void => update({ sidebarWidth: clampSidebarWidth(width) }),

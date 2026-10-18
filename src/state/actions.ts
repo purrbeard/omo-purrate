@@ -1,5 +1,6 @@
-import type { AccountUsage, BridgeStatus, HistoryResult, OmoBridgeApi } from "../../shared/ipc";
+import type { AccountUsage, BridgeStatus, HistoryResult, ImportPage, OmoBridgeApi } from "../../shared/ipc";
 import type { ApprovalDecision, ProviderAccount, ReasoningEffort, RequestId, RpcNotification, Thread, ThreadSessionResult } from "../../shared/protocol";
+import { CLIENT_MESSAGE_PREFIX } from "../../shared/session-origin";
 import { messageInput, type ImageInput } from "../ui/composer/attachments";
 import { normalizeModel, resolveEffort } from "../ui/composer/model-groups";
 import { resendOf, storedText } from "../ui/conversation/resend";
@@ -110,6 +111,10 @@ export interface AppActions {
   /** Starts and activates a thread in `cwd`; resolves its id, or null on failure. */
   newThread(cwd: string, parentId?: string): Promise<string | null>;
   manageThread(threadId: string, managed: boolean): Promise<void>;
+  loadImportCandidates(cursor: string | null): Promise<ImportPage>;
+  /** Adds the importable sessions among the paths to the managed list, ends the first-run import, and refreshes the sidebar. */
+  importSessions(sessionPaths: string[]): Promise<string[]>;
+  skipSessionImport(): Promise<void>;
   linkThread(childId: string, parentId: string | null): Promise<void>;
   /** Sends to the active thread: steers the running turn, otherwise resumes the thread if needed and starts a turn; resolves true when omo accepted the message. */
   sendMessage(text: string, images?: readonly ImageInput[]): Promise<boolean>;
@@ -568,7 +573,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       }
     }
     if (changedElsewhere.has(threadId) && !(await reloadChangedSession(threadId))) return false;
-    const clientId = newId();
+    const clientId = `${CLIENT_MESSAGE_PREFIX}${newId()}`;
     try {
       await ensureResumed(threadId);
       if (!confirmModelSwitch(threadId, (selection ?? store.getState().composer).modelId)) return false;
@@ -838,6 +843,18 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       const preferences = await bridge.getPreferences();
       uiState.setPreferences(await bridge.setPreferences({ threadOrigins: { ...preferences.threadOrigins, [threadId]: origin } }));
       await refreshThreads();
+    },
+    loadImportCandidates(cursor) {
+      return bridge.loadImportCandidates(cursor, 200);
+    },
+    async importSessions(sessionPaths) {
+      const { imported } = await bridge.importSessions(sessionPaths);
+      uiState.setPreferences(await bridge.getPreferences());
+      await refreshThreads();
+      return imported;
+    },
+    async skipSessionImport() {
+      uiState.setPreferences(await bridge.setPreferences({ sessionImportCompleted: true }));
     },
     async manageThread(threadId, managed) {
       const preferences = await bridge.getPreferences();

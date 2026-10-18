@@ -21,6 +21,8 @@ import type {
   UserInput,
   WireGoal,
 } from "../../../shared/protocol";
+import { ORIGIN_CONTEXT } from "../../../shared/session-origin";
+import { keysetPage } from "../../history/session-catalog";
 import { parseSessionJsonl } from "../../history/session-jsonl";
 import type { AppServerClientOptions, InitializeResult } from "../app-server-client";
 import type { ExitInfo, StopTimeouts } from "../managed-child";
@@ -433,7 +435,7 @@ export class NativeAppServerClient {
   }
 
   private loadedThread(loaded: Loaded): Thread {
-    const record: SessionRecord = {
+    const record: Omit<SessionRecord, "facts"> = {
       id: loaded.threadId, sessionPath: loaded.sessionPath ?? "", cwd: loaded.cwd, createdAtMs: loaded.createdAtMs,
       updatedAtMs: loaded.createdAtMs, name: null, preview: null, parentSession: null,
     };
@@ -471,17 +473,15 @@ export class NativeAppServerClient {
       if (term !== "" && !`${record.name ?? ""}\n${record.preview ?? ""}`.toLocaleLowerCase().includes(term)) continue;
       matches.push(record);
     }
-    const start = typeof input["cursor"] === "string" && /^\d+$/.test(input["cursor"]) ? Number(input["cursor"]) : 0;
     const limit = typeof input["limit"] === "number" && input["limit"] > 0 ? input["limit"] : DEFAULT_THREAD_LIST_LIMIT;
-    const page = matches.slice(start, start + limit);
-    const next = start + page.length;
-    return { data: page.map((record) => this.index.toThread(record, this.status(record.id))), nextCursor: next < matches.length ? String(next) : null };
+    const { page, nextCursor } = keysetPage(matches, input["cursor"], limit, Date.now());
+    return { data: page.map((record) => this.index.toThread(record, this.status(record.id))), nextCursor };
   }
 
   private async startThread(input: JsonObject): Promise<ThreadSessionResult> {
     const cwd = requiredString(input, "cwd");
     const model = typeof input["model"] === "string" ? splitModel(input["model"]) : null;
-    const loaded = await this.openSession({ cwd, ...(model === null ? {} : model) }, cwd);
+    const loaded = await this.openSession({ cwd, ...(model === null ? {} : model), kind: "interactive", context: ORIGIN_CONTEXT }, cwd);
     const thread = this.loadedThread(loaded);
     this.emit({ method: "thread/started", params: { thread } });
     return this.sessionResult(loaded, thread);

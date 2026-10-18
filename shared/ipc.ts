@@ -97,6 +97,36 @@ export type TimeFormatPreference = "system" | "12h" | "24h";
 
 export type ThreadOrigin = "user" | "agent" | "dori" | "unknown";
 
+/** Creation evidence for a session offered for import: "app" and "terminal" were opened by a person. */
+export type ImportEvidence = "app" | "terminal" | "automation" | "other-client" | "child" | "empty";
+export type ImportLocation = "temp" | "quarantine" | "hidden";
+
+export interface ImportCandidate {
+  id: string;
+  sessionPath: string;
+  cwd: string;
+  name: string | null;
+  preview: string | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+  sizeBytes: number;
+  userMessages: number;
+  evidence: ImportEvidence;
+  defects: string[];
+  /** Set when the session's folder is scratch space (temp, quarantine, a hidden folder in HOME). */
+  location: ImportLocation | null;
+  importable: boolean;
+  /** Selected by default: importable, person-opened, and in an ordinary folder. */
+  recommended: boolean;
+}
+
+export interface ImportPage {
+  items: ImportCandidate[];
+  nextCursor: string | null;
+  /** Sessions with no user message; never listed. */
+  emptyCount: number;
+}
+
 /** Creator evidence captured by this app's explicit new-session action. */
 export interface ThreadCreatorEvidence {
   origin: "user";
@@ -143,6 +173,8 @@ export interface Preferences {
   settledThreads: string[];
   /** Thread ids the user unsettled manually, blocking auto-settle until their next activity. */
   unsettledThreads: string[];
+  /** True once the first-run session import was confirmed or skipped. */
+  sessionImportCompleted?: boolean;
 }
 
 /** Preferences every field resets to on "Restore device defaults" (Settings → General, top right). */
@@ -408,7 +440,10 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi {
   /** Optional JSONL paths add verified header links and their parent chain, using header IDs. */
   loadThreadLinks(cwds: string[], paths?: string[]): Promise<ThreadLink[]>;
   /** Keys are the requested JSONL paths, not thread IDs; unknown creation origins are omitted. */
-  loadThreadOrigins(paths: string[]): Promise<Record<string, "agent" | "dori">>;
+  loadThreadOrigins(paths: string[]): Promise<Record<string, "user" | "agent" | "dori">>;
+  loadImportCandidates(cursor: string | null, limit?: number): Promise<ImportPage>;
+  /** Adds the importable sessions among the given paths to the managed list; returns the ids added. */
+  importSessions(sessionPaths: string[]): Promise<{ imported: string[] }>;
   readModelRouting(): Promise<ModelRoutingSettings>;
   saveModelRouting(input: ModelRoutingInput): Promise<ModelRoutingSettings>;
   importExistingMcpConfigs(): Promise<{ imported: string[]; sources: number }>;
@@ -508,6 +543,8 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi {
 export const IPC = {
   loadThreadLinks: "history:thread-links",
   loadThreadOrigins: "history:thread-origins",
+  loadImportCandidates: "history:import-candidates",
+  importSessions: "history:import-sessions",
   readModelRouting: "models:read-routing",
   saveModelRouting: "models:save-routing",
   importExistingMcpConfigs: "mcp:import-existing",

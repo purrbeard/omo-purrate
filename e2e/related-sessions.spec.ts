@@ -1,7 +1,14 @@
 import { test, expect } from "@playwright/test";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { launchApp, newSession, send, tempDir, threadRow, shot, setTheme } from "./helpers.ts";
+
+/** Sessions this app opens carry its creation marker; dropping it makes one look written by another client or before the marker existed. */
+function asForeignSession(file: string): void {
+  const { atime, mtime } = statSync(file);
+  writeFileSync(file, readFileSync(file, "utf8").split("\n").filter(line => !line.includes('"customType":"omo-ui.origin"')).join("\n"));
+  utimesSync(file, atime, mtime);
+}
 
 test("agent-created sessions stay separate, searchable and reopen their original session", async () => {
   const home = tempDir("agent-origin-home"), workspace = tempDir("agent-origin-workspace"), userData = tempDir("agent-origin-user");
@@ -15,6 +22,7 @@ test("agent-created sessions stay separate, searchable and reopen their original
       await window.omo.request("thread/name/set", { threadId: result.thread.id, name: "자동 생성 검증 세션" });
       return result.thread;
     }, workspace);
+    asForeignSession(agent.path!);
     appendFileSync(agent.path!, JSON.stringify({ type: "custom", customType: "rpc_client_message_admission", data: { clientMessageId: `probe-owner:${agent.id}`, clientTurnId: `probe-owner:${agent.id}`, durableSessionId: agent.id } }) + "\n");
     await page.reload();
     await page.getByTestId("native-sessions-open").click();
@@ -78,9 +86,11 @@ test("creator evidence records UI creation, keeps old sessions unknown and persi
     expect(initial.managedThreadIds).toEqual([main]);
     const old = await page.evaluate(async cwd => (await window.omo.request("thread/start", { cwd })).thread, workspace);
     await page.evaluate(async id => window.omo.request("thread/name/set", { threadId: id, name: "Historical session without creator evidence" }), old.id);
+    asForeignSession(old.path!);
     const original = readFileSync(old.path!, "utf8");
     const dori = await page.evaluate(async cwd => (await window.omo.request("thread/start", { cwd })).thread, workspace);
     await page.evaluate(async id => window.omo.request("thread/name/set", { threadId: id, name: "Owner request relayed by Dori" }), dori.id);
+    asForeignSession(dori.path!);
     appendFileSync(dori.path!, JSON.stringify({ type: "custom", customType: "rpc_client_message_admission", data: { clientMessageId: "discord:1557620286520696913", durableSessionId: dori.id } }) + "\n");
     await page.reload();
     await expect(threadRow(page, old.id)).toHaveCount(0);
@@ -231,6 +241,7 @@ test("native inventory pages reveal older sessions and managed IDs survive app r
       return ids;
     }, workspace);
     const older = ids[0]!;
+    asForeignSession(path.join(home, "sessions", `${older}.jsonl`));
     const firstPage = await page.evaluate(async () => (await window.omo.request("thread/list", { limit: 50 })).data.map(thread => thread.id));
     expect(firstPage).not.toContain(older);
     await page.reload();

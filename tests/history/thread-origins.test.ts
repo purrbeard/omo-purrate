@@ -21,6 +21,22 @@ describe("read-only machine session origins", () => {
     expect(await origin(jsonl(header, admission(id)))).toBe("agent");
   });
 
+  it("recognizes this app's creation marker and its prefixed admission as user-created", async () => {
+    expect(await origin(jsonl(header, { type: "custom", customType: "omo-ui.origin", data: { createdBy: "omo-ui", surface: "desktop" } }))).toBe("user");
+    expect(await origin(jsonl(header, admission(`omo-ui:${answerId}`)))).toBe("user");
+  });
+
+  it("does not accept a marker from another creator, a foreign session's admission, or a malformed app id", async () => {
+    expect(await origin(jsonl(header, { type: "custom", customType: "omo-ui.origin", data: { createdBy: "someone-else" } }))).toBeUndefined();
+    expect(await origin(jsonl(header, { type: "custom_message", customType: "omo-ui.origin", data: { createdBy: "omo-ui" } }))).toBeUndefined();
+    expect(await origin(jsonl(header, admission(`omo-ui:${answerId}`, answerId)))).toBeUndefined();
+    for (const id of ["omo-ui:", "omo-ui:not-a-uuid", `omo-ui:${answerId}:suffix`, answerId]) expect(await origin(jsonl(header, admission(id)))).toBeUndefined();
+  });
+
+  it("ignores an app marker that only appears after the first user message", async () => {
+    expect(await origin(jsonl(header, { type: "message", message: { role: "user" } }, { type: "custom", customType: "omo-ui.origin", data: { createdBy: "omo-ui" } }))).toBeUndefined();
+  });
+
   it("recognizes a proven Discord admission as Dori-created", async () => {
     expect(await origin(jsonl(header, admission("discord:1557276589203656765")))).toBe("dori");
   });

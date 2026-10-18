@@ -20,6 +20,8 @@ import { createSessionWatcher } from "./history/session-watch";
 import { loadTaskWork, readTaskLinks } from "./history/task-work";
 import { loadHeaderLinks } from "./history/thread-links";
 import { loadThreadOrigins } from "./history/thread-origins";
+import { importPage, toCandidate } from "./history/session-catalog";
+import { SessionIndex } from "./omo/native/threads";
 import { RpcRequestError } from "./omo/app-server-client";
 import { runInstaller } from "./omo/installer";
 import { unarchiveBySidecar } from "./omo/unarchive-fallback";
@@ -138,6 +140,12 @@ export function registerIpc(deps: IpcDeps): () => void {
   const proxyAgentDir = (): string => supervisor.initializeResult?.codexHome ?? process.env["OMO_CODING_AGENT_DIR"] ?? path.join(homeDir, ".omo", "agent");
   /** Resolves a renderer-supplied session path, refusing anything outside the omo sessions directory. */
   const sessionFile = createSessionFileResolver(supervisor, homeDir);
+  let catalog: SessionIndex | null = null;
+  const catalogIndex = (): SessionIndex => {
+    const dir = path.join(supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent"), "sessions");
+    if (catalog?.sessionsDir !== dir) catalog = new SessionIndex(dir);
+    return catalog;
+  };
   const sessionWatcher = createSessionWatcher((sessionPath) => send(IPC.historyChanged, sessionPath));
 
   // omo 5.1.30 thread/unarchive misses sidecars in per-project session folders; restore the one thread/list reports.
@@ -296,6 +304,21 @@ export function registerIpc(deps: IpcDeps): () => void {
     [IPC.loadThreadOrigins]: (_event, paths) => {
       if (!Array.isArray(paths) || paths.some(file => typeof file !== "string" || !path.isAbsolute(file))) throw new Error("Invalid session paths");
       return loadThreadOrigins(paths as string[], sessionFile);
+    },
+    [IPC.loadImportCandidates]: (_event, cursor, limit) => {
+      if (cursor !== null && typeof cursor !== "string") throw new Error("Invalid import cursor");
+      return importPage(catalogIndex(), cursor, limit, { homeDir, tmpDir: app.getPath("temp") });
+    },
+    [IPC.importSessions]: async (_event, sessionPaths): Promise<{ imported: string[] }> => {
+      if (!Array.isArray(sessionPaths) || sessionPaths.length > 5_000 || sessionPaths.some(file => typeof file !== "string" || !path.isAbsolute(file))) {
+        throw new Error("Invalid session paths");
+      }
+      const wanted = new Set(sessionPaths as string[]);
+      const places = { homeDir, tmpDir: app.getPath("temp") };
+      const imported = (await catalogIndex().list()).filter(record => wanted.has(record.sessionPath) && toCandidate(record, places).importable).map(record => record.id);
+      const current = prefs.get();
+      prefs.set({ managedThreadIds: [...new Set([...current.managedThreadIds, ...imported])], sessionImportCompleted: true });
+      return { imported };
     },
     [IPC.loadTaskWork]: (_event, cwd, parentSessionId) => loadTaskWork(
       supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent"),

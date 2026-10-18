@@ -4,12 +4,40 @@ import taskMessageExtension from "../../electron/omo/task-message-extension";
 function extension(result: { isError?: boolean; content: { type: string; text: string }[]; details?: unknown } = { content: [] }) {
   const handlers = new Map<string, (data: unknown) => Promise<unknown>>();
   const executeTool = vi.fn(async () => result);
-  taskMessageExtension({ rpc: { handle(name, callback) { handlers.set(name, callback); } }, executeTool });
+  taskMessageExtension({ rpc: { handle(name, callback) { handlers.set(name, callback); } }, executeTool, on: vi.fn(), appendEntry: vi.fn() });
   const handler = handlers.get("omo-ui.task.send");
   const cancel = handlers.get("omo-ui.task.cancel");
   if (handler === undefined || cancel === undefined) throw new Error("RPC handler missing");
   return { handler, cancel, executeTool };
 }
+
+function originExtension(sessionContext: Record<string, string> | undefined, entries: { type: string; customType?: string }[]) {
+  const starts: ((event: unknown, ctx: { sessionManager: { getEntries(): typeof entries } }) => void | Promise<void>)[] = [];
+  const appendEntry = vi.fn();
+  taskMessageExtension({
+    rpc: { handle() {} }, executeTool: vi.fn(), appendEntry, ...(sessionContext === undefined ? {} : { sessionContext }),
+    on(_name, handler) { starts.push(handler); },
+  });
+  return { appendEntry, start: async () => { for (const handler of starts) await handler({ reason: "startup" }, { sessionManager: { getEntries: () => entries } }); } };
+}
+
+describe("creation marker", () => {
+  it("records an app-opened session as bookkeeping before its first message", async () => {
+    const { appendEntry, start } = originExtension({ created_by: "omo-ui", surface: "desktop" }, [{ type: "model_change" }]);
+    await start();
+    expect(appendEntry).toHaveBeenCalledWith("omo-ui.origin", { createdBy: "omo-ui", surface: "desktop" }, { startupBookkeeping: true });
+  });
+  it.each([[{ type: "message" }], [{ type: "custom", customType: "omo-ui.origin" }]])("does not mark a session that already holds %o", async entry => {
+    const { appendEntry, start } = originExtension({ created_by: "omo-ui" }, [entry]);
+    await start();
+    expect(appendEntry).not.toHaveBeenCalled();
+  });
+  it.each<Record<string, string> | undefined>([undefined, {}, { created_by: "another-client" }])("leaves sessions other openers created unmarked (%o)", async context => {
+    const { appendEntry, start } = originExtension(context, []);
+    await start();
+    expect(appendEntry).not.toHaveBeenCalled();
+  });
+});
 
 describe("child agent RPC messages", () => {
   it("uses native task ownership rather than replaying a conversation", async () => {

@@ -98,6 +98,8 @@ class FakeBridge implements OmoBridgeApi {
   sendTaskMessage(): Promise<void> { return Promise.resolve(); }
   loadThreadLinks(): ReturnType<OmoBridgeApi["loadThreadLinks"]> { return Promise.resolve([]); }
   loadThreadOrigins(): ReturnType<OmoBridgeApi["loadThreadOrigins"]> { return Promise.resolve({}); }
+  loadImportCandidates(): ReturnType<OmoBridgeApi["loadImportCandidates"]> { return Promise.resolve({ items: [], nextCursor: null, emptyCount: 0 }); }
+  importSessions(): ReturnType<OmoBridgeApi["importSessions"]> { return Promise.resolve({ imported: [] }); }
   loadContextUsage(): ReturnType<OmoBridgeApi["loadContextUsage"]> { return Promise.resolve({ tokens: null, provider: null, model: null, compacted: false }); }
   loadNativeCatalog(): ReturnType<OmoBridgeApi["loadNativeCatalog"]> { return Promise.resolve({ commands: [], contextWindows: {}, error: null }); }
   readonly dagLoads: Array<{ cwd: string; threadId: string }> = [];
@@ -724,12 +726,12 @@ describe("createActions", () => {
     expect(context.bridge.calls.at(-1)?.params).toEqual({
       threadId: THREAD_ID,
       input: [{ type: "text", text: "hello", text_elements: [] }],
-      clientUserMessageId: "id-1",
+      clientUserMessageId: "omo-ui:id-1",
     });
     const conversation = context.store.getState().conversations[THREAD_ID];
     expect(conversation?.resumed).toBe(true);
     expect(conversation?.session).toEqual({ modelProvider: "anthropic", model: "claude-fable-5", reasoningEffort: null });
-    expect(conversation?.pendingUserMessages).toEqual([{ clientId: "id-1", text: "hello", sentAtMs: 5_000 }]);
+    expect(conversation?.pendingUserMessages).toEqual([{ clientId: "omo-ui:id-1", text: "hello", sentAtMs: 5_000 }]);
   });
 
   it("applies the composer model to the thread before the turn, because omo drops it on turn/start", async () => {

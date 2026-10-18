@@ -35,6 +35,7 @@ const SettingsDialog = lazy(() => import("./ui/settings/SettingsDialog").then(mo
 const TerminalPanel = lazy(() => import("./ui/terminal/TerminalPanel").then(module => ({ default: module.TerminalPanel })));
 const WorkspacePanel = lazy(() => import("./ui/workspace/WorkspacePanel").then(module => ({ default: module.WorkspacePanel })));
 const SetupWizard = lazy(() => import("./ui/wizard/SetupWizard").then(module => ({ default: module.SetupWizard })));
+const SessionImportDialog = lazy(() => import("./ui/sidebar/SessionImportDialog").then(module => ({ default: module.SessionImportDialog })));
 
 function MainPane() {
   return (
@@ -75,6 +76,9 @@ function Shell() {
   const appState = useAppSelector(state => state);
   const ui = useUiState();
   const { sidebarVisible, sidebarWidth, workflowPanelSize, onboardingOpen, settingsOpen, preferences, rightWidths, dockSide } = ui;
+  useEffect(() => {
+    if (preferences?.onboardingCompleted === true && preferences.sessionImportCompleted !== true && !onboardingOpen) uiState.setSessionImportOpen(true);
+  }, [preferences?.onboardingCompleted, preferences?.sessionImportCompleted, onboardingOpen]);
   const hasAgents = useAppSelector(state => {
     const main = selectMainThreadId(state);
     return main !== null && (selectAgentChildren(state, main).length > 0 || selectTasks(state, main).length > 0 || state.threadLinks.some(link => link.parentId === main && link.taskId !== undefined));
@@ -193,6 +197,7 @@ function Shell() {
       {paletteOpen && <CommandPalette entries={paletteEntries} onClose={() => setPaletteOpen(false)} />}
       <ProjectPickerHost />
       {onboardingOpen && <Suspense fallback={null}><SetupWizard /></Suspense>}
+      {ui.sessionImportOpen && !onboardingOpen && <Suspense fallback={null}><SessionImportDialog /></Suspense>}
       <ThreadNotifications />
       <NoticeToasts />
     </>

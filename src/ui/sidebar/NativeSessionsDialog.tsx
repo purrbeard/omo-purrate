@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "../../state";
 import { useActions, useAppSelector } from "../app-context";
 import { useT } from "../../i18n";
-import { useUiState } from "../ui-state";
+import { uiState, useUiState } from "../ui-state";
 import { threadTitle } from "../conversation/format";
 import { Button, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import css from "./Sidebar.module.css";
@@ -62,6 +62,7 @@ export function NativeSessionsDialog({ onClose }: { onClose: () => void }) {
   return <Modal open onClose={onClose} title={t("shell.managed.inventory")} closeLabel={t("common.close")} footer={<Button variant="outline" data-testid="native-sessions-close" onClick={onClose}>{t("shell.managed.close")}</Button>}>
     <div data-testid="native-sessions-dialog">
     <p>{t("shell.managed.inventoryHint")}</p>
+    <Button variant="outline" data-testid="native-sessions-import" onClick={() => { onClose(); uiState.setSessionImportOpen(true); }}>{t("shell.import.open")}</Button>
     <input className={css.nativeSearch} data-testid="native-sessions-search" value={query} onChange={e => setQuery(e.target.value)} aria-label={t("shell.managed.search")} placeholder={t("shell.managed.search")} />
     <p role="status">{searching && cursor !== null && error === null ? t("shell.managed.searching", { count: order.length }) : t("shell.managed.loaded", { count: order.length })}</p>
     {error !== null && <p role="alert">{error}</p>}

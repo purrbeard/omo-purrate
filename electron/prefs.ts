@@ -117,6 +117,8 @@ function merge(current: Preferences, patch: unknown): Preferences {
     autoSettleDays: has("autoSettleDays") ? settleDays(patch["autoSettleDays"], current.autoSettleDays) : current.autoSettleDays,
     settledThreads: has("settledThreads") ? threadIds(patch["settledThreads"], current.settledThreads) : current.settledThreads,
     unsettledThreads: has("unsettledThreads") ? threadIds(patch["unsettledThreads"], current.unsettledThreads) : current.unsettledThreads,
+    ...(typeof patch["sessionImportCompleted"] === "boolean" ? { sessionImportCompleted: patch["sessionImportCompleted"] }
+      : current.sessionImportCompleted === undefined ? {} : { sessionImportCompleted: current.sessionImportCompleted }),
     ...(has("modelProfile") ? { modelProfile: patch["modelProfile"] === null ? null :
       PROFILES.find(value => value === patch["modelProfile"]) ?? current.modelProfile ?? null }
       : current.modelProfile === undefined ? {} : { modelProfile: current.modelProfile }),

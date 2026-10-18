@@ -48,8 +48,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * Marks onboarding completed in userData's preferences so specs never meet the wizard. Preferences a spec wrote
- * itself are kept; an explicit onboardingCompleted in them wins.
+ * Marks onboarding and the first-run session import completed in userData's preferences so specs never meet either.
+ * Preferences a spec wrote itself are kept; an explicit value for either flag in them wins.
  */
 function seedSkipOnboarding(userData: string): void {
   const file = path.join(userData, "preferences.json");
@@ -61,8 +61,8 @@ function seedSkipOnboarding(userData: string): void {
     if (!isRecord(error) || error["code"] !== "ENOENT") throw error;
     mkdirSync(userData, { recursive: true });
   }
-  if ("onboardingCompleted" in existing) return;
-  writeFileSync(file, `${JSON.stringify({ ...existing, onboardingCompleted: true })}\n`);
+  if ("onboardingCompleted" in existing && "sessionImportCompleted" in existing) return;
+  writeFileSync(file, `${JSON.stringify({ onboardingCompleted: true, sessionImportCompleted: true, ...existing })}\n`);
 }
 
 export function tempDir(label: string): string {

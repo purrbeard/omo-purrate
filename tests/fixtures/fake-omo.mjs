@@ -1011,6 +1011,10 @@ function openSession(frame) {
   }
   record.handle = `rpc-${nextHandle++}`;
   threads.set(record.thread.id, record);
+    // Stands in for the app's extension, which marks sessions opened with its context label.
+    if (isRecord(frame.context) && frame.context.created_by === "omo-ui") {
+      recordEntry(record, { type: "custom", customType: "omo-ui.origin", data: { createdBy: "omo-ui", surface: frame.context.surface ?? "desktop" } });
+    }
   handles.set(record.handle, record);
   return { sessionId: record.handle, state: sessionState(record) };
 }
@@ -1049,6 +1053,9 @@ async function prompt(frame, record, reply) {
   const turn = createTurn(record);
   record.activeTurn = turn;
   reply({});
+  if (typeof frame.clientMessageId === "string") {
+    recordEntry(record, { type: "custom", customType: "rpc_client_message_admission", data: { clientMessageId: frame.clientMessageId, durableSessionId: record.thread.id } });
+  }
   runTurn(record, turn, message, images).catch((error) => {
     process.stderr.write(`fake-omo: turn crashed: ${error instanceof Error ? error.stack : String(error)}\n`);
   });

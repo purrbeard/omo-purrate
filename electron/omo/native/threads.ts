@@ -3,7 +3,21 @@ import { createReadStream } from "node:fs";
 import { mkdir, open, readdir, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Thread, ThreadStatus } from "../../../shared/protocol";
+import { creationEvidence } from "../../history/thread-origins";
 import { ARCHIVE_SUFFIX } from "../unarchive-fallback";
+
+export type SessionDefect = "malformed_line" | "duplicate_entry_id" | "unknown_parent" | "unsupported_version";
+/** Who opened the session, from the records before its first user message ("terminal": typed with no client admission). */
+export type CreationEvidence = "app" | "automation" | "other-client" | "terminal";
+
+export interface SessionFacts {
+  userMessages: number;
+  sizeBytes: number;
+  defects: SessionDefect[];
+  evidence: CreationEvidence | null;
+}
+
+const SUPPORTED_SESSION_VERSION = 3;
 
 export interface SessionRecord {
   id: string;
@@ -14,6 +28,7 @@ export interface SessionRecord {
   name: string | null;
   preview: string | null;
   parentSession: string | null;
+  facts: SessionFacts;
 }
 
 interface CacheEntry {
@@ -22,6 +37,7 @@ interface CacheEntry {
   scanned: number;
   tail: string;
   record: SessionRecord | null;
+  entryIds: Set<string>;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -41,6 +57,11 @@ function userText(content: unknown): string | null {
   return text === "" ? null : text;
 }
 
+/** Newest first; equal times order by path so a keyset cursor over the list is total. */
+export function newestFirst(left: SessionRecord, right: SessionRecord): number {
+  return right.updatedAtMs - left.updatedAtMs || (left.sessionPath < right.sessionPath ? -1 : left.sessionPath > right.sessionPath ? 1 : 0);
+}
+
 /** UUIDv7, the id shape omo gives sessions; it sorts by creation time like native ids do. */
 export function uuidv7(nowMs = Date.now()): string {
   const bytes = randomBytes(16);
@@ -52,17 +73,25 @@ export function uuidv7(nowMs = Date.now()): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function applyLine(record: SessionRecord | null, line: string, sessionPath: string): SessionRecord | null {
+function addDefect(record: SessionRecord, defect: SessionDefect): void {
+  if (!record.facts.defects.includes(defect)) record.facts.defects.push(defect);
+}
+
+/** Applies one complete line; the scan holds a partial last line back, so a line that does not parse is damage. */
+function applyLine(record: SessionRecord | null, line: string, sessionPath: string, entryIds: Set<string>): SessionRecord | null {
   if (line.trim() === "") return record;
   let value: unknown;
   try {
     value = JSON.parse(line);
   } catch (error) {
-    // A live writer can leave a partial last line; the next scan reads it whole.
     void error;
+    if (record !== null) addDefect(record, "malformed_line");
     return record;
   }
-  if (!isRecord(value)) return record;
+  if (!isRecord(value)) {
+    if (record !== null) addDefect(record, "malformed_line");
+    return record;
+  }
   if (record === null) {
     if (value["type"] !== "session" || typeof value["id"] !== "string") return null;
     const created = typeof value["timestamp"] === "string" ? Date.parse(value["timestamp"]) : Number.NaN;
@@ -75,7 +104,26 @@ function applyLine(record: SessionRecord | null, line: string, sessionPath: stri
       name: null,
       preview: null,
       parentSession: typeof value["parentSession"] === "string" ? value["parentSession"] : null,
+      facts: {
+        userMessages: 0,
+        sizeBytes: 0,
+        defects: typeof value["version"] === "number" && value["version"] > SUPPORTED_SESSION_VERSION ? ["unsupported_version"] : [],
+        evidence: null,
+      },
     };
+  }
+  const parentId = value["parentId"];
+  if (typeof parentId === "string" && !entryIds.has(parentId)) addDefect(record, "unknown_parent");
+  if (typeof value["id"] === "string") {
+    if (entryIds.has(value["id"])) addDefect(record, "duplicate_entry_id");
+    entryIds.add(value["id"]);
+  }
+  const isUserMessage = value["type"] === "message" && isRecord(value["message"]) && value["message"]["role"] === "user";
+  if (isUserMessage) record.facts.userMessages += 1;
+  if (record.facts.evidence === null) {
+    const proven = isUserMessage ? undefined : creationEvidence(value, record.id);
+    record.facts.evidence = isUserMessage ? "terminal" : proven === "user" ? "app" : proven === "agent" || proven === "dori" ? "automation"
+      : proven === "other" ? "other-client" : null;
   }
   if (value["type"] === "session_info") {
     record.name = typeof value["name"] === "string" && value["name"].trim() !== "" ? value["name"] : null;
@@ -111,7 +159,7 @@ export class SessionIndex {
       const record = await this.scan(file);
       if (record !== null) records.push(record);
     }
-    return records.sort((left, right) => right.updatedAtMs - left.updatedAtMs);
+    return records.sort(newestFirst);
   }
 
   async find(threadId: string): Promise<SessionRecord | null> {
@@ -188,7 +236,7 @@ export class SessionIndex {
     return target;
   }
 
-  toThread(record: SessionRecord, status: ThreadStatus): Thread {
+  toThread(record: Omit<SessionRecord, "facts">, status: ThreadStatus): Thread {
     return {
       id: record.id,
       sessionId: record.id,
@@ -245,16 +293,21 @@ export class SessionIndex {
     let entry = this.cache.get(file);
     if (entry !== undefined && entry.size === info.size && entry.mtimeMs === info.mtimeMs) return entry.record;
     if (entry === undefined || info.size < entry.scanned) {
-      entry = { size: 0, mtimeMs: 0, scanned: 0, tail: "", record: null };
+      entry = { size: 0, mtimeMs: 0, scanned: 0, tail: "", record: null, entryIds: new Set() };
     }
     const text = entry.tail + await readRange(file, entry.scanned, info.size);
     const lastNewline = text.lastIndexOf("\n");
     const complete = lastNewline === -1 ? "" : text.slice(0, lastNewline);
-    let record = entry.record === null ? null : { ...entry.record };
-    for (const line of complete.split("\n")) record = applyLine(record, line, file);
+    let record = entry.record === null ? null
+      : { ...entry.record, facts: { ...entry.record.facts, defects: [...entry.record.facts.defects] } };
+    const { entryIds } = entry;
+    for (const line of complete.split("\n")) record = applyLine(record, line, file, entryIds);
     const tail = lastNewline === -1 ? text : text.slice(lastNewline + 1);
-    if (record !== null) record.updatedAtMs = info.mtimeMs;
-    this.cache.set(file, { size: info.size, mtimeMs: info.mtimeMs, scanned: info.size, tail, record });
+    if (record !== null) {
+      record.updatedAtMs = info.mtimeMs;
+      record.facts.sizeBytes = info.size;
+    }
+    this.cache.set(file, { size: info.size, mtimeMs: info.mtimeMs, scanned: info.size, tail, record, entryIds });
     return record;
   }
 }
