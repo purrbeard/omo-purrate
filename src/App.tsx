@@ -1,5 +1,6 @@
 import { resolveProfile } from "./ui/composer/model-profiles";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { JSX } from "react";
 import { modalSelector, observeComposition } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { MenuCommand } from "../shared/ipc";
 import { createActions, createAppStore, localSideStorage, selectAgentChildren, selectMainThreadId, selectTasks, selectManagedThreadsByWorkspace, useAppStore } from "./state";

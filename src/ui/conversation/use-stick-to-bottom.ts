@@ -5,8 +5,8 @@ const SMOOTH_JUMP_VIEWPORTS = 2;
 const UPWARD_KEYS: ReadonlySet<string> = new Set(["PageUp", "ArrowUp", "Home"]);
 
 export interface StickToBottom {
-  scrollRef: RefObject<HTMLDivElement>;
-  contentRef: RefObject<HTMLDivElement>;
+  scrollRef: RefObject<HTMLDivElement | null>;
+  contentRef: RefObject<HTMLDivElement | null>;
   showJump: boolean;
   jumpToLatest: () => void;
 }
