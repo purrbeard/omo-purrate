@@ -26,6 +26,7 @@ export type TerminalStream = "stdout" | "stderr" | "system";
 
 export interface TerminalChunk {
   threadId: string;
+  sequence: number;
   stream: TerminalStream;
   text: string;
 }
@@ -37,6 +38,8 @@ export interface TerminalExit {
 
 export interface TerminalSnapshot {
   threadId: string;
+  sequence: number;
+  windowsBuild?: number;
   cwd: string;
   running: boolean;
   output: TerminalChunk[];
@@ -48,6 +51,7 @@ export const WORKBENCH_IPC = {
   loadDagRuns: "workbench:dag-runs",
   terminalOpen: "terminal:open",
   terminalWrite: "terminal:write",
+  terminalResize: "terminal:resize",
   terminalKill: "terminal:kill",
   terminalChunk: "terminal:chunk",
   terminalExit: "terminal:exit",
@@ -61,7 +65,9 @@ export interface WorkbenchBridgeApi {
   loadDagRuns(cwd: string, threadId: string): Promise<DagRun[]>;
   /** Returns the existing shell for `threadId` or starts one in `cwd`, which must be an existing absolute directory. */
   terminalOpen(threadId: string, cwd: string): Promise<TerminalSnapshot>;
-  terminalWrite(threadId: string, line: string): Promise<void>;
+  /** Writes raw keystrokes, including control characters, without adding a newline. */
+  terminalWrite(threadId: string, data: string): Promise<void>;
+  terminalResize(threadId: string, cols: number, rows: number): Promise<void>;
   terminalKill(threadId: string): Promise<void>;
   onTerminalChunk(listener: (chunk: TerminalChunk) => void): () => void;
   onTerminalExit(listener: (exit: TerminalExit) => void): () => void;

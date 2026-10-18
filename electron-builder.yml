@@ -10,6 +10,10 @@ files:
   - package.json
   - "!**/*.map"
 asar: true
+# node-pty ships N-API prebuilts; Electron loads them directly (verified by scripts/prove-pty.cjs).
+npmRebuild: false
+asarUnpack:
+  - node_modules/node-pty/**
 # The DSH MIT notice and the font license ship with every copy of the app (Contents/Resources).
 extraResources:
   - from: dist-electron/tree-selection-extension.js

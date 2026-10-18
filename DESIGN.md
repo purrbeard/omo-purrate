@@ -24,6 +24,10 @@ This Windows port preserves the upstream design system documented in `src/ui/REA
 
 The supplied Codex screenshot defines the interaction and grouping: a round plus trigger, an elevated menu above the composer, an Add heading, file/folder context, explicit terminal text attachment, goal, plan, sketch, then installed skills. Reuse existing Menu keyboard navigation, theme surfaces and focus tokens rather than copying Codex branding. The menu owns scrolling and fits desktop and 640px widths. Context chips remain removable and scoped to each conversation draft. Files and folders are references, not uploaded or eagerly read. Terminal content is explicitly pasted by the user, never scraped from another running process. Sketches become ordinary PNG attachments. Show actual installed skill names and descriptions; do not advertise uninstalled Exa/GitHub/Documents/PDF plugins. Goal and plan controls must connect to supported native behavior, not cosmetic toggles. The installed user app is never used for verification.
 
+## Integrated terminal
+
+The terminal dock tab renders the session's real PTY shell with xterm.js (fit addon), replacing the line-based command field and history. The header keeps the workspace name and Restart; the screen fills the panel and refits on every size change, sending columns and rows to the shell. Keystrokes, paste, Escape and Ctrl+L go to the shell; Ctrl+` (Command+` on macOS) still toggles the dock. Opening focuses the screen. Reopening replays the shell's buffered output once, with output that arrives during the open neither lost nor repeated. Colors come only from theme tokens: `TerminalPanel.module.css` maps foreground, background, cursor, selection, scrollbar and the 16 ANSI colors onto DSH/OmO tokens per light/dark scheme, and the terminal re-reads them when the body scheme or palette changes; xterm's minimum contrast keeps dark-background shell colors readable on the light theme. Type is the code font at the panel's 12px. A stopped shell shows the existing stopped hint beneath the screen.
+
 ## Workflow reference additions
 
 ### Workflow / agent conversation separation

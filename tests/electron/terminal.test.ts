@@ -1,88 +1,186 @@
-import { spawn } from "node:child_process";
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { EventEmitter } from "node:events";
 import { mkdtemp, realpath } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TerminalChunk, TerminalExit } from "../../shared/workbench";
-import { WORKBENCH_IPC } from "../../shared/workbench";
 import { createTerminals } from "../../electron/workbench/terminal";
+import type { TerminalPty } from "../../electron/workbench/terminal";
+import { resolveTerminalShell } from "../../electron/workbench/terminal-shell";
 
-function event<T>(events: EventEmitter, channel: string, matches: (value: T) => boolean): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const listener = (value: T) => {
-      if (!matches(value)) return;
-      clearTimeout(timer);
-      events.off(channel, listener);
-      resolve(value);
-    };
-    const timer = setTimeout(() => {
-      events.off(channel, listener);
-      reject(new Error(`No ${channel} event within 10 seconds`));
-    }, 10_000);
-    events.on(channel, listener);
-  });
+type PtyExit = Parameters<Parameters<TerminalPty["onExit"]>[0]>[0];
+
+class FakePty implements TerminalPty {
+  readonly pid = 12345;
+  readonly write = vi.fn<(data: string) => void>();
+  readonly resize = vi.fn<(cols: number, rows: number) => void>();
+  readonly dataListeners = new Set<(data: string) => void>();
+  readonly exitListeners = new Set<(event: PtyExit) => void>();
+  readonly kill = vi.fn(() => this.exit(0));
+  onData(listener: (data: string) => void) { this.dataListeners.add(listener); return { dispose: () => this.dataListeners.delete(listener) }; }
+  onExit(listener: (event: PtyExit) => void) { this.exitListeners.add(listener); return { dispose: () => this.exitListeners.delete(listener) }; }
+  data(text: string): void { for (const listener of this.dataListeners) listener(text); }
+  exit(exitCode: number): void { for (const listener of [...this.exitListeners]) listener({ exitCode }); }
 }
 
-describe("workbench terminals", () => {
-  it("bounds retained chunks and bytes while forwarding complete stream chunks", async () => {
-    const cwd = await mkdtemp(path.join(os.tmpdir(), "omo-terminal-buffer-"));
-    let child: ChildProcessWithoutNullStreams | undefined;
-    let latest: TerminalChunk | TerminalExit | undefined;
-    const terminals = createTerminals({
-      getLoginEnv: async () => Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
-      spawnImpl: (command, args, options) => {
-        child = spawn(command, args, options);
-        return child;
-      },
-      send: (_channel, payload) => { latest = payload; },
-    });
-    try {
-      await terminals.terminalOpen("buffer", cwd);
-      for (let index = 0; index < 450; index += 1) child!.stdout.emit("data", `chunk-${index}\n`);
-      let snapshot = await terminals.terminalOpen("buffer", cwd);
-      expect(snapshot.output).toHaveLength(400);
-      expect(snapshot.output[0]?.text).toBe("chunk-50\n");
-      const large = "a".repeat(300_000);
-      child!.stdout.emit("data", large);
-      expect(latest).toMatchObject({ stream: "stdout", text: large });
-      snapshot = await terminals.terminalOpen("buffer", cwd);
-      expect(snapshot.output.reduce((bytes, chunk) => bytes + chunk.text.length * 2, 0)).toBeLessThanOrEqual(200 * 1024);
-      expect(snapshot.output.at(-1)?.text).toHaveLength(100 * 1024);
-    } finally {
-      await terminals.dispose();
-    }
-  }, 20_000);
+describe("terminal shell resolution", () => {
+  const env = { PATH: "C:\\Tools;C:\\Legacy", SystemRoot: "C:\\Windows", ComSpec: "C:\\Custom\\cmd.exe" };
+  const chain = ["C:\\Override\\pwsh.exe", "C:\\Tools\\pwsh.exe", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "C:\\Legacy\\powershell.exe", "C:\\Custom\\cmd.exe", "C:\\Windows\\System32\\cmd.exe"];
+  it.each(chain.map((file, index) => ({ file, available: chain.slice(index) })))("uses $file when earlier Windows shells are absent", async ({ file, available }) => {
+    // Given
+    const exists = async (candidate: string): Promise<boolean> => available.includes(candidate);
+    // When
+    const shell = await resolveTerminalShell({ platform: "win32", env, override: chain[0], exists });
+    // Then
+    expect(shell.file).toBe(file);
+    expect(shell.args).toEqual(/powershell|pwsh/u.test(file) ? ["-NoLogo", "-NoExit", "-Command", "[Console]::OutputEncoding=[Text.Encoding]::UTF8; $OutputEncoding=[Text.Encoding]::UTF8"] : []);
+  });
+  it.each(["/custom/shell", "/bin/zsh", "/bin/bash", "/bin/sh"])("uses %s when earlier Unix shells are absent", async file => {
+    // Given
+    const exists = async (candidate: string): Promise<boolean> => candidate === file;
+    // When
+    const shell = await resolveTerminalShell({ platform: "linux", env: { SHELL: "/custom/shell" }, exists });
+    // Then
+    expect(shell).toEqual({ file, args: [] });
+  });
+});
 
-  it("streams real shell output with stdin open, reuses snapshots and kills the shell", async () => {
-    const cwd = await realpath(await mkdtemp(path.join(os.tmpdir(), "omo-terminal-")));
-    const events = new EventEmitter();
-    const terminals = createTerminals({
-      getLoginEnv: async () => Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
-      send: (channel, payload) => events.emit(channel, payload),
-    });
-    try {
-      const [opened, concurrent] = await Promise.all([terminals.terminalOpen("thread", cwd), terminals.terminalOpen("thread", cwd)]);
-      expect(opened).toMatchObject({ threadId: "thread", cwd, running: true });
-      expect(concurrent).toEqual(opened);
-      const output = event<TerminalChunk>(events, WORKBENCH_IPC.terminalChunk, (chunk) => chunk.threadId === "thread" && chunk.stream === "stdout" && /workbench-ok\r?\n/u.test(chunk.text));
-      await terminals.terminalWrite("thread", "echo workbench-ok");
-      expect((await output).text).toContain("workbench-ok");
-      const snapshot = await terminals.terminalOpen("thread", cwd);
-      expect(snapshot.output.some((chunk) => chunk.text.includes("workbench-ok"))).toBe(true);
-      const exit = event<TerminalExit>(events, WORKBENCH_IPC.terminalExit, (value) => value.threadId === "thread");
-      await terminals.terminalKill("thread");
-      expect((await exit).threadId).toBe("thread");
-      await expect(terminals.terminalWrite("thread", "echo after")).rejects.toThrow(/not running/);
-      await expect(terminals.terminalOpen("../bad", cwd)).rejects.toThrow(/thread id/);
-      await expect(terminals.terminalOpen("valid", ".")).rejects.toThrow(/absolute/);
-      await expect(terminals.terminalWrite("unknown", "hello")).rejects.toThrow(/not running/);
-      await expect(terminals.terminalWrite("thread", 1)).rejects.toThrow(/string/);
-      await expect(terminals.terminalWrite("thread", "a".repeat(8001))).rejects.toThrow(/8000/);
-    } finally {
-      await terminals.dispose();
-    }
+describe("workbench PTY terminals", () => {
+  let cwd: string;
+  let pty: FakePty;
+  let sent: Array<TerminalChunk | TerminalExit>;
+  let terminals: ReturnType<typeof createTerminals>;
+  let spawnImpl: ReturnType<typeof vi.fn<NonNullable<Parameters<typeof createTerminals>[0]["spawnImpl"]>>>;
+  beforeEach(async () => {
+    cwd = await realpath(await mkdtemp(path.join(os.tmpdir(), "omo-terminal-")));
+    pty = new FakePty();
+    sent = [];
+    spawnImpl = vi.fn(() => pty);
+    terminals = createTerminals({ getLoginEnv: async () => Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), spawnImpl, send: (_channel, value) => sent.push(value) });
+  });
+  it("deduplicates concurrent opens and preserves the workspace", async () => {
+    // Given / When
+    const [first, second] = await Promise.all([terminals.terminalOpen("thread", cwd), terminals.terminalOpen("thread", cwd)]);
+    // Then
+    expect(second).toEqual(first);
+    expect(spawnImpl).toHaveBeenCalledExactlyOnceWith(expect.any(String), expect.any(Array), expect.objectContaining({ cwd, cols: 80, rows: 24 }));
+    await terminals.dispose();
+  });
+  it("forwards raw control data without inserting a newline", async () => {
+    // Given
+    await terminals.terminalOpen("thread", cwd);
+    // When
+    await terminals.terminalWrite("thread", "한글\u001b\u000c\r");
+    // Then
+    expect(pty.write).toHaveBeenCalledExactlyOnceWith("한글\u001b\u000c\r");
+    await terminals.dispose();
+  });
+  it("resizes the running PTY", async () => {
+    // Given
+    await terminals.terminalOpen("thread", cwd);
+    // When
+    await terminals.terminalResize("thread", 132, 40);
+    // Then
+    expect(pty.resize).toHaveBeenCalledExactlyOnceWith(132, 40);
+    await terminals.dispose();
+  });
+  it.each([[0, 24], [80, -1], [1.5, 24], [1001, 24], [80, Infinity], ["80", 24]])("rejects invalid dimensions %s by %s", async (cols, rows) => {
+    // Given
+    await terminals.terminalOpen("thread", cwd);
+    // When / Then
+    await expect(terminals.terminalResize("thread", cols, rows)).rejects.toThrow(/positive integers/);
+    expect(pty.resize).not.toHaveBeenCalled();
+    await terminals.dispose();
+  });
+  it("caps raw replay while forwarding the complete original data", async () => {
+    // Given
+    await terminals.terminalOpen("thread", cwd);
+    const text = "한글\u001b[31m" + "a".repeat(300_000);
+    // When
+    pty.data(text);
+    const replay = await terminals.terminalOpen("thread", cwd);
+    // Then
+    expect(sent).toContainEqual({ threadId: "thread", sequence: 1, stream: "stdout", text });
+    expect(replay.output.map(chunk => chunk.text).join("")).toBe(text.slice(-100 * 1024));
+    expect(replay.sequence).toBe(1);
+    await terminals.dispose();
+  });
+  it("kills once, publishes exit, and rejects input after termination", async () => {
+    // Given
+    await terminals.terminalOpen("thread", cwd);
+    // When
+    await Promise.all([terminals.terminalKill("thread"), terminals.terminalKill("thread")]);
+    // Then
+    expect(pty.kill).toHaveBeenCalledTimes(1);
+    expect(sent).toContainEqual({ threadId: "thread", code: 0 });
+    await expect(terminals.terminalWrite("thread", "x")).rejects.toThrow(/not running/);
+    expect(pty.dataListeners.size).toBe(0);
+    await terminals.dispose();
+  });
+  it("disposes all sessions and prevents new shells", async () => {
+    // Given
+    await terminals.terminalOpen("thread", cwd);
+    // When
+    await terminals.dispose();
+    // Then
+    expect(pty.kill).toHaveBeenCalledTimes(1);
     await expect(terminals.terminalOpen("thread", cwd)).rejects.toThrow(/disposed/);
-  }, 20_000);
+  });
+  it("escalates when PTY kill throws without leaving killing stuck", async () => {
+    // Given
+    const killTree = vi.fn(async () => {});
+    pty.kill.mockImplementation(() => { throw new Error("native kill failed"); });
+    terminals = createTerminals({ getLoginEnv: async () => ({ ...process.env, PATH: process.env["PATH"] ?? "" }), spawnImpl, send: (_channel, value) => sent.push(value), killTree });
+    await terminals.terminalOpen("thread", cwd);
+    // When
+    await terminals.terminalKill("thread");
+    // Then
+    expect(killTree).toHaveBeenCalledExactlyOnceWith(pty.pid);
+    expect(sent).toContainEqual({ threadId: "thread", code: -1 });
+    await expect(terminals.terminalWrite("thread", "x")).rejects.toThrow(/not running/);
+    await terminals.dispose();
+  });
+  it("bounds disposal and tree kills when the PTY never publishes exit", async () => {
+    // Given
+    const killTree = vi.fn(async () => {});
+    pty.kill.mockImplementation(() => {});
+    terminals = createTerminals({ getLoginEnv: async () => Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), spawnImpl, send: (_channel, value) => sent.push(value), killTree });
+    await terminals.terminalOpen("thread", cwd);
+    vi.useFakeTimers();
+    try {
+      // When
+      const disposal = terminals.dispose();
+      await vi.advanceTimersByTimeAsync(1000);
+      await disposal;
+      // Then
+      expect(killTree).toHaveBeenCalledExactlyOnceWith(pty.pid);
+      expect(sent).toContainEqual({ threadId: "thread", code: -1 });
+    } finally { vi.useRealTimers(); }
+  });
+  it("stops and clears sessions even when the forced kill exceeds its bound", async () => {
+    // Given
+    const killTree = vi.fn(() => new Promise<void>(() => {}));
+    pty.kill.mockImplementation(() => {});
+    terminals = createTerminals({ getLoginEnv: async () => Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), spawnImpl, send: (_channel, value) => sent.push(value), killTree });
+    await terminals.terminalOpen("thread", cwd);
+    vi.useFakeTimers();
+    try {
+      // When
+      const disposal = terminals.dispose();
+      await vi.advanceTimersByTimeAsync(2000);
+      await disposal;
+      // Then
+      expect(sent).toContainEqual({ threadId: "thread", code: -1 });
+      expect(pty.dataListeners.size).toBe(0);
+      await expect(terminals.terminalWrite("thread", "x")).rejects.toThrow(/not running/);
+    } finally { vi.useRealTimers(); }
+  });
+  it("validates IDs, workspace and raw input at the IPC boundary", async () => {
+    // Given / When / Then
+    await expect(terminals.terminalOpen("../bad", cwd)).rejects.toThrow(/thread id/);
+    await expect(terminals.terminalOpen("thread", ".")).rejects.toThrow(/absolute/);
+    await expect(terminals.terminalWrite("thread", 1)).rejects.toThrow(/string/);
+    await expect(terminals.terminalWrite("thread", "a".repeat(8001))).rejects.toThrow(/8000/);
+    await expect(terminals.terminalWrite("missing", "x")).rejects.toThrow(/not running/);
+    await terminals.dispose();
+  });
 });

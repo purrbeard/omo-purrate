@@ -9,6 +9,7 @@ export function registerWorkbenchIpc(handlers: WorkbenchHandlers): () => void {
     [WORKBENCH_IPC.loadDagRuns]: (_event, cwd, threadId) => handlers.loadDagRuns(cwd, threadId),
     [WORKBENCH_IPC.terminalOpen]: (_event, threadId, cwd) => handlers.terminalOpen(threadId, cwd),
     [WORKBENCH_IPC.terminalWrite]: (_event, threadId, line) => handlers.terminalWrite(threadId, line),
+    [WORKBENCH_IPC.terminalResize]: (_event, threadId, cols, rows) => handlers.terminalResize(threadId, cols, rows),
     [WORKBENCH_IPC.terminalKill]: (_event, threadId) => handlers.terminalKill(threadId),
   };
   for (const [channel, handler] of Object.entries(table)) ipcMain.handle(channel, handler);

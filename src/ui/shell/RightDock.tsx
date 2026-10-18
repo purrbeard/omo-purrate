@@ -121,11 +121,16 @@ export function RightDock({ tab, placement, children }: { tab: RightTab; placeme
   );
 }
 
+/** Ctrl+` (Command+` on macOS) toggles the terminal dock; the terminal hands this key back to the app instead of the shell. */
+export function isTerminalShortcut(event: globalThis.KeyboardEvent): boolean {
+  const modifier = window.omo.platform === "darwin" ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  return modifier && !event.altKey && !event.shiftKey && !event.isComposing && event.code === "Backquote";
+}
+
 export function useTerminalShortcut(): void {
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent): void => {
-      const modifier = window.omo.platform === "darwin" ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-      if (!modifier || event.altKey || event.shiftKey || event.isComposing || event.code !== "Backquote") return;
+      if (!isTerminalShortcut(event)) return;
       event.preventDefault();
       uiState.toggleRightTab("terminal");
     };
