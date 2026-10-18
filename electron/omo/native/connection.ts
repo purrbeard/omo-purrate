@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
+import type { Socket } from "node:net";
 import type { SpawnImpl } from "../app-server-client";
 import { JsonlDecoder } from "../jsonl";
 import { ManagedChild } from "../managed-child";
 import type { ExitInfo, StopTimeouts } from "../managed-child";
 import { BRIDGE_ERROR_CODES, describeExit, RpcRequestError } from "../rpc";
+import { connectSharedHost } from "./shared-host";
 
 export type NativeRecord = Record<string, unknown> & { type: string };
 
@@ -26,6 +28,65 @@ export interface NativeConnectionOptions {
   cwd: string;
   env: Record<string, string>;
   spawnImpl?: SpawnImpl;
+  /** A shared host's socket; when set, the connection attaches to it instead of spawning `command`. */
+  socket?: string;
+  connectImpl?: (socket: string) => Socket;
+}
+
+/** What a connection needs from its transport: an omo child over stdio, or a shared host socket. */
+interface Link {
+  readonly pid: number | null;
+  readonly hasExited: boolean;
+  readonly stderrTail: string;
+  readonly spawnError: Error | null;
+  readonly exited: Promise<ExitInfo>;
+  readonly writable: boolean;
+  write(text: string): void;
+  stop(timeouts: StopTimeouts): Promise<void>;
+}
+
+function childLink(child: ManagedChild): Link {
+  return {
+    get pid() { return child.process.pid ?? null; },
+    get hasExited() { return child.hasExited; },
+    get stderrTail() { return child.stderrTail; },
+    get spawnError() { return child.spawnError; },
+    exited: child.exited,
+    get writable() { return !child.hasExited && child.process.stdin.writable; },
+    write: (text) => { child.process.stdin.write(text); },
+    stop: (timeouts) => child.stop(timeouts),
+  };
+}
+
+function socketLink(stream: Socket, onClosed: () => void): Link {
+  let closed = false;
+  let failure: Error | null = null;
+  let stopRequested = false;
+  let resolveExited: (info: ExitInfo) => void = () => undefined;
+  const exited = new Promise<ExitInfo>((resolve) => { resolveExited = resolve; });
+  stream.on("error", (error) => { failure ??= error; });
+  stream.once("close", () => {
+    closed = true;
+    onClosed();
+    resolveExited({ code: null, signal: null, stderrTail: failure === null ? "" : failure.message, expected: stopRequested });
+  });
+  return {
+    pid: null,
+    get hasExited() { return closed; },
+    get stderrTail() { return failure?.message ?? ""; },
+    get spawnError() { return failure; },
+    exited,
+    get writable() { return !closed && stream.writable; },
+    write: (text) => { stream.write(text); },
+    stop: async (timeouts) => {
+      stopRequested = true;
+      if (closed) return;
+      stream.end();
+      const timer = setTimeout(() => stream.destroy(), timeouts.afterStdinEnd);
+      await exited;
+      clearTimeout(timer);
+    },
+  };
 }
 
 interface Pending {
@@ -41,7 +102,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /** One `omo --mode rpc` child: string-id commands with `type: "response"` answers, everything else is a record. */
 export class NativeConnection {
-  private child: ManagedChild | null = null;
+  private child: Link | null = null;
   private readonly pending = new Map<string, Pending>();
   private nextId = 1;
   private readonly recordListeners = new Set<(record: NativeRecord) => void>();
@@ -51,7 +112,7 @@ export class NativeConnection {
   constructor(private readonly options: NativeConnectionOptions) {}
 
   get pid(): number | null {
-    return this.child?.process.pid ?? null;
+    return this.child?.pid ?? null;
   }
 
   get hasExited(): boolean {
@@ -72,6 +133,24 @@ export class NativeConnection {
 
   start(): void {
     if (this.child) throw new Error("NativeConnection.start() may only be called once");
+    const decoder = new JsonlDecoder({
+      onFrame: (value) => this.handle(value),
+      onMalformed: (line, error) => this.emitMalformed(line, error),
+    });
+    const socket = this.options.socket;
+    if (socket !== undefined) {
+      const stream = (this.options.connectImpl ?? connectSharedHost)(socket);
+      const link = socketLink(stream, () => {
+        decoder.end();
+        this.rejectPending(new RpcRequestError(BRIDGE_ERROR_CODES.notConnected, "the omo host closed the connection"));
+      });
+      this.child = link;
+      stream.on("data", (chunk: Buffer) => decoder.push(chunk));
+      void link.exited.then((info) => {
+        for (const listener of [...this.exitListeners]) listener(info);
+      });
+      return;
+    }
     const spawnImpl = this.options.spawnImpl ?? spawn;
     const nodeScript = process.platform === "win32" && /\.mjs$/i.test(this.options.command);
     const childProcess = spawnImpl(nodeScript ? process.execPath : this.options.command,
@@ -84,11 +163,7 @@ export class NativeConnection {
     const child = new ManagedChild(childProcess, (code, signal) => {
       this.rejectPending(new RpcRequestError(BRIDGE_ERROR_CODES.notConnected, `omo exited with ${describeExit(code, signal)}`));
     });
-    this.child = child;
-    const decoder = new JsonlDecoder({
-      onFrame: (value) => this.handle(value),
-      onMalformed: (line, error) => this.emitMalformed(line, error),
-    });
+    this.child = childLink(child);
     childProcess.stdout.on("data", (chunk: Buffer) => decoder.push(chunk));
     childProcess.stdout.on("end", () => decoder.end());
     void child.exited.then((info) => {
@@ -118,10 +193,10 @@ export class NativeConnection {
   /** Writes a frame that expects no tracked answer (extension_ui_response). */
   write(frame: object): void {
     const child = this.child;
-    if (!child || child.hasExited || !child.process.stdin.writable) {
+    if (!child || !child.writable) {
       throw new RpcRequestError(BRIDGE_ERROR_CODES.notConnected, "omo is not running");
     }
-    child.process.stdin.write(`${JSON.stringify(frame)}\n`);
+    child.write(`${JSON.stringify(frame)}\n`);
   }
 
   onRecord(listener: (record: NativeRecord) => void): () => void {

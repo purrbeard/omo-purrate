@@ -152,6 +152,7 @@ export class NativeAppServerClient {
       cwd: options.cwd,
       env: options.env,
       ...(options.spawnImpl === undefined ? {} : { spawnImpl: options.spawnImpl }),
+      ...(options.socket === undefined ? {} : { socket: options.socket }),
     });
     this.ui = new UiBridge(
       (handle, frame) => this.connection.write({ ...frame, type: "extension_ui_response", sessionId: handle }),

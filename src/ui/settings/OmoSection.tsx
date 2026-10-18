@@ -71,6 +71,8 @@ export function OmoSection() {
   const diagnostics = useDiagnostics();
   const installer = useInstaller();
   const update = useAppSelector((state) => state.bridge?.update);
+  const transport = useAppSelector((state) => (state.bridge?.state === "connected" ? state.bridge.transport : undefined));
+  const hostNotice = useAppSelector((state) => (state.bridge?.state === "connected" ? state.bridge.hostNotice ?? null : null));
   const { preferences } = useUiState();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -82,6 +84,15 @@ export function OmoSection() {
     setSaveError(null);
     updatePreferences({ omoAutoUpdate: preferences?.omoAutoUpdate === false }).then(
       () => setSaving(false),
+      (error: unknown) => { setSaving(false); setSaveError(errorMessage(error)); },
+    );
+  };
+
+  const toggleSharedHost = (): void => {
+    setSaving(true);
+    setSaveError(null);
+    updatePreferences({ sharedHost: preferences?.sharedHost !== true }).then(
+      () => { setSaving(false); runRestart(); },
       (error: unknown) => { setSaving(false); setSaveError(errorMessage(error)); },
     );
   };
@@ -119,6 +130,28 @@ export function OmoSection() {
               : update.state === "failed"
                 ? t("shell.settings.omo.update.failed", { message: update.message })
                 : t(`shell.settings.omo.update.${update.state}`)}
+          </p>
+        )}
+        <SettingRow title={t("shell.settings.omo.sharedHost")} hint={t("shell.settings.omo.sharedHostHint")}>
+          <Button
+            variant="outline"
+            data-testid={TESTID.omoSharedHost}
+            aria-label={t("shell.settings.omo.sharedHost")}
+            aria-pressed={preferences?.sharedHost === true}
+            disabled={saving || preferences === null || restart.kind === "running"}
+            onClick={toggleSharedHost}
+          >
+            {t(preferences?.sharedHost === true ? "shell.settings.omo.sharedHostOn" : "shell.settings.omo.sharedHostOff")}
+          </Button>
+        </SettingRow>
+        {transport !== undefined && (
+          <p className={css.cardFooter} role="status" data-testid={TESTID.omoHostTransport} data-transport={transport}>
+            {t(`shell.settings.omo.transport.${transport}`)}
+          </p>
+        )}
+        {hostNotice !== null && (
+          <p className={css.rowError} role="alert" data-testid={TESTID.omoHostNotice}>
+            {t("shell.settings.omo.hostNotice", { message: hostNotice })}
           </p>
         )}
         {saveError !== null && <p className={css.rowError} role="alert">{t("shell.settings.saveFailed", { message: saveError })}</p>}

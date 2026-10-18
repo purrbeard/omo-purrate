@@ -150,6 +150,7 @@ const GROUPS: readonly SectionGroup[] = [
         icon: IconApiOutlineMedium,
         keys: [
           "shell.settings.omo.autoUpdate",
+          "shell.settings.omo.sharedHost",
           "shell.settings.omo.serverTitle",
           "shell.settings.omo.installTitle",
           "shell.settings.proxy.url",

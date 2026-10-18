@@ -6,6 +6,8 @@ import { AppServerClient, AppServerStartError, BRIDGE_ERROR_CODES, RpcRequestErr
 import type { AppServerClientOptions, ExitInfo, InitializeResult } from "./app-server-client";
 import { locateOmo } from "./locate";
 import { NativeAppServerClient } from "./native/client";
+import { ensureSharedHost } from "./native/shared-host";
+import type { SharedHost } from "./native/shared-host";
 import type { LocateOptions, LocateResult } from "./locate";
 import { resolveLoginShellEnv, scrubChildEnv } from "./shell-env";
 import type { LoginShellEnv, ResolveLoginShellEnvOptions } from "./shell-env";
@@ -32,6 +34,9 @@ export interface OmoSupervisorOptions {
   extensionPath?: string;
   /** When supplied, updates once per app lifetime before the first app-server launch. */
   autoUpdate?: AutoUpdateOptions;
+  /** Read on every connect: attach to omo's shared host (`omo host ensure`) before falling back to a private one. */
+  sharedHost?: () => boolean;
+  ensureHost?: (command: string, cwd: string, env: Record<string, string>) => Promise<SharedHost>;
 }
 
 export type SupervisorDiagnostics = Pick<Diagnostics, "omo" | "childPid" | "childPath" | "loginShellEnv">;
@@ -227,7 +232,7 @@ export class OmoSupervisor {
     this.childPath = env["PATH"] ?? null;
     const createClient = this.options.createClient ?? ((options: AppServerClientOptions) => new NativeAppServerClient(options));
     // omo 5.1.34 removed `omo app-server`; one multi-session Native RPC host serves every thread.
-    const client = createClient({
+    const base: AppServerClientOptions = {
       command: binary.path,
       args: ["--mode", "rpc", "--multi-session", "--session-runtime", "in-process", "--extension", this.options.extensionPath ?? path.join(__dirname, "task-message-extension.js")],
       cwd: this.options.homeDir,
@@ -236,7 +241,28 @@ export class OmoSupervisor {
       // The child env drops OMO_* overrides, so omo itself uses <home>/.omo/agent.
       agentDir: this.options.baseEnv[ENV.qaAgentDir] ?? path.join(this.options.homeDir, ".omo", "agent"),
       ...(this.options.stateDir === undefined ? {} : { stateDir: this.options.stateDir }),
-    });
+    };
+    let hostNotice: string | null = null;
+    if (this.options.sharedHost?.() === true) {
+      try {
+        const host = await (this.options.ensureHost ?? ensureSharedHost)(binary.path, this.options.homeDir, env);
+        if (generation !== this.generation) return;
+        const failure = await this.attach(generation, binary, createClient({ ...base, socket: host.socket }), "shared", null);
+        if (failure === null) return;
+        hostNotice = `Could not use the shared omo host at ${host.socket}: ${failure}`;
+      } catch (error) {
+        hostNotice = error instanceof Error ? error.message : String(error);
+      }
+      if (generation !== this.generation) return;
+    }
+    await this.attach(generation, binary, createClient(base), "private", hostNotice);
+  }
+
+  /**
+   * Starts one client. A private host's failure goes through the restart policy; a shared host's failure is
+   * returned instead, so the caller can fall back to a private host. Resolves null once connected or superseded.
+   */
+  private async attach(generation: number, binary: OmoBinary, client: SupervisedClient, transport: "shared" | "private", hostNotice: string | null): Promise<string | null> {
     this.client = client;
     this.setStatus({ state: "starting", omo: binary, userAgent: null });
     client.onNotification((notification) => {
@@ -257,7 +283,12 @@ export class OmoSupervisor {
     try {
       result = await client.start();
     } catch (error) {
-      if (generation !== this.generation || this.client !== client) return;
+      if (generation !== this.generation || this.client !== client) return null;
+      if (transport === "shared") {
+        this.client = null;
+        await client.stop();
+        return error instanceof Error ? error.message : String(error);
+      }
       const startError = error instanceof AppServerStartError ? error : null;
       this.handleExit({
         code: startError?.exitCode ?? null,
@@ -266,11 +297,11 @@ export class OmoSupervisor {
         expected: false,
         message: `omo failed to start: ${error instanceof Error ? error.message : String(error)}`,
       });
-      return;
+      return null;
     }
     if (generation !== this.generation || this.client !== client) {
       await client.stop();
-      return;
+      return null;
     }
     this.setStatus({
       state: "connected",
@@ -279,7 +310,10 @@ export class OmoSupervisor {
       stderrTail: null,
       exitCode: null,
       restartAttempt: 0,
+      transport,
+      hostNotice,
     });
+    return null;
   }
 
   private handleExit(info: ExitInfo & { message?: string }): void {

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Deterministic stand-in for the omo CLI: version, the multi-session Native RPC host, and the session-tree and catalog RPC.
-import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   appendFileSync,
   existsSync,
@@ -14,8 +15,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { createServer } from "node:net";
+import { dirname, join, win32 } from "node:path";
 import { createInterface } from "node:readline";
+import { fileURLToPath } from "node:url";
 import { runDagScenario } from "./dag-scenario.mjs";
 
 const VERSION_LINE = "omo 5.1.4-fake (engine: fake)";
@@ -1008,13 +1011,13 @@ function openSession(frame) {
     const path = typeof frame.sessionPath === "string" ? frame.sessionPath : join(sessionsDir, `${id}.jsonl`);
     record = { thread: { id, path, cwd, createdAt: nowSec(), name: null }, lastEntryId: null, activeTurn: null, settings };
     recordEntry(record, { type: "model_change", provider: settings.provider, modelId: settings.modelId });
-  }
-  record.handle = `rpc-${nextHandle++}`;
-  threads.set(record.thread.id, record);
     // Stands in for the app's extension, which marks sessions opened with its context label.
     if (isRecord(frame.context) && frame.context.created_by === "omo-ui") {
       recordEntry(record, { type: "custom", customType: "omo-ui.origin", data: { createdBy: "omo-ui", surface: frame.context.surface ?? "desktop" } });
     }
+  }
+  record.handle = `rpc-${nextHandle++}`;
+  threads.set(record.thread.id, record);
   handles.set(record.handle, record);
   return { sessionId: record.handle, state: sessionState(record) };
 }
@@ -1050,12 +1053,12 @@ async function prompt(frame, record, reply) {
   if (record.activeTurn !== null) throw new CommandFailure("Agent is already processing a prompt", "already_streaming");
   if (message.includes("SCENARIO:fail")) throw new CommandFailure("Simulated turn failure", "simulated_failure");
   const images = Array.isArray(frame.images) ? frame.images.filter(isRecord) : [];
-  const turn = createTurn(record);
-  record.activeTurn = turn;
-  reply({});
   if (typeof frame.clientMessageId === "string") {
     recordEntry(record, { type: "custom", customType: "rpc_client_message_admission", data: { clientMessageId: frame.clientMessageId, durableSessionId: record.thread.id } });
   }
+  const turn = createTurn(record);
+  record.activeTurn = turn;
+  reply({});
   runTurn(record, turn, message, images).catch((error) => {
     process.stderr.write(`fake-omo: turn crashed: ${error instanceof Error ? error.stack : String(error)}\n`);
   });
@@ -1239,6 +1242,7 @@ function serve() {
   writeLongSession();
   writeSeedSessions();
   process.stderr.write("fake omo rpc host ready\n");
+  if (process.env.FAKE_OMO_SHARED === "1" && logPath !== undefined) appendFileSync(logPath, `${JSON.stringify({ type: "fake_shared_host_connection" })}\n`);
   const lines = createInterface({ input: process.stdin });
   lines.on("line", onLine);
   lines.on("close", () => {
@@ -1334,9 +1338,82 @@ function serveCatalog() {
   lines.on("close", () => { process.exitCode = 0; });
 }
 
+// The shared host mirrors omo's socket transport: <socket>.secret holds 32 bytes, win32 listens on a named pipe derived from
+// the normalized lower-cased path and that secret, and every connection sends the secret before its first JSONL line.
+function sharedSocketPath() {
+  return join(process.env.FAKE_OMO_HOME ?? tmpdir(), "rpc", "rpc.sock");
+}
+
+function pipeAddress(socket, secret) {
+  if (process.platform !== "win32") return socket;
+  const canonical = win32.normalize(socket).toLowerCase();
+  return `\\\\.\\pipe\\senpi-rpc-${createHash("sha256").update(Buffer.concat([Buffer.from(canonical, "utf8"), secret])).digest("hex").slice(0, 32)}`;
+}
+
+function hostEnsure() {
+  const answer = (value, code) => { process.stdout.write(`${JSON.stringify(value)}\n`); process.exitCode = code; };
+  if (process.env.FAKE_OMO_HOST_ENSURE === "fail") {
+    answer({ action: "error", reason: "host_error", detail: "fake shared host refused" }, 1);
+    return;
+  }
+  const socket = sharedSocketPath();
+  mkdirSync(dirname(socket), { recursive: true });
+  if (!existsSync(`${socket}.secret`)) writeFileSync(`${socket}.secret`, randomBytes(32));
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--fake-shared-host", socket], {
+    detached: true, stdio: ["ignore", "pipe", "ignore"], env: process.env, windowsHide: true,
+  });
+  child.stdout.once("data", () => {
+    child.stdout.destroy();
+    child.unref();
+    answer({ action: "start", socket, pid: child.pid, instanceId: "fake-shared-host", generation: 0, reused: false, upgradeable: false }, 0);
+  });
+  child.once("exit", (code) => answer({ action: "error", reason: "host_error", detail: `fake shared host exited with ${code}` }, 1));
+}
+
+/** Serves each authenticated connection with its own stdio fake host and exits once the last connection closes. */
+function serveSharedHost(socket) {
+  const secret = readFileSync(`${socket}.secret`);
+  let live = 0;
+  const idle = setTimeout(() => process.exit(0), 120_000);
+  const server = createServer((connection) => {
+    let received = Buffer.alloc(0);
+    const onData = (chunk) => {
+      received = Buffer.concat([received, chunk]);
+      if (received.length < secret.length) return;
+      connection.off("data", onData);
+      if (!received.subarray(0, secret.length).equals(secret)) { connection.destroy(); return; }
+      clearTimeout(idle);
+      live++;
+      const host = spawn(process.execPath, [fileURLToPath(import.meta.url), ...hostArgs], { env: { ...process.env, FAKE_OMO_SHARED: "1" }, stdio: ["pipe", "pipe", "ignore"], windowsHide: true });
+      const rest = received.subarray(secret.length);
+      if (rest.length > 0) host.stdin.write(rest);
+      connection.pipe(host.stdin);
+      host.stdout.pipe(connection);
+      host.stdin.on("error", () => undefined);
+      connection.on("error", () => undefined);
+      let ended = false;
+      const end = () => {
+        if (ended) return;
+        ended = true;
+        host.kill();
+        connection.destroy();
+        if (--live === 0) server.close(() => process.exit(0));
+      };
+      connection.once("close", end);
+      host.once("exit", end);
+    };
+    connection.on("data", onData);
+  });
+  server.listen(pipeAddress(socket, secret), () => process.stdout.write("ready\n"));
+}
+
 const argv = process.argv.slice(2);
 const hostArgs = ["--mode", "rpc", "--multi-session", "--session-runtime", "in-process"];
-if (argv.length === 1 && argv[0] === "--version") {
+if (argv[0] === "host" && argv[1] === "ensure") {
+  hostEnsure();
+} else if (argv.length === 2 && argv[0] === "--fake-shared-host") {
+  serveSharedHost(argv[1]);
+} else if (argv.length === 1 && argv[0] === "--version") {
   process.stdout.write(`${VERSION_LINE}\n`);
 } else if ((argv.length === 5 || (argv.length === 7 && argv[5] === "--extension")) && hostArgs.every((arg, index) => argv[index] === arg)) {
   serve();

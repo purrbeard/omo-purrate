@@ -123,6 +123,7 @@ function run(): void {
     homeDir, baseEnv: process.env, clientVersion: app.getVersion(), stateDir: app.getPath("userData"),
     extensionPath: path.join(app.isPackaged ? process.resourcesPath : __dirname, "task-message-extension.js"),
     autoUpdate: { enabled: () => process.env[ENV.omoAutoUpdate] !== "0" && prefs.get().omoAutoUpdate !== false },
+    sharedHost: () => prefs.get().sharedHost === true,
   });
   const unsubscribeNotification = supervisor.onNotification(attention.onNotification);
   const unsubscribeServerRequest = supervisor.onServerRequest(attention.onServerRequest);

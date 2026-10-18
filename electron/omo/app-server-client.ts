@@ -53,6 +53,8 @@ export interface AppServerClientOptions {
   agentDir?: string;
   /** App-owned scratch directory for the native client's utility sessions. */
   stateDir?: string;
+  /** Shared omo host socket the native client attaches to instead of spawning its own host. */
+  socket?: string;
 }
 
 type Listener<T> = (value: T) => void;

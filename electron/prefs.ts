@@ -121,6 +121,8 @@ function merge(current: Preferences, patch: unknown): Preferences {
     unsettledThreads: has("unsettledThreads") ? threadIds(patch["unsettledThreads"], current.unsettledThreads) : current.unsettledThreads,
     ...(typeof patch["sessionImportCompleted"] === "boolean" ? { sessionImportCompleted: patch["sessionImportCompleted"] }
       : current.sessionImportCompleted === undefined ? {} : { sessionImportCompleted: current.sessionImportCompleted }),
+    ...(typeof patch["sharedHost"] === "boolean" ? { sharedHost: patch["sharedHost"] }
+      : current.sharedHost === undefined ? {} : { sharedHost: current.sharedHost }),
     ...(has("modelProfile") ? { modelProfile: patch["modelProfile"] === null ? null :
       PROFILES.find(value => value === patch["modelProfile"]) ?? current.modelProfile ?? null }
       : current.modelProfile === undefined ? {} : { modelProfile: current.modelProfile }),

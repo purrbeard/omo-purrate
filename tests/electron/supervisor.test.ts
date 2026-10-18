@@ -2,7 +2,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BridgeStatus } from "../../shared/ipc";
 import { RpcRequestError } from "../../electron/omo/app-server-client";
-import type { ExitInfo, InitializeResult } from "../../electron/omo/app-server-client";
+import type { AppServerClientOptions, ExitInfo, InitializeResult } from "../../electron/omo/app-server-client";
 import { OmoSupervisor } from "../../electron/omo/supervisor";
 import type { SupervisedClient } from "../../electron/omo/supervisor";
 
@@ -200,5 +200,44 @@ describe("OmoSupervisor", () => {
     expect(createClient).toHaveBeenCalledTimes(1);
     expect(supervisor.getStatus().state).toBe("stopped");
     await expect(supervisor.respond(1, {})).rejects.toBeInstanceOf(RpcRequestError);
+  });
+});
+
+describe("OmoSupervisor shared host", () => {
+  const sharedOptions = (clients: { options: AppServerClientOptions; client: FakeClient }[], ensureHost: () => Promise<{ socket: string; action: string; instanceId: string | null }>, failShared = false) => new OmoSupervisor({
+    homeDir: "/tmp", baseEnv: {}, clientVersion: "test", resolveEnv: loginEnv,
+    locate: async () => ({ ok: true, binary }),
+    sharedHost: () => true,
+    ensureHost,
+    createClient: (options) => {
+      const client = new FakeClient(failShared && options.socket !== undefined ? new Error("handshake refused") : INIT);
+      clients.push({ options, client });
+      return client;
+    },
+  });
+
+  it("attaches to the socket omo host ensure reports", async () => {
+    const clients: { options: AppServerClientOptions; client: FakeClient }[] = [];
+    const supervisor = sharedOptions(clients, async () => ({ socket: "/agent/rpc/rpc.sock", action: "reuse", instanceId: "i" }));
+    await supervisor.start();
+    expect(supervisor.getStatus()).toMatchObject({ state: "connected", transport: "shared", hostNotice: null });
+    expect(clients.map(entry => entry.options.socket)).toEqual(["/agent/rpc/rpc.sock"]);
+  });
+
+  it("falls back to a private host with a notice when ensure fails", async () => {
+    const clients: { options: AppServerClientOptions; client: FakeClient }[] = [];
+    const supervisor = sharedOptions(clients, async () => { throw new Error("omo host ensure failed (exit 1): host_error"); });
+    await supervisor.start();
+    expect(supervisor.getStatus()).toMatchObject({ state: "connected", transport: "private", hostNotice: "omo host ensure failed (exit 1): host_error" });
+    expect(clients.map(entry => entry.options.socket)).toEqual([undefined]);
+  });
+
+  it("falls back to a private host when the shared host does not initialize, without spending a restart attempt", async () => {
+    const clients: { options: AppServerClientOptions; client: FakeClient }[] = [];
+    const supervisor = sharedOptions(clients, async () => ({ socket: "/agent/rpc/rpc.sock", action: "start", instanceId: null }), true);
+    await supervisor.start();
+    expect(supervisor.getStatus()).toMatchObject({ state: "connected", transport: "private", restartAttempt: 0 });
+    expect(supervisor.getStatus().hostNotice).toBe("Could not use the shared omo host at /agent/rpc/rpc.sock: handshake refused");
+    expect(clients.map(entry => [entry.options.socket, entry.client.stopped])).toEqual([["/agent/rpc/rpc.sock", 1], [undefined, 0]]);
   });
 });

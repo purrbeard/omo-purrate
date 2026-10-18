@@ -67,6 +67,10 @@ export interface BridgeStatus {
   installCommand: typeof OMO_INSTALL_COMMAND | typeof OMO_WINDOWS_INSTALL_COMMAND;
   /** Result of this app launch's automatic update, independent of connection failures. */
   update?: OmoUpdateStatus;
+  /** Whether the connected host is omo's shared host or a private one this app started. */
+  transport?: "shared" | "private";
+  /** Why the shared host was not used although the setting asked for it. */
+  hostNotice?: string | null;
 }
 
 export interface Diagnostics {
@@ -175,6 +179,8 @@ export interface Preferences {
   unsettledThreads: string[];
   /** True once the first-run session import was confirmed or skipped. */
   sessionImportCompleted?: boolean;
+  /** Attach to omo's shared host instead of starting a private one; omitted means off. */
+  sharedHost?: boolean;
 }
 
 /** Preferences every field resets to on "Restore device defaults" (Settings → General, top right). */
