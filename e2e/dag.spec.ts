@@ -1,7 +1,7 @@
 import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, newSession, send, setTheme, shot, tempDir, threadRow } from "./helpers.ts";
+import { byTestId, launchApp, newSession, send, setTheme, shot, tempDir, threadRow, hostRequests, prompts } from "./helpers.ts";
 
 test("running child agents can be stopped from the agent workspace", async () => {
   const launched = await launchApp({ omo: "fake", pickDir: tempDir("agent-stop-workspace"), size: { width: 1440, height: 900 } });
@@ -16,9 +16,9 @@ test("running child agents can be stopped from the agent workspace", async () =>
     const current = threadRow(page, threadId);
     await expect(current).toHaveAttribute("aria-current", "page");
     await stop.click();
-    const cancels = () => launched.readFakeLog().filter(entry => entry.method === "extension_request" && (entry.params as { name?: string })?.name === "omo-ui.task.cancel");
+    const cancels = () => hostRequests(launched.readFakeLog(), "omo-ui.task.cancel");
     await expect.poll(() => cancels().length).toBe(1);
-    expect(cancels()[0]?.params).toEqual({ threadId, name: "omo-ui.task.cancel", data: { taskId: "st_dag_layout" } });
+    expect(cancels()[0]).toEqual({ threadId, name: "omo-ui.task.cancel", data: { taskId: "st_dag_layout" } });
     const tab = page.locator('[data-testid="agent-chat-tab"][data-task-id="st_dag_layout"]');
     await expect(tab).toHaveAttribute("data-status", "cancelled");
     await expect(stop).toHaveCount(0);
@@ -102,7 +102,7 @@ test("compact DAG and nested subagent todos update without disturbing the conver
     await expect(chip).toHaveCount(0);
     await threadRow(page, threadId).getByRole("button").first().click();
     await expect(panel).toBeVisible();
-    expect(launched.readFakeLog().filter((entry) => entry["method"] === "turn/start")).toHaveLength(1);
+    expect(prompts(launched.readFakeLog())).toHaveLength(1);
   } finally {
     await launched.close();
     rmSync(pickDir, { recursive: true, force: true });

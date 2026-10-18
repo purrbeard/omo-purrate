@@ -593,6 +593,8 @@ export const ENV = {
   devUrl: "OMO_UI_DEV_URL",
   /** "0" skips the launch-time omo update regardless of the preference (tests and QA). */
   omoAutoUpdate: "OMO_UI_OMO_AUTO_UPDATE",
+  /** omo's agent directory (sessions, goal stores) when it is not `<home>/.omo/agent` (tests and QA). */
+  qaAgentDir: "OMO_UI_QA_AGENT_DIR",
 } as const;
 
 declare global {

@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ENV } from "../shared/ipc.ts";
 import { ATTACHMENT_HEADER } from "../src/ui/composer/attachments.ts";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, lastTurn, launchApp, newSession, send, setTheme, shot, tempDir, threadRow, type LaunchedApp } from "./helpers.ts";
+import { byTestId, lastTurn, launchApp, newSession, send, setTheme, shot, tempDir, threadRow, type LaunchedApp, prompts, newSessions } from "./helpers.ts";
 
 interface SessionEntry {
   id: string;
@@ -92,18 +92,17 @@ test("edit and repeated regeneration preserve one native session, images, origin
       await expect(users.nth(1).locator("img")).toBeVisible();
       await expect(byTestId(page, TESTID.threadRow)).toHaveCount(1);
       await expect(threadRow(page, threadId)).toHaveAttribute("aria-current", "page");
-      expect(readFakeLog().filter((entry) => entry.method === "turn/start").at(-1)?.params).toMatchObject({
-        threadId, model: "gpt-6-astra", effort: "high",
-        input: [{ type: "text", text: `gamma question\n\n${ATTACHMENT_HEADER}\n- ${image}`, text_elements: [] }],
-      });
+      expect(prompts(readFakeLog()).at(-1)).toEqual({ threadId, message: `gamma question\n\n${ATTACHMENT_HEADER}\n- ${image}` });
+      expect(readFakeLog().filter((entry) => entry["type"] === "set_model").at(-1)).toMatchObject({ threadId, modelId: "gpt-6-astra" });
+      expect(readFakeLog().filter((entry) => entry["type"] === "set_thinking_level").at(-1)).toMatchObject({ threadId, level: "high" });
       await expect(byTestId(page, TESTID.modelPicker)).toContainText("GPT-6 Astra");
       await expect(byTestId(page, TESTID.reasoningPicker)).toHaveAttribute("data-effort", "high");
     }
     const log = readFakeLog();
-    const starts = log.filter((entry) => entry.method === "turn/start");
+    const starts = prompts(log);
     expect(starts).toHaveLength(5);
-    expect(starts.every((entry) => (entry.params as { threadId: string }).threadId === threadId)).toBe(true);
-    expect(log.filter((entry) => entry.method === "thread/start")).toHaveLength(1);
+    expect(starts.every((entry) => entry.threadId === threadId)).toBe(true);
+    expect(newSessions(log)).toHaveLength(1);
     expect(log.filter((entry) => entry.type === "navigate_tree")).toHaveLength(3);
     expect(log.filter((entry) => entry.type === "extension_request" && entry.name === "omoui.tree.persist")).toHaveLength(3);
     expect(readdirSync(sessionDir).filter((name) => name.endsWith(".jsonl"))).toEqual(sessionFiles);
@@ -136,7 +135,7 @@ test("edit and repeated regeneration preserve one native session, images, origin
     await expect(users.nth(1).locator("img")).toBeVisible();
     const selected = entries().at(-1)!;
     expect(selected).toMatchObject({ type: "custom", customType: "omoui.tree.selection", parentId: originalAnswer.id });
-    expect(readFakeLog().filter((entry) => entry.method === "turn/start")).toHaveLength(5);
+    expect(prompts(readFakeLog())).toHaveLength(5);
 
     await launched.close();
     launched = null;
@@ -149,7 +148,7 @@ test("edit and repeated regeneration preserve one native session, images, origin
     await expect(byTestId(launched.page, TESTID.threadRow)).toHaveCount(1);
     expect(readdirSync(sessionDir).filter((name) => name.endsWith(".jsonl"))).toEqual(sessionFiles);
     expect(entries().at(-1)).toEqual(selected);
-    expect(launched.readFakeLog().filter((entry) => entry.method === "turn/start")).toHaveLength(5);
+    expect(prompts(launched.readFakeLog())).toHaveLength(5);
   } finally {
     await launched?.close();
     for (const dir of [fakeHome, pickDir, userData]) rmSync(dir, { recursive: true, force: true });

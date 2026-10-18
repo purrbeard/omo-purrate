@@ -28,22 +28,22 @@ test("context usage and native slash command menu", async () => {
     if (logPath === null) throw new Error("fake log path is required");
     const compactReceived = new Promise<void>((resolve, reject) => {
       const watcher = watch(logPath, () => {
-        if (!launched.readFakeLog().some(frame => frame["method"] === "thread/compact/start")) return;
+        if (!launched.readFakeLog().some(frame => frame["type"] === "compact")) return;
         clearTimeout(timeout);
         watcher.close();
         resolve();
       });
       const timeout = setTimeout(() => {
         watcher.close();
-        reject(new Error("fake did not receive thread/compact/start"));
+        reject(new Error("fake did not receive compact"));
       }, 30_000);
       watcher.once("error", error => { clearTimeout(timeout); watcher.close(); reject(error); });
     });
     await compact.click();
     await expect(input).toHaveValue("");
     await compactReceived;
-    expect(launched.readFakeLog().filter(frame => frame["method"] === "thread/compact/start"))
-      .toEqual([expect.objectContaining({ params: { threadId } })]);
+    expect(launched.readFakeLog().filter(frame => frame["type"] === "compact"))
+      .toEqual([expect.objectContaining({ threadId })]);
     await input.fill("/comp");
     await expect(menu.getByRole("option")).toHaveCount(1);
     await expect(compact).toBeVisible();

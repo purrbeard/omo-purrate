@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { byTestId, launchApp, shot, tempDir } from "./helpers.ts";
+import { byTestId, launchApp, shot, tempDir, hostRequests } from "./helpers.ts";
 import { TESTID } from "../src/ui/testids.ts";
 
 test("child agents have independent tabs and native task messages without switching the main session", async () => {
@@ -26,9 +26,9 @@ test("child agents have independent tabs and native task messages without switch
     await input.fill("Only this child receives this instruction");
     await workspace.locator('button[type="submit"]').click();
     await expect(input).toHaveValue("");
-    const deliveries = launched.readFakeLog().filter(entry => entry.method === "extension_request" && (entry.params as { name?: string })?.name === "omo-ui.task.send");
+    const deliveries = hostRequests(launched.readFakeLog(), "omo-ui.task.send");
     expect(deliveries).toHaveLength(1);
-    expect(deliveries[0]?.params).toEqual({ threadId: parentId, name: "omo-ui.task.send", data: { taskId, message: "Only this child receives this instruction" } });
+    expect(deliveries[0]).toEqual({ threadId: parentId, name: "omo-ui.task.send", data: { taskId, message: "Only this child receives this instruction" } });
     await expect(mainInput).toBeVisible();
     await input.fill("draft stays with this agent");
     await page.getByTestId("workflow-graph-view").click();

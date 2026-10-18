@@ -120,7 +120,8 @@ function run(): void {
   const homeDir = os.homedir();
   const prefs = new PreferencesStore(app.getPath("userData"));
   const supervisor = new OmoSupervisor({
-    homeDir, baseEnv: process.env, clientVersion: app.getVersion(),
+    homeDir, baseEnv: process.env, clientVersion: app.getVersion(), stateDir: app.getPath("userData"),
+    extensionPath: path.join(app.isPackaged ? process.resourcesPath : __dirname, "task-message-extension.js"),
     autoUpdate: { enabled: () => process.env[ENV.omoAutoUpdate] !== "0" && prefs.get().omoAutoUpdate !== false },
   });
   const unsubscribeNotification = supervisor.onNotification(attention.onNotification);

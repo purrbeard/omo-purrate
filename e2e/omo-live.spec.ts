@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, lastTurn, launchApp, newSession, send, setTheme, shot, tempDir, threadRow, type LaunchedApp } from "./helpers.ts";
+import { byTestId, lastTurn, launchApp, newSession, send, setTheme, shot, tempDir, threadRow, type LaunchedApp, prompts } from "./helpers.ts";
 
 test.describe.configure({ mode: "serial" });
 
@@ -138,7 +138,7 @@ test("relaunch restores phased todo and task receipts without live spinners or a
   launched = null;
   await start();
   const { page, readFakeLog } = current();
-  const turnsBefore = readFakeLog().filter((entry) => entry["method"] === "turn/start").length;
+  const turnsBefore = prompts(readFakeLog()).length;
   const row = threadRow(page, threadId);
   await expect(row).toBeVisible();
   await row.getByRole("button").first().click();
@@ -166,6 +166,6 @@ test("relaunch restores phased todo and task receipts without live spinners or a
   await expect(byTestId(page, TESTID.omoActivity).locator('[data-state="ongoing"]')).toHaveCount(0);
   await expect(byTestId(page, TESTID.omoActivityToggle).locator('[data-state="ongoing"]')).toHaveCount(0);
   await expect(byTestId(page, TESTID.goalStrip)).toHaveCount(0);
-  expect(readFakeLog().filter((entry) => entry["method"] === "turn/start")).toHaveLength(turnsBefore);
+  expect(prompts(readFakeLog())).toHaveLength(turnsBefore);
   await shot(page, "C002-restored");
 });

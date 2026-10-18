@@ -43,7 +43,7 @@ test("USB phone controls omo and Settings tracks detach", async () => {
       const rejected = fake.waitFor((frame) => frame.type === "rpcError" && frame.id === 3);
       fake.send({ type: "rpc", id: 3, method: "config/value/write", params: { threadId } });
       expect((await rejected).error?.code).toBe(-32601);
-      expect(app.readFakeLog().some((entry) => entry["method"] === "config/value/write")).toBe(false);
+      expect(app.readFakeLog().some((entry) => JSON.stringify(entry).includes("config/value/write"))).toBe(false);
 
       // Approval and question round trip: omo asks, the phone answers, omo records the phone's decision.
       const mark = fake.frames.length;
@@ -67,16 +67,16 @@ test("USB phone controls omo and Settings tracks detach", async () => {
       await expect(app.page.locator('[data-pending-approval="false"]')).toBeVisible();
       await app.page.locator('[data-section="general"]').click();
       await app.page.keyboard.press("Escape");
-      const answers = app.readFakeLog().filter((entry) => entry["method"] === undefined && "result" in entry);
-      expect(answers).toContainEqual({ id: asked.id, result: { decision: "accept" } });
-      expect(answers).toContainEqual(expect.objectContaining({ result: { answers: { q1: { answers: ["B"] } } } }));
+      const answers = app.readFakeLog().filter((entry) => entry["type"] === "extension_ui_response");
+      expect(answers).toContainEqual(expect.objectContaining({ threadId, value: "Allow once" }));
+      expect(answers).toContainEqual(expect.objectContaining({ threadId, answers: { q1: { selected: ["B"] } } }));
 
       // An unknown frame type is ignored; the link stays up and later RPCs still answer.
       fake.send({ type: "made-up" });
       const renamed = fake.waitFor((frame) => frame.type === "rpcResult" && frame.id === 5);
       fake.send({ type: "rpc", id: 5, method: "thread/name/set", params: { threadId, name: "From the phone" } });
       await renamed;
-      expect(app.readFakeLog()).toContainEqual(expect.objectContaining({ method: "thread/name/set", params: { threadId, name: "From the phone" } }));
+      expect(app.readFakeLog()).toContainEqual(expect.objectContaining({ type: "set_session_name", threadId, name: "From the phone" }));
       const reconnectMark = fake.frames.length;
       const nextHello = fake.waitFor((frame) => fake.frames.indexOf(frame) >= reconnectMark && frame.type === "hello");
       fake.send([]);

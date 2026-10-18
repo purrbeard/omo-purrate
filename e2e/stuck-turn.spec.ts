@@ -38,10 +38,7 @@ test("a turn whose turn/completed never arrives settles on the idle status and t
   await expect
     .poll(readFakeLog)
     .toContainEqual(
-      expect.objectContaining({
-        method: "turn/start",
-        params: expect.objectContaining({ input: [expect.objectContaining({ text: "second message" })] }),
-      }),
+      expect.objectContaining({ type: "prompt", message: "second message" }),
     );
   await expect(byTestId(page, TESTID.assistantMessage)).toHaveCount(2);
   await expect(lastTurn(page)).toHaveAttribute("data-status", "completed");
@@ -61,10 +58,7 @@ test("a rejected steer into a turn omo already ended sends the message as a new 
   await expect
     .poll(readFakeLog)
     .toContainEqual(
-      expect.objectContaining({
-        method: "turn/start",
-        params: expect.objectContaining({ input: [expect.objectContaining({ text: "after a silent end" })] }),
-      }),
+      expect.objectContaining({ type: "prompt", message: "after a silent end" }),
     );
   await expect(byTestId(page, TESTID.assistantMessage)).toHaveCount(2);
   await expect(lastTurn(page)).toHaveAttribute("data-status", "completed");

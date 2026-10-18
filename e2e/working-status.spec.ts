@@ -20,7 +20,7 @@ test("a silent turn shows how long it has run, and a message sent into it says i
     await expect(detail).toHaveText(/^[2-9]s/, { timeout: 5_000 });
 
     await send(page, "are you still there?");
-    await expect.poll(readFakeLog).toContainEqual(expect.objectContaining({ method: "turn/steer" }));
+    await expect.poll(readFakeLog).toContainEqual(expect.objectContaining({ type: "steer" }));
     await expect(working).toHaveAttribute("data-queued", "true");
     await expect(detail).toContainText("your message is queued");
     await shot(page, "working-queued");

@@ -7,6 +7,7 @@ export interface McpServer {
   tools: McpTool[];
   authStatus: string;
   status?: string;
+  toolCount?: number;
 }
 
 /** Validate at the RPC boundary; discard malformed entries, not forward-compatible statuses. */
@@ -19,7 +20,8 @@ export function normalizeMcpPage(value: unknown): { servers: McpServer[]; nextCu
   for (const entry of value["data"]) {
     if (!object(entry) || typeof entry["name"] !== "string" || typeof entry["authStatus"] !== "string" ||
         !object(entry["tools"]) || !Array.isArray(entry["resources"]) || !Array.isArray(entry["resourceTemplates"]) ||
-        (entry["status"] !== undefined && typeof entry["status"] !== "string")) continue;
+        (entry["status"] !== undefined && typeof entry["status"] !== "string") ||
+        (entry["toolCount"] !== undefined && !(Number.isSafeInteger(entry["toolCount"]) && Number(entry["toolCount"]) >= 0))) continue;
     const info = entry["serverInfo"];
     if (info !== null && (!object(info) || typeof info["name"] !== "string" || typeof info["version"] !== "string")) continue;
     const tools: McpTool[] = [];
@@ -32,7 +34,8 @@ export function normalizeMcpPage(value: unknown): { servers: McpServer[]; nextCu
     servers.push({ name: entry["name"], authStatus: entry["authStatus"],
       serverInfo: info === null ? null : { name: String(info["name"]), version: String(info["version"]) },
       tools: tools.sort((a, b) => a.name.localeCompare(b.name)),
-      ...(typeof entry["status"] === "string" ? { status: entry["status"] } : {}) });
+      ...(typeof entry["status"] === "string" ? { status: entry["status"] } : {}),
+      ...(typeof entry["toolCount"] === "number" ? { toolCount: entry["toolCount"] } : {}) });
   }
   return { servers, nextCursor: value["nextCursor"] };
 }

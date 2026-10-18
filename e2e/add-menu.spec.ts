@@ -1,6 +1,6 @@
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { byTestId, launchApp, newSession, send, setTheme, shot, WT } from "./helpers";
+import { byTestId, launchApp, newSession, send, setTheme, shot, WT, goalCommands, prompts } from "./helpers";
 import { TESTID } from "../src/ui/testids";
 
 const planSkill = { name: "ulw-plan", description: "Write a plan before implementation.", scope: "system", enabled: true, path: "/fake/ulw-plan/SKILL.md" };
@@ -21,16 +21,15 @@ test("terminal context and goal are attached only on send, then activated in ord
     await page.getByRole("menuitem", { name: /^Goal/ }).click();
     await page.getByTestId("context-dialog-input").fill("Finish the test report");
     await page.getByRole("button", { name: "Add goal", exact: true }).click();
-    expect(readFakeLog().filter(entry => entry["method"] === "thread/goal/set")).toHaveLength(0);
+    expect(goalCommands(readFakeLog())).toEqual([]);
     await send(page, "SCENARIO:echo inspect the context");
     await expect(byTestId(page, TESTID.turn).last()).toHaveAttribute("data-status", "completed");
     await expect(page.getByTestId("goal-draft-chip")).toHaveCount(0);
     const log = readFakeLog();
-    const goals = log.filter(entry => entry["method"] === "thread/goal/set");
-    expect(goals.map(entry => (entry["params"] as { status: string }).status)).toEqual(["paused", "active"]);
-    expect(log.findIndex(entry => entry["method"] === "thread/goal/set")).toBeLessThan(log.findIndex(entry => entry["method"] === "turn/start"));
-    const input = (log.find(entry => entry["method"] === "turn/start")?.["params"] as { input: unknown }).input;
-    expect(input).toEqual(expect.arrayContaining([expect.objectContaining({ type: "text", text: expect.stringContaining("PS> npm test") })]));
+    expect(goalCommands(log)).toEqual(["/goal Finish the test report", "/goal pause", "/goal resume"]);
+    const isTurn = (entry: Record<string, unknown>): boolean => entry["type"] === "prompt" && !String(entry["message"]).startsWith("/goal");
+    expect(log.findIndex(entry => entry["type"] === "prompt" && entry["message"] === "/goal pause")).toBeLessThan(log.findIndex(isTurn));
+    expect(prompts(log)[0]?.message).toContain("PS> npm test");
   } finally { await launched.close(); }
 });
 
@@ -62,9 +61,9 @@ test("plan menu invokes the installed skill; sketch produces a PNG and keyboard 
     await expect(byTestId(page, TESTID.attachmentThumbnail)).toHaveCount(1);
     await send(page, "SCENARIO:echo plan the layout");
     await expect(byTestId(page, TESTID.turn).last()).toHaveAttribute("data-status", "completed");
-    const input = (readFakeLog().find(entry => entry["method"] === "turn/start")?.["params"] as { input: unknown }).input;
-    expect(input).toEqual(expect.arrayContaining([expect.objectContaining({ type: "text", text: expect.stringMatching(/^\/skill:ulw-plan /) })]));
-    expect(JSON.stringify(input)).toContain(".png");
+    const message = prompts(readFakeLog())[0]?.message ?? "";
+    expect(message).toMatch(/^\/skill:ulw-plan /);
+    expect(message).toContain(".png");
     await page.getByTestId("composer-add").click();
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("composer-add")).toBeFocused();
@@ -98,7 +97,7 @@ test("native attachment selection and menu layout at desktop and narrow widths",
     }
     await send(page, "SCENARIO:echo inspect package");
     await expect(byTestId(page, TESTID.turn).last()).toHaveAttribute("data-status", "completed");
-    expect((readFakeLog().find(entry => entry["method"] === "turn/start")?.["params"] as { input: unknown }).input).toEqual(expect.arrayContaining([expect.objectContaining({ type: "text", text: expect.stringContaining("package.json") })]));
+    expect(prompts(readFakeLog())[0]?.message).toContain("package.json");
   } finally { await launched.close(); }
 });
 
@@ -122,6 +121,6 @@ test("folder references persist per conversation and installed skills can be sel
     await byTestId(page, TESTID.composerInput).fill("/ulw-loop SCENARIO:echo inspect folder");
     await byTestId(page, TESTID.composerInput).press("Enter");
     await expect(byTestId(page, TESTID.turn).last()).toHaveAttribute("data-status", "completed");
-    expect((readFakeLog().find(entry => entry["method"] === "turn/start")?.["params"] as { input: unknown }).input).toEqual(expect.arrayContaining([expect.objectContaining({ type: "text", text: expect.stringMatching(/^\/skill:ulw-loop /) })]));
+    expect(prompts(readFakeLog())[0]?.message).toMatch(/^\/skill:ulw-loop /);
   } finally { await launched.close(); }
 });

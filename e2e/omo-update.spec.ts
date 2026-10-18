@@ -44,7 +44,7 @@ test("update checks are nonblocking and the localized setting persists across ap
     await launched.app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.setContentSize(600, 820); });
     await shot(launched.page, "omo-update-disabled-ko-narrow");
     expect(readFileSync(path.join(home, "update.log"), "utf8")).toBe(
-      "check\napp-server 5.1.4\ncheck\napp-server 5.1.4\napp-server 5.1.4\n",
+      "check\nrpc 5.1.4\ncheck\nrpc 5.1.4\nrpc 5.1.4\n",
     );
   } finally {
     await launched?.close();

@@ -2,7 +2,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, newSession, shot, tempDir, type LaunchedApp } from "./helpers.ts";
+import { byTestId, launchApp, newSession, shot, tempDir, type LaunchedApp, prompts, newSessions } from "./helpers.ts";
 
 test.describe.configure({ mode: "serial" });
 
@@ -98,9 +98,9 @@ test("New project picks a folder and starts a thread there", async () => {
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(byTestId(page, TESTID.newSession)).toHaveText(/New project/);
   const threadId = await newSession(page);
-  const started = readFakeLog().filter((frame) => frame["method"] === "thread/start");
+  const started = newSessions(readFakeLog());
   expect(started).toHaveLength(1);
-  expect(started[0]).toMatchObject({ params: { cwd: pickDir } });
+  expect(started[0]).toMatchObject({ cwd: pickDir });
   const group = page.locator(`[data-testid="${TESTID.workspaceGroup}"][data-cwd=${JSON.stringify(pickDir)}]`);
   await expect(group).toBeVisible();
   await expect(group.locator(`[data-testid="${TESTID.threadRow}"][data-thread-id="${threadId}"]`)).toHaveAttribute("aria-current", "page");
@@ -140,13 +140,7 @@ test("a magic keyword highlights, shows the hint and is sent unchanged", async (
   await expect(input).toHaveValue("");
   await expect(hint).toHaveCount(0);
   const sentTexts = (): string[] =>
-    readFakeLog()
-      .filter((frame) => frame["method"] === "turn/start")
-      .flatMap((frame) => {
-        const params = frame["params"];
-        const input = typeof params === "object" && params !== null && "input" in params ? params.input : [];
-        return Array.isArray(input) ? input.map((item: { text?: unknown }) => String(item.text)) : [];
-      });
+    prompts(readFakeLog()).map((entry) => entry.message);
   await expect.poll(sentTexts).toEqual(["ulw fix the login bug"]);
   await expect(byTestId(page, TESTID.userMessage).last()).toContainText("ulw fix the login bug");
 });

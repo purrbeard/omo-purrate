@@ -124,6 +124,8 @@ export async function launchApp(options: LaunchOptions): Promise<LaunchedApp> {
     env[ENV.omoBin] = FAKE_OMO;
     env["FAKE_OMO_HOME"] = fakeHome;
     env["FAKE_OMO_LOG"] = fakeLog;
+    // The app lists threads from omo's agent directory; the fake keeps its sessions under FAKE_OMO_HOME.
+    env[ENV.qaAgentDir] = fakeHome;
   }
 
   env["OMO_UI_IPHONE_BRIDGE"] = "0";
@@ -324,4 +326,26 @@ export async function tokenColors(page: Page, foreground: string, background: st
     probe.remove();
     return colors;
   }, { fg: foreground, bg: background });
+}
+
+/** The fake omo's prompts in order, without /goal commands: the text each turn sent and the thread it went to. */
+export function prompts(log: Record<string, unknown>[]): Array<{ threadId: string; message: string }> {
+  return log.flatMap((entry) => entry["type"] === "prompt" && typeof entry["message"] === "string" && !entry["message"].startsWith("/goal")
+    ? [{ threadId: String(entry["threadId"]), message: entry["message"] }] : []);
+}
+
+/** The /goal commands the app sent, in order. */
+export function goalCommands(log: Record<string, unknown>[]): string[] {
+  return log.flatMap((entry) => entry["type"] === "prompt" && typeof entry["message"] === "string" && entry["message"].startsWith("/goal") ? [entry["message"]] : []);
+}
+
+/** Sessions the app created: open_session without a session file, so not a resume, a fork or a utility session. */
+export function newSessions(log: Record<string, unknown>[]): Record<string, unknown>[] {
+  return log.filter((entry) => entry["type"] === "open_session" && entry["sessionPath"] === undefined);
+}
+
+/** Extension requests the omo host received for one handler, as { threadId, name, data }. */
+export function hostRequests(log: Record<string, unknown>[], name: string): Array<{ threadId: unknown; name: unknown; data: unknown }> {
+  return log.flatMap((entry) => entry["type"] === "extension_request" && entry["name"] === name && entry["threadId"] !== undefined
+    ? [{ threadId: entry["threadId"], name: entry["name"], data: entry["data"] }] : []);
 }

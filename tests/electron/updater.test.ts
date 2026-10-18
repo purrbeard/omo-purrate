@@ -7,8 +7,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OMO_INSTALL_SCRIPT_URL, OMO_WINDOWS_INSTALL_SCRIPT_URL } from "../../shared/ipc";
 import type { OmoBinary, OmoUpdateStatus } from "../../shared/ipc";
-import { AppServerClient } from "../../electron/omo/app-server-client";
 import type { SpawnImpl } from "../../electron/omo/app-server-client";
+import { NativeAppServerClient } from "../../electron/omo/native/client";
 import { OmoSupervisor } from "../../electron/omo/supervisor";
 import { autoUpdateOmo, compareVersions, runUpdateCommand } from "../../electron/omo/updater";
 import type { UpdateCommand, UpdateCommandRunner } from "../../electron/omo/updater";
@@ -154,29 +154,29 @@ describe("startup with real fake command processes", () => {
       resolveEnv: async () => ({ env, fromLoginShell: false }),
       locate: async () => ({ ok: true, binary: { ...binary, path: path.join(home, process.platform === "win32" ? "omo.exe" : "omo") } }),
       autoUpdate: { enabled: () => enabled, run },
-      createClient: (options) => new AppServerClient({ ...options, spawnImpl: fakeSpawn }),
+      createClient: (options) => new NativeAppServerClient({ ...options, spawnImpl: fakeSpawn }),
     });
     return { supervisor, home, ready, childClosed: () => childClosed, updaterChild: () => updaterChild };
   }
 
-  it("installs with a fake command, then spawns and connects the app server with the new version", async () => {
+  it("installs with a fake command, then spawns and connects the omo host with the new version", async () => {
     const { supervisor, home } = await setup("newer");
     try {
       await supervisor.start();
       expect(supervisor.getStatus()).toMatchObject({ state: "connected", omo: { version: "5.1.5" }, update: { state: "updated" } });
-      expect(await readFile(path.join(home, "update.log"), "utf8")).toBe("check\ninstall\napp-server 5.1.5\n");
+      expect(await readFile(path.join(home, "update.log"), "utf8")).toBe("check\ninstall\nrpc 5.1.5\n");
       await supervisor.restart();
-      expect(await readFile(path.join(home, "update.log"), "utf8")).toBe("check\ninstall\napp-server 5.1.5\napp-server 5.1.5\n");
+      expect(await readFile(path.join(home, "update.log"), "utf8")).toBe("check\ninstall\nrpc 5.1.5\nrpc 5.1.5\n");
     } finally {
       await supervisor.stop();
     }
   });
-  it("an offline check still spawns and connects the old app server", async () => {
+  it("an offline check still spawns and connects the old omo host", async () => {
     const { supervisor, home } = await setup("offline");
     try {
       await supervisor.start();
       expect(supervisor.getStatus()).toMatchObject({ state: "connected", update: { state: "failed", message: "offline" } });
-      expect(await readFile(path.join(home, "update.log"), "utf8")).toBe("check\napp-server 5.1.4\n");
+      expect(await readFile(path.join(home, "update.log"), "utf8")).toBe("check\nrpc 5.1.4\n");
     } finally { await supervisor.stop(); }
   });
   it("disabled startup performs no check and launches immediately", async () => {
@@ -184,7 +184,7 @@ describe("startup with real fake command processes", () => {
     try {
       await supervisor.start();
       expect(supervisor.getStatus()).toMatchObject({ state: "connected", update: { state: "disabled" } });
-      expect(await readFile(path.join(home, "update.log"), "utf8")).toBe("app-server 5.1.4\n");
+      expect(await readFile(path.join(home, "update.log"), "utf8")).toBe("rpc 5.1.4\n");
     } finally { await supervisor.stop(); }
   });
   it("kills a hung checker at the exact fake deadline and still launches", async () => {
@@ -195,17 +195,17 @@ describe("startup with real fake command processes", () => {
       await ready;
       await vi.advanceTimersByTimeAsync(20_000);
       await childClosed();
-      // Real app-server RPC timeouts are not the behavior under test.
+      // Real omo RPC timeouts are not the behavior under test.
       vi.useRealTimers();
       await started;
       expect(supervisor.getStatus()).toMatchObject({ state: "connected", update: { state: "failed", message: "omo update timed out after 20000 ms" } });
-      expect(await readFile(path.join(home, "update.log"), "utf8")).toBe("check\napp-server 5.1.4\n");
+      expect(await readFile(path.join(home, "update.log"), "utf8")).toBe("check\nrpc 5.1.4\n");
     } finally {
       vi.useRealTimers();
       await supervisor.stop();
     }
   });
-  it("quitting during a check cancels it without spawning an app server", async () => {
+  it("quitting during a check cancels it without spawning an omo host", async () => {
     const { supervisor, home, ready, childClosed } = await setup("timeout");
     const started = supervisor.start();
     try {

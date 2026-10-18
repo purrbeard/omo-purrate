@@ -67,7 +67,7 @@ test("full scenario: reasoning, approval, question, markdown answer", async () =
   await byTestId(page, TESTID.approvalAccept).click();
   await expect
     .poll(readFakeLog)
-    .toContainEqual(expect.objectContaining({ id: "approval-1", result: { decision: "accept" } }));
+    .toContainEqual(expect.objectContaining({ type: "extension_ui_response", value: "Allow once" }));
   await expect(approval).toBeHidden();
   const tool = page.locator(`[data-testid="${TESTID.toolCard}"][data-tool="eval"]`);
   await expect(tool).toHaveAttribute("data-status", "completed");
@@ -81,7 +81,7 @@ test("full scenario: reasoning, approval, question, markdown answer", async () =
   await byTestId(page, TESTID.questionSubmit).click();
   await expect
     .poll(readFakeLog)
-    .toContainEqual(expect.objectContaining({ id: "user-input-1", result: { answers: { q1: { answers: ["B"] } } } }));
+    .toContainEqual(expect.objectContaining({ type: "extension_ui_response", answers: { q1: { selected: ["B"] } } }));
   await expect(question).toBeHidden();
 
   await expect(lastTurn(page)).toHaveAttribute("data-status", "completed");
@@ -106,7 +106,7 @@ test("slow scenario stops on interrupt", async () => {
   const turn = lastTurn(page);
   await expect(turn.locator(`[data-testid="${TESTID.assistantMessage}"]`)).toContainText("tick 3");
   await byTestId(page, TESTID.composerStop).click();
-  await expect.poll(readFakeLog).toContainEqual(expect.objectContaining({ method: "turn/interrupt" }));
+  await expect.poll(readFakeLog).toContainEqual(expect.objectContaining({ type: "abort" }));
   await expect(turn).toHaveAttribute("data-status", "interrupted");
   await expect(byTestId(page, TESTID.composerStop)).toBeHidden();
   await expect(byTestId(page, TESTID.composerSend)).toBeVisible();

@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, newSession, send, setTheme, shot, tempDir, threadRow, type LaunchedApp } from "./helpers.ts";
+import { byTestId, launchApp, newSession, send, setTheme, shot, tempDir, threadRow, type LaunchedApp, prompts } from "./helpers.ts";
 
 test.describe.configure({ mode: "serial" });
 
@@ -39,18 +39,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 function turnStarts(log: Record<string, unknown>[]): TurnStart[] {
-  return log.flatMap((frame): TurnStart[] => {
-    const params = frame["params"];
-    if (frame["method"] !== "turn/start" || !isRecord(params) || typeof params["threadId"] !== "string") return [];
-    const input = Array.isArray(params["input"]) ? params["input"] : [];
-    const first: unknown = input[0];
-    const text = isRecord(first) && typeof first["text"] === "string" ? first["text"] : "";
-    return [{ threadId: params["threadId"], text }];
-  });
+  return prompts(log).map(({ threadId, message }) => ({ threadId, text: message }));
 }
 
-function methodCount(log: Record<string, unknown>[], method: string): number {
-  return log.filter((frame) => frame["method"] === method).length;
+function commandCount(log: Record<string, unknown>[], type: string): number {
+  return log.filter((frame) => frame["type"] === type).length;
 }
 
 /** Records every thread row id the sidebar ever renders into `<html data-seen-rows>`. */
@@ -183,14 +176,14 @@ test("/btw without a question opens the panel without sending, and the / menu li
   const { page, readFakeLog } = current();
   await page.getByTestId("right-dock-close").click();
   const input = byTestId(page, TESTID.composerInput);
-  const before = { turns: methodCount(readFakeLog(), "turn/start"), threads: methodCount(readFakeLog(), "thread/start") };
+  const before = { turns: commandCount(readFakeLog(), "prompt"), threads: commandCount(readFakeLog(), "open_session") };
   await input.fill("/btw");
   await input.press("Escape");
   await input.press("Enter");
   await expect(panel(page)).toBeVisible();
   await expect(input).toHaveValue("");
-  expect(methodCount(readFakeLog(), "turn/start")).toBe(before.turns);
-  expect(methodCount(readFakeLog(), "thread/start")).toBe(before.threads);
+  expect(commandCount(readFakeLog(), "prompt")).toBe(before.turns);
+  expect(commandCount(readFakeLog(), "open_session")).toBe(before.threads);
 
   await input.fill("/bt");
   const command = page.locator(`[data-testid="${TESTID.commandOption}"][data-command="btw"]`);
@@ -224,8 +217,8 @@ test("/btw while a main turn runs neither steers nor interrupts it", async () =>
   await expect(input).toHaveValue("");
   await expect(sideAnswer(page)).toContainText('Side answer to "are we there yet?"');
   await expect(running).toHaveAttribute("data-status", "inProgress");
-  expect(methodCount(readFakeLog(), "turn/steer")).toBe(0);
-  expect(methodCount(readFakeLog(), "turn/interrupt")).toBe(0);
+  expect(commandCount(readFakeLog(), "steer")).toBe(0);
+  expect(commandCount(readFakeLog(), "abort")).toBe(0);
   await shot(page, "C002-running");
   await byTestId(page, TESTID.composerStop).click();
   await expect(running).toHaveAttribute("data-status", "interrupted");

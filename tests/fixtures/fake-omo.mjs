@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// Deterministic stand-in for the omo CLI: version, app-server, and native session-tree RPC.
+// Deterministic stand-in for the omo CLI: version, the multi-session Native RPC host, and the session-tree and catalog RPC.
 import { randomUUID } from "node:crypto";
 import {
   appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
-  statSync,
+  utimesSync,
   watch,
   writeFileSync,
 } from "node:fs";
@@ -19,31 +19,32 @@ import { createInterface } from "node:readline";
 import { runDagScenario } from "./dag-scenario.mjs";
 
 const VERSION_LINE = "omo 5.1.4-fake (engine: fake)";
-const USAGE = "usage: fake-omo --version | fake-omo app-server --listen stdio://\n";
+const SERVER_VERSION = "5.1.4-fake";
+const USAGE = "usage: fake-omo --version | fake-omo --mode rpc --multi-session --session-runtime in-process [--extension <path>]\n";
 const MAX_SLOW_TICKS = 300;
-
-const NOT_FOUND = -32601;
-const INVALID_REQUEST = -32600;
-const INVALID_PARAMS = -32602;
-const SERVER_ERROR = -32000;
+const PERMISSION_OPTIONS = ["Allow once", "Allow always", "Deny", "Deny with feedback"];
 // FAKE_OMO_DEMO names a JSON file with scripted presentation content for scripts/readme-media.mjs:
 // { session?: { model, modelProvider }, models?: [...], scenes: [{ match, steps }], sideAnswers?: [{ match, reply, chunks?, chunkMs? }] }.
 // A turn whose text contains a scene's `match` plays its steps (runDemoScene); tests never set the variable.
 const DEMO = process.env.FAKE_OMO_DEMO === undefined ? null : JSON.parse(readFileSync(process.env.FAKE_OMO_DEMO, "utf8"));
+const DEFAULT_MODEL = { provider: DEMO?.session?.modelProvider ?? "fake", id: DEMO?.session?.model ?? "alpha" };
 
+// Durable session id -> session, and omo's per-connection routing handle (`rpc-N`) -> session.
 const threads = new Map();
+const handles = new Map();
 const pendingResponses = new Map();
 const timers = new Set();
 const watchers = new Set();
 let home = "";
 let sessionsDir = "";
 let logPath;
-let initialized = false;
+let nextHandle = 1;
 
-class RpcFailure extends Error {
-  constructor(code, message) {
+/** A command refused with `success: false`, like omo's response envelope. */
+class CommandFailure extends Error {
+  constructor(message, errorCode) {
     super(message);
-    this.code = code;
+    this.errorCode = errorCode;
   }
 }
 
@@ -51,28 +52,14 @@ class Interrupted extends Error {}
 
 const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 const nowSec = () => Date.now() / 1000;
-const sessionPath = (id) => join(sessionsDir, `${id}.jsonl`);
 
 function write(frame) {
   process.stdout.write(`${JSON.stringify(frame)}\n`);
 }
 
-function notify(method, params) {
-  write({ method, params, emittedAtMs: Date.now() });
-}
-
-function respond(id, result) {
-  write({ id, result });
-}
-
-function fail(id, code, message) {
-  write({ id, error: { code, message } });
-}
-
-function requireString(params, key) {
-  const value = params[key];
-  if (typeof value !== "string") throw new RpcFailure(INVALID_PARAMS, `Invalid params: ${key}`);
-  return value;
+/** One session record, tagged with the routing handle the client opened the session under. */
+function event(record, type, fields = {}) {
+  write({ type, sessionId: record.handle, ...fields });
 }
 
 function firstText(input) {
@@ -90,50 +77,25 @@ function splitInto(text, count) {
   return chunks;
 }
 
-// ---- threads and session files ------------------------------------------------------------
+// ---- sessions and their files ----------------------------------------------------------------
 
-function defaultThread(id) {
-  const now = nowSec();
-  return {
-    id,
-    sessionId: id,
-    preview: "",
-    ephemeral: false,
-    modelProvider: "fake",
-    createdAt: now,
-    updatedAt: now,
-    status: { type: "idle" },
-    path: sessionPath(id),
-    cwd: home,
-    cliVersion: "5.1.4-fake",
-    source: "appServer",
-    name: null,
-    turns: [],
+function writeHeader(record) {
+  mkdirSync(dirname(record.thread.path), { recursive: true });
+  const header = {
+    type: "session",
+    version: 3,
+    id: record.thread.id,
+    timestamp: new Date(record.thread.createdAt * 1000).toISOString(),
+    cwd: record.thread.cwd,
   };
-}
-
-function addThread(thread, extra = {}) {
-  const record = { thread, loaded: false, archived: false, lastEntryId: null, activeTurn: null, ...extra };
-  threads.set(thread.id, record);
-  return record;
+  writeFileSync(record.thread.path, `${JSON.stringify(header)}\n`);
 }
 
 function recordEntry(record, entry) {
-  const file = record.thread.path ?? sessionPath(record.thread.id);
-  if (!existsSync(file)) {
-    mkdirSync(dirname(file), { recursive: true });
-    const header = {
-      type: "session",
-      version: 3,
-      id: record.thread.id,
-      timestamp: new Date(record.thread.createdAt * 1000).toISOString(),
-      cwd: record.thread.cwd,
-    };
-    writeFileSync(file, `${JSON.stringify(header)}\n`);
-  }
+  if (!existsSync(record.thread.path)) writeHeader(record);
   const id = randomUUID().slice(0, 8);
   const line = { ...entry, id, parentId: record.lastEntryId, timestamp: new Date().toISOString() };
-  appendFileSync(file, `${JSON.stringify(line)}\n`);
+  appendFileSync(record.thread.path, `${JSON.stringify(line)}\n`);
   record.lastEntryId = id;
 }
 
@@ -146,9 +108,9 @@ const zeroUsage = () => ({
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 });
 
-const userEntry = (text) => ({
+const userEntry = (text, images = []) => ({
   type: "message",
-  message: { role: "user", content: [{ type: "text", text }], timestamp: Date.now() },
+  message: { role: "user", content: [{ type: "text", text }, ...images], timestamp: Date.now() },
 });
 
 function expandSkills(text) {
@@ -195,10 +157,10 @@ const toolResultEntry = (toolCallId, toolName, text, isError, details) => ({
   },
 });
 
-function loadSessionFile(file) {
+function loadSession(file) {
   const lines = [];
   for (const raw of readFileSync(file, "utf8").split("\n")) {
-    if (raw.length === 0) continue;
+    if (raw.trim() === "") continue;
     try {
       lines.push(JSON.parse(raw));
     } catch (error) {
@@ -206,51 +168,85 @@ function loadSessionFile(file) {
     }
   }
   const header = lines[0];
-  if (!isRecord(header) || header.type !== "session" || typeof header.id !== "string") return;
-  const thread = {
-    ...defaultThread(header.id),
-    path: file,
-    cwd: typeof header.cwd === "string" ? header.cwd : home,
-    createdAt: Date.parse(String(header.timestamp)) / 1000,
-    updatedAt: statSync(file).mtimeMs / 1000,
-  };
+  if (!isRecord(header) || header.type !== "session" || typeof header.id !== "string") {
+    throw new CommandFailure(`Not an omo session file: ${file}`, "invalid_session");
+  }
   let lastEntryId = null;
-  let archived = false;
+  let name = null;
   for (const entry of lines.slice(1)) {
     if (!isRecord(entry)) continue;
     if (typeof entry.id === "string") lastEntryId = entry.id;
-    if (entry.type === "session_info" && typeof entry.name === "string") thread.name = entry.name;
-    if (entry.type === "custom" && entry.customType === "fake-omo.archived") archived = true;
-    if (entry.type === "custom" && entry.customType === "fake-omo.unarchived") archived = false;
-    if (entry.type === "message" && isRecord(entry.message) && entry.message.role === "user" && thread.preview === "") {
-      thread.preview = firstText(Array.isArray(entry.message.content) ? entry.message.content : []);
-    }
+    if (entry.type === "session_info") name = typeof entry.name === "string" ? entry.name : null;
   }
-  const entries = new Map(lines.slice(1).filter((entry) => isRecord(entry) && typeof entry.id === "string").map((entry) => [entry.id, entry]));
-  const branch = [];
-  for (let id = lastEntryId; id !== null;) {
-    const entry = entries.get(id);
-    if (entry === undefined) break;
-    branch.push(entry);
-    id = typeof entry.parentId === "string" ? entry.parentId : null;
+  return {
+    thread: { id: header.id, path: file, cwd: typeof header.cwd === "string" ? header.cwd : home, createdAt: Date.parse(String(header.timestamp)) / 1000, name },
+    lastEntryId,
+  };
+}
+
+/** FAKE_OMO_SEED_THREADS holds [{ id, cwd?, name?, preview?, createdAt?, updatedAt? }] (seconds); each seed is written once as a session file. */
+function writeSeedSessions() {
+  const seedFile = process.env.FAKE_OMO_SEED_THREADS;
+  if (seedFile === undefined) return;
+  const seeds = JSON.parse(readFileSync(seedFile, "utf8"));
+  if (!Array.isArray(seeds)) throw new Error("FAKE_OMO_SEED_THREADS must hold a JSON array");
+  for (const seed of seeds) {
+    if (!isRecord(seed) || typeof seed.id !== "string") throw new Error("seed thread needs a string id");
+    const path = join(sessionsDir, `${seed.id}.jsonl`);
+    if (existsSync(path)) continue;
+    const updatedAt = typeof seed.updatedAt === "number" ? seed.updatedAt : nowSec();
+    const createdAt = typeof seed.createdAt === "number" ? seed.createdAt : updatedAt;
+    const record = { thread: { id: seed.id, path, cwd: typeof seed.cwd === "string" ? seed.cwd : home, createdAt }, lastEntryId: null };
+    writeHeader(record);
+    if (typeof seed.preview === "string" && seed.preview !== "") recordEntry(record, userEntry(seed.preview));
+    if (typeof seed.name === "string") recordEntry(record, { type: "session_info", name: seed.name });
+    utimesSync(path, updatedAt, updatedAt);
   }
-  let turn = null;
-  for (const entry of branch.reverse()) {
-    if (entry.type !== "message" || !isRecord(entry.message)) continue;
-    const message = entry.message;
-    if (message.role === "user") {
-      turn = {
-        id: entry.id, items: [{ type: "userMessage", id: entry.id, clientId: null, content: message.content }],
-        itemsView: "full", status: "completed", error: null,
-        startedAt: Math.floor(Date.parse(entry.timestamp) / 1000), completedAt: null, durationMs: null,
-      };
-      thread.turns.push(turn);
-    } else if (turn !== null && message.role === "assistant") {
-      const text = firstText(Array.isArray(message.content) ? message.content : []);
-      if (text !== "") turn.items.push({ type: "agentMessage", id: entry.id, text, phase: "final_answer" });
-    }
+}
+
+// omo's goal extension keeps one store per session beside the session file; times are Unix seconds.
+const goalFile = (record) => join(dirname(record.thread.path), "extensions", "goal", `${record.thread.id}.json`);
+
+function readGoal(record) {
+  try {
+    return JSON.parse(readFileSync(goalFile(record), "utf8")).goal ?? null;
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
   }
-  addThread(thread, { archived, lastEntryId });
+}
+
+function writeGoal(record, goal) {
+  const file = goalFile(record);
+  if (goal === null) {
+    rmSync(file, { force: true });
+    return;
+  }
+  mkdirSync(dirname(file), { recursive: true });
+  const temporary = `${file}.${process.pid}.tmp`;
+  writeFileSync(temporary, JSON.stringify({ version: 1, goal: { id: randomUUID(), ...goal, threadId: record.thread.id } }));
+  renameSync(temporary, file);
+}
+
+/**
+ * The scenarios name what they publish in the app-server terms they were written in; this sends each one the way omo
+ * does: extension events as `extension_event` records, goal changes as writes to the goal store.
+ */
+function notify(method, params, owner = threads.get(params.threadId)) {
+  if (owner === undefined) throw new Error(`fake-omo: ${method} names no open session (${String(params.threadId)})`);
+  switch (method) {
+    case "extension_event":
+      event(owner, "extension_event", { name: params.name, data: params.data });
+      return;
+    case "thread/goal/updated":
+      writeGoal(owner, params.goal);
+      return;
+    case "thread/goal/cleared":
+      writeGoal(owner, null);
+      return;
+    default:
+      throw new Error(`fake-omo: no native record for ${method}`);
+  }
 }
 
 /**
@@ -279,54 +275,7 @@ function writeLongSession() {
   }
 }
 
-function loadPersistedThreads() {
-  for (const name of readdirSync(sessionsDir)) {
-    if (name.endsWith(".jsonl")) loadSessionFile(join(sessionsDir, name));
-  }
-  const seedFile = process.env.FAKE_OMO_SEED_THREADS;
-  if (seedFile === undefined) return;
-  const seeds = JSON.parse(readFileSync(seedFile, "utf8"));
-  if (!Array.isArray(seeds)) throw new Error("FAKE_OMO_SEED_THREADS must hold a JSON array");
-  for (const seed of seeds) {
-    if (!isRecord(seed) || typeof seed.id !== "string") throw new Error("seed thread needs a string id");
-    if (!threads.has(seed.id)) addThread({ ...defaultThread(seed.id), ...seed });
-  }
-}
-
-// Like omo, a session file another process wrote into the sessions directory (a branch) can be resumed by its id.
-function loadSessionById(threadId) {
-  for (const name of readdirSync(sessionsDir)) {
-    if (!name.endsWith(".jsonl")) continue;
-    const file = join(sessionsDir, name);
-    const header = readFileSync(file, "utf8").split("\n", 1)[0];
-    if (header.includes(`"id":"${threadId}"`)) loadSessionFile(file);
-  }
-}
-
-function getThread(threadId) {
-  if (!threads.has(threadId)) loadSessionById(threadId);
-  const record = threads.get(threadId);
-  if (record === undefined) throw new RpcFailure(INVALID_REQUEST, `Thread not found: ${threadId}`);
-  return record;
-}
-
-const threadView = (record, includeTurns) => ({ ...record.thread, turns: includeTurns ? record.thread.turns : [] });
-
-// Like omo, a thread keeps the model and effort set through thread/settings/update and reports them on resume.
-const sessionResult = (record) => {
-  const applied = record.settings?.model;
-  const cut = applied?.indexOf("/") ?? -1;
-  return {
-    thread: threadView(record, true),
-    model: applied === undefined ? DEMO?.session?.model ?? "alpha" : applied.slice(cut + 1),
-    modelProvider: applied === undefined || cut <= 0 ? DEMO?.session?.modelProvider ?? "fake" : applied.slice(0, cut),
-    cwd: record.thread.cwd,
-    reasoningEffort: record.settings?.effort ?? "medium",
-  };
-};
-
-// ---- turns --------------------------------------------------------------------------------
-
+// ---- turns ----------------------------------------------------------------------------------
 function guard(turn, promise) {
   return Promise.race([
     promise,
@@ -373,41 +322,133 @@ function awaitFile(turn, file) {
   );
 }
 
-async function askClient(turn, id, method, params) {
+/** Raises one extension UI dialog and resolves with the client's `extension_ui_response`. */
+async function uiRequest(record, fields, turn = null) {
+  const id = randomUUID();
   const answer = new Promise((resolve) => pendingResponses.set(id, resolve));
-  write({ id, method, params });
+  event(record, "extension_ui_request", { id, ...fields });
   try {
-    return await guard(turn, answer);
+    const response = await (turn === null ? answer : guard(turn, answer));
+    if (fields.method === "question") event(record, "question_resolved", { id, toolCallId: fields.toolCallId, outcome: response.cancelled === true ? "cancelled" : "answered" });
+    return response;
+  } catch (error) {
+    if (error instanceof Interrupted && fields.method === "question") event(record, "question_resolved", { id, toolCallId: fields.toolCallId, outcome: "cancelled" });
+    throw error;
   } finally {
     pendingResponses.delete(id);
-    notify("serverRequest/resolved", { threadId: turn.threadId, requestId: id });
   }
+}
+
+/** omo's permission prompt for a bash call, answered in the app-server approval terms the scenarios check. */
+async function askApproval(turn, { itemId, command }) {
+  const call = { toolCallId: itemId };
+  const choice = await uiRequest(turn.record, { method: "select", title: `Permission required: bash\n\nCommand: $ ${command}`, options: PERMISSION_OPTIONS, ...call }, turn);
+  const value = choice.cancelled === true ? undefined : choice.value;
+  if (value === "Allow once") return { decision: "accept" };
+  if (value === "Allow always") return { decision: "acceptForSession" };
+  if (value === "Deny with feedback") {
+    const feedback = await uiRequest(turn.record, { method: "input", title: "Feedback", placeholder: "Why are you denying this permission? (optional)", ...call }, turn);
+    return { decision: "decline", ...(typeof feedback.value === "string" && feedback.value !== "" ? { reason: feedback.value } : {}) };
+  }
+  return { decision: value === "Deny" ? "decline" : "cancel" };
+}
+
+/** omo's `question` dialog; the answer comes back as `{ answers: { <id>: { answers: string[] } } }`. */
+async function askQuestions(turn, { itemId, questions, timeoutMs = 600000 }) {
+  const response = await uiRequest(turn.record, {
+    method: "question", toolCallId: itemId, waitForAnswer: true, timeout: timeoutMs,
+    questions: questions.map(({ id, header = "", question, options = [], multiSelect = false }) => ({ id, header, question, options, multiSelect })),
+  }, turn);
+  if (response.cancelled === true || !isRecord(response.answers)) return {};
+  return {
+    answers: Object.fromEntries(Object.entries(response.answers).map(([id, answer]) => [id, {
+      answers: [...(Array.isArray(answer?.selected) ? answer.selected : []), ...(typeof answer?.text === "string" && answer.text !== "" ? [answer.text] : [])],
+    }])),
+  };
 }
 
 const nextItemId = (turn) => `item-${++turn.itemSeq}`;
 
-function startItem(turn, item) {
-  turn.wire.items.push(item);
-  notify("item/started", { threadId: turn.threadId, turnId: turn.wire.id, item, startedAtMs: Date.now() });
+const assistantMessage = (content, stopReason, extra = {}) => ({
+  role: "assistant", content, api: "fake", provider: "fake", model: "alpha", usage: zeroUsage(), stopReason, timestamp: Date.now(), ...extra,
+});
+
+function messageUpdate(turn, assistantMessageEvent) {
+  event(turn.record, "message_update", { message: { role: "assistant" }, assistantMessageEvent });
 }
 
-function finishItem(turn, item) {
-  notify("item/completed", { threadId: turn.threadId, turnId: turn.wire.id, item, completedAtMs: Date.now() });
+function toolResult(text, details) {
+  return { content: [{ type: "text", text }], ...(details === undefined ? {} : { details }) };
+}
+
+/** Starts the native records for one wire item: an assistant message for text and reasoning, a tool execution for calls. */
+function startItem(turn, item) {
+  const record = turn.record;
+  switch (item.type) {
+    case "agentMessage":
+      event(record, "message_start", { message: assistantMessage([], "stop") });
+      messageUpdate(turn, { type: "text_start", contentIndex: 0 });
+      return;
+    case "reasoning":
+      event(record, "message_start", { message: assistantMessage([], "toolUse") });
+      messageUpdate(turn, { type: "thinking_start", contentIndex: 0 });
+      return;
+    case "dynamicToolCall":
+      event(record, "tool_execution_start", { toolCallId: item.id, toolName: item.tool, args: item.arguments });
+      return;
+    case "commandExecution":
+      event(record, "tool_execution_start", { toolCallId: item.id, toolName: "bash", args: { command: item.command } });
+      return;
+    default:
+      throw new Error(`fake-omo: no native record for a ${item.type} item`);
+  }
+}
+
+function finishItem(turn, item, stopReason = "stop") {
+  const record = turn.record;
+  switch (item.type) {
+    case "agentMessage":
+      messageUpdate(turn, { type: "text_end", contentIndex: 0, content: item.text });
+      event(record, "message_end", { message: assistantMessage([{ type: "text", text: item.text }], stopReason) });
+      return;
+    case "reasoning": {
+      const thinking = item.content.join("\n");
+      messageUpdate(turn, { type: "thinking_end", contentIndex: 0, content: thinking });
+      event(record, "message_end", { message: assistantMessage([{ type: "thinking", thinking }], "toolUse") });
+      return;
+    }
+    case "dynamicToolCall": {
+      const text = (item.contentItems ?? []).map((content) => content.text).join("");
+      event(record, "tool_execution_end", { toolCallId: item.id, toolName: item.tool, result: toolResult(text, item.details), isError: item.success === false });
+      return;
+    }
+    case "commandExecution":
+      event(record, "tool_execution_end", {
+        toolCallId: item.id, toolName: "bash", result: toolResult(item.aggregatedOutput ?? "", { exitCode: item.exitCode }), isError: item.status !== "completed",
+      });
+      return;
+    default:
+      throw new Error(`fake-omo: no native record for a ${item.type} item`);
+  }
 }
 
 function openAgentMessage(turn) {
-  const item = { type: "agentMessage", id: nextItemId(turn), text: "", phase: null };
+  const item = { type: "agentMessage", id: nextItemId(turn), text: "" };
   startItem(turn, item);
   return item;
 }
 
 function appendAgentDelta(turn, item, delta) {
   item.text += delta;
-  notify("item/agentMessage/delta", { threadId: turn.threadId, turnId: turn.wire.id, itemId: item.id, delta });
+  messageUpdate(turn, { type: "text_delta", contentIndex: 0, delta });
+}
+
+function reasoningDelta(turn, delta) {
+  messageUpdate(turn, { type: "thinking_delta", contentIndex: 0, delta });
 }
 
 function closeAgentMessage(record, turn, item, stopReason) {
-  finishItem(turn, item);
+  finishItem(turn, item, stopReason);
   const entry = assistantEntry([{ type: "text", text: item.text }], stopReason);
   if (item.text === "echo: usage-turn") entry.message.usage = { ...zeroUsage(), input: 24000, output: 1000, totalTokens: 25000 };
   recordEntry(record, entry);
@@ -443,32 +484,20 @@ function firstAnswer(response) {
 }
 
 async function runFull(record, turn) {
-  const reasoning = { type: "reasoning", id: nextItemId(turn), summary: [], content: [] };
+  const reasoning = { type: "reasoning", id: nextItemId(turn), content: [] };
   startItem(turn, reasoning);
-  for (const delta of ["Planning the ", "demo ", "answer."]) {
-    notify("item/reasoning/textDelta", {
-      threadId: turn.threadId,
-      turnId: turn.wire.id,
-      itemId: reasoning.id,
-      delta,
-      contentIndex: 0,
-    });
-  }
+  for (const delta of ["Planning the ", "demo ", "answer."]) reasoningDelta(turn, delta);
   reasoning.content = ["Planning the demo answer."];
   finishItem(turn, reasoning);
 
   const tool = {
     type: "dynamicToolCall",
     id: nextItemId(turn),
-    namespace: null,
     tool: "eval",
     arguments: { language: "js", code: "1+1", summary: "Add numbers" },
-    status: "inProgress",
     contentItems: null,
     success: null,
-    durationMs: null,
   };
-  const toolStartedAtMs = Date.now();
   startItem(turn, tool);
   recordEntry(
     record,
@@ -481,47 +510,20 @@ async function runFull(record, turn) {
     ),
   );
 
-  const approval = await askClient(turn, "approval-1", "item/commandExecution/requestApproval", {
-    threadId: turn.threadId,
-    turnId: turn.wire.id,
-    itemId: tool.id,
-    startedAtMs: toolStartedAtMs,
-    reason: "Permission required: bash",
-    command: "rm -rf /tmp/fake-demo",
-    cwd: record.thread.cwd,
-    availableDecisions: ["accept", "acceptForSession", "decline", "cancel"],
-  });
-  const decision = isRecord(approval) ? approval.decision : undefined;
+  const { decision } = await askApproval(turn, { itemId: tool.id, command: "rm -rf /tmp/fake-demo" });
   const accepted = decision === "accept" || decision === "acceptForSession";
   const resultText = accepted ? '{"text":"2"}' : "declined by user";
-  tool.status = accepted ? "completed" : "failed";
   tool.success = accepted;
   tool.contentItems = [{ type: "inputText", text: resultText }];
-  tool.durationMs = Date.now() - toolStartedAtMs;
   finishItem(turn, tool);
   recordEntry(record, toolResultEntry(tool.id, tool.tool, resultText, !accepted));
 
-  const response = await askClient(turn, "user-input-1", "item/tool/requestUserInput", {
-    threadId: turn.threadId,
-    turnId: turn.wire.id,
+  const response = await askQuestions(turn, {
     itemId: "question-1",
-    questions: [
-      {
-        id: "q1",
-        header: "Pick",
-        question: "Which option?",
-        isOther: true,
-        isSecret: false,
-        options: [
-          { label: "A", description: "first" },
-          { label: "B", description: "second" },
-        ],
-        multiSelect: false,
-      },
-    ],
-    waitForAnswer: true,
-    timeoutMs: 600000,
-    autoResolutionMs: null,
+    questions: [{
+      id: "q1", header: "Pick", question: "Which option?",
+      options: [{ label: "A", description: "first" }, { label: "B", description: "second" }],
+    }],
   });
 
   const reply = `# Demo\n\n- one\n- two\n\n\`\`\`ts\nconst answer: number = 42;\n\`\`\`\n\nYou picked **${firstAnswer(response)}**.`;
@@ -532,27 +534,12 @@ async function runFull(record, turn) {
 
 /** Asks one multi-select question and confirms the first chosen option. */
 async function runMultiQuestion(record, turn) {
-  const response = await askClient(turn, `user-input-${turn.itemSeq}`, "item/tool/requestUserInput", {
-    threadId: turn.threadId,
-    turnId: turn.wire.id,
+  const response = await askQuestions(turn, {
     itemId: `question-${turn.itemSeq}`,
-    questions: [
-      {
-        id: "q1",
-        header: "Checks",
-        question: "Which checks should run?",
-        isOther: false,
-        isSecret: false,
-        options: [
-          { label: "Unit", description: "vitest" },
-          { label: "E2E", description: "Playwright" },
-        ],
-        multiSelect: true,
-      },
-    ],
-    waitForAnswer: true,
-    timeoutMs: 600000,
-    autoResolutionMs: null,
+    questions: [{
+      id: "q1", header: "Checks", question: "Which checks should run?", multiSelect: true,
+      options: [{ label: "Unit", description: "vitest" }, { label: "E2E", description: "Playwright" }],
+    }],
   });
   const item = openAgentMessage(turn);
   appendAgentDelta(turn, item, `Running **${firstAnswer(response)}**.`);
@@ -645,23 +632,23 @@ function demoTask(task, at) {
 }
 
 /**
- * Plays one FAKE_OMO_DEMO scene. Steps: { wait }, { reasoning }, { item, done?, ms? } (any wire item, completed
- * with `done`), { command: { command, output, exitCode, ms?, approval?, cwd? } }, { question }, { todo: phases, durationMs? },
- * { goal }, { dag }, { dagActivity }, { tasks }, { say, chunks?, chunkMs? } ("{{answer}}" becomes the last
- * question's answer) and { hold } (waits for fake.advance or an interrupt).
+ * Plays one FAKE_OMO_DEMO scene. Steps: { wait }, { reasoning }, { item, done?, ms? } (a dynamicToolCall or
+ * commandExecution item, completed with `done`), { command: { command, output, exitCode, ms?, approval? } }, { question },
+ * { todo: phases, durationMs? }, { goal }, { dag }, { dagActivity }, { tasks }, { say, chunks?, chunkMs? } ("{{answer}}" becomes
+ * the last question's answer) and { hold } (waits for fake.advance or an interrupt).
  */
 async function runDemoScene(record, turn, scene) {
   const threadId = record.thread.id;
-  const extension = (name, data) => notify("extension_event", { type: "extension_event", threadId, name, data });
+  const extension = (name, data) => notify("extension_event", { threadId, name, data });
   let answer = "";
   for (const step of scene.steps) {
     const at = new Date().toISOString();
     if ("wait" in step) await sleep(turn, step.wait);
     else if ("reasoning" in step) {
-      const item = { type: "reasoning", id: nextItemId(turn), summary: [], content: [] };
+      const item = { type: "reasoning", id: nextItemId(turn), content: [] };
       startItem(turn, item);
       for (const delta of splitInto(step.reasoning, 4)) {
-        notify("item/reasoning/textDelta", { threadId, turnId: turn.wire.id, itemId: item.id, delta, contentIndex: 0 });
+        reasoningDelta(turn, delta);
         await sleep(turn, 60);
       }
       item.content = [step.reasoning];
@@ -673,41 +660,29 @@ async function runDemoScene(record, turn, scene) {
       Object.assign(item, step.done ?? {});
       finishItem(turn, item);
     } else if ("command" in step) {
-      const { command, output, exitCode, ms, approval, cwd = record.thread.cwd } = step.command;
-      const item = { type: "commandExecution", id: nextItemId(turn), command, cwd, status: "inProgress", aggregatedOutput: null, exitCode: null, durationMs: null };
+      const { command, output, exitCode, ms, approval } = step.command;
+      const item = { type: "commandExecution", id: nextItemId(turn), command, status: "inProgress", aggregatedOutput: null, exitCode: null };
       startItem(turn, item);
-      const startedAtMs = Date.now();
       let accepted = true;
       if (approval !== undefined) {
-        const response = await askClient(turn, `approval-${item.id}`, "item/commandExecution/requestApproval", {
-          threadId, turnId: turn.wire.id, itemId: item.id, startedAtMs, command, cwd,
-          availableDecisions: ["accept", "acceptForSession", "decline", "cancel"], ...approval,
-        });
-        accepted = isRecord(response) && (response.decision === "accept" || response.decision === "acceptForSession");
+        const { decision } = await askApproval(turn, { itemId: item.id, command });
+        accepted = decision === "accept" || decision === "acceptForSession";
       }
       await sleep(turn, accepted ? ms ?? 0 : 0);
-      Object.assign(item, accepted
-        ? { status: "completed", aggregatedOutput: output, exitCode, durationMs: Date.now() - startedAtMs }
-        : { status: "declined", durationMs: Date.now() - startedAtMs });
+      Object.assign(item, accepted ? { status: "completed", aggregatedOutput: output, exitCode } : { status: "declined" });
       finishItem(turn, item);
     } else if ("question" in step) {
-      const response = await askClient(turn, `user-input-${turn.itemSeq}`, "item/tool/requestUserInput", {
-        threadId, turnId: turn.wire.id, itemId: `question-${turn.itemSeq}`,
-        questions: [{ id: "q1", isOther: true, isSecret: false, multiSelect: false, ...step.question }],
-        waitForAnswer: true, timeoutMs: 600000, autoResolutionMs: null,
-      });
-      answer = firstAnswer(response);
+      answer = firstAnswer(await askQuestions(turn, { itemId: `question-${turn.itemSeq}`, questions: [{ id: "q1", ...step.question }] }));
     } else if ("todo" in step) {
-      const tool = { type: "dynamicToolCall", id: nextItemId(turn), namespace: null, tool: "todo", arguments: { op: "init" }, status: "inProgress", contentItems: null, success: null, durationMs: null };
+      const tool = { type: "dynamicToolCall", id: nextItemId(turn), tool: "todo", arguments: { op: "init" }, contentItems: null, success: null };
       startItem(turn, tool);
       recordEntry(record, assistantEntry([{ type: "toolCall", id: tool.id, name: "todo", arguments: tool.arguments }], "toolUse"));
       recordEntry(record, { type: "custom", customType: "senpi.todo-state", data: { schema: "v2", phases: step.todo } });
       recordEntry(record, toolResultEntry(tool.id, "todo", "Todo saved", false));
-      Object.assign(tool, { status: "completed", success: true, contentItems: [{ type: "inputText", text: "Todo saved" }], durationMs: step.durationMs ?? 0 });
+      Object.assign(tool, { success: true, contentItems: [{ type: "inputText", text: "Todo saved" }] });
       finishItem(turn, tool);
     } else if ("goal" in step) {
-      record.goal = { threadId, tokenBudget: null, tokensUsed: 0, timeUsedSeconds: 0, createdAt: nowSec(), updatedAt: nowSec(), ...step.goal };
-      notify("thread/goal/updated", { threadId, turnId: null, goal: record.goal });
+      notify("thread/goal/updated", { threadId, goal: { tokensUsed: 0, timeUsedSeconds: 0, createdAt: Math.floor(nowSec()), updatedAt: Math.floor(nowSec()), ...step.goal } });
     } else if ("dag" in step) extension("omo.dag.updated", { parent_session_id: threadId, runs: [demoRun(step.dag, at)] });
     else if ("dagActivity" in step) extension("omo.dag.activity", { schemaVersion: 1, at, ...step.dagActivity });
     else if ("tasks" in step) extension("omo.task.updated", { parent_session_id: threadId, tasks: step.tasks.map((task) => demoTask(task, at)) });
@@ -733,20 +708,22 @@ function runScenario(record, turn, text) {
   if (text.startsWith(SIDE_MARKER)) return runSide(record, turn, text);
   const scene = DEMO?.scenes?.find((candidate) => text.includes(candidate.match));
   if (scene !== undefined) return runDemoScene(record, turn, scene);
+  // The DAG fixture names child sessions as event owners; omo publishes every one of them on the parent session.
+  const dagNotify = (method, params) => notify(method, params, record);
   if (text.includes("SCENARIO:omo-live")) return runLive(record, turn);
   if (text.includes("SCENARIO:workflow-background")) {
-    const tool = { type: "dynamicToolCall", id: nextItemId(turn), namespace: null, tool: "read", arguments: { path: "shared/protocol.ts" }, status: "inProgress", contentItems: null, success: null, durationMs: null };
+    const tool = { type: "dynamicToolCall", id: nextItemId(turn), tool: "read", arguments: { path: "shared/protocol.ts" }, contentItems: null, success: null };
     startItem(turn, tool);
     recordEntry(record, assistantEntry([{ type: "toolCall", id: tool.id, name: "read", arguments: tool.arguments }], "toolUse"));
-    Object.assign(tool, { status: "completed", success: true, contentItems: [{ type: "inputText", text: "Runtime dependency contract checked." }], durationMs: 120 });
+    Object.assign(tool, { success: true, contentItems: [{ type: "inputText", text: "Runtime dependency contract checked." }] });
     finishItem(turn, tool);
     recordEntry(record, toolResultEntry(tool.id, "read", "Runtime dependency contract checked.", false));
     const message = openAgentMessage(turn);
     appendAgentDelta(turn, message, "Background workflow started. You can continue this conversation.");
     closeAgentMessage(record, turn, message, "stop");
-    return runDagScenario(record, turn, { home, notify, guard, background: true });
+    return runDagScenario(record, turn, { home, notify: dagNotify, guard, background: true });
   }
-  if (text.includes("SCENARIO:dag")) return runDagScenario(record, turn, { home, notify, guard });
+  if (text.includes("SCENARIO:dag")) return runDagScenario(record, turn, { home, notify: dagNotify, guard });
   if (text === "SCENARIO:skills-history") {
     const item = openAgentMessage(turn);
     appendAgentDelta(turn, item, "Built the thing.");
@@ -768,15 +745,16 @@ function runScenario(record, turn, text) {
   }
   if (text.includes("SCENARIO:full")) return runFull(record, turn);
   if (text.includes("SCENARIO:async-question")) {
-    const id = `async-question-${turn.wire.id}`;
-    write({ id, method: "item/tool/requestUserInput", params: {
-      threadId: record.thread.id, turnId: turn.wire.id, itemId: "async-question", waitForAnswer: false,
-      questions: [{ id: "choice", header: "Choice", question: "Pick A or B?", options: [{ label: "A", description: "First" }, { label: "B", description: "Second" }] }],
-    } });
+    // A non-blocking question: omo raises it, the turn ends at once, and the question is withdrawn with the turn.
+    const id = randomUUID();
+    event(record, "extension_ui_request", {
+      id, method: "question", toolCallId: "async-question", waitForAnswer: false,
+      questions: [{ id: "choice", header: "Choice", question: "Pick A or B?", options: [{ label: "A", description: "First" }, { label: "B", description: "Second" }], multiSelect: false }],
+    });
     const item = openAgentMessage(turn);
     appendAgentDelta(turn, item, "The question is waiting for your answer.");
     closeAgentMessage(record, turn, item, "stop");
-    notify("serverRequest/resolved", { threadId: record.thread.id, requestId: id });
+    event(record, "question_resolved", { id, toolCallId: "async-question", outcome: "cancelled" });
     return;
   }
   // SCENARIO:gate:<file> streams nothing until <file> exists, then echoes: a test holds the turn open for as long as it
@@ -894,13 +872,18 @@ function runLive(record, turn) {
   }));
 }
 
-function createTurn(threadId) {
+function createTurn(record) {
   let interrupt = () => {};
   const interruptSignal = new Promise((resolve) => {
     interrupt = resolve;
   });
+  let finished = () => {};
+  const done = new Promise((resolve) => {
+    finished = resolve;
+  });
   return {
-    threadId,
+    threadId: record.thread.id,
+    record,
     itemSeq: 0,
     interrupted: false,
     interruptSignal,
@@ -908,80 +891,66 @@ function createTurn(threadId) {
       this.interrupted = true;
       interrupt();
     },
-    startMs: Date.now(),
-    wire: {
-      id: randomUUID(),
-      items: [],
-      itemsView: "full",
-      status: "inProgress",
-      error: null,
-      startedAt: Math.floor(nowSec()),
-      completedAt: null,
-      durationMs: null,
-    },
+    done,
+    finished,
   };
 }
 
-async function runTurn(record, turn, input, clientId) {
-  const threadId = record.thread.id;
-  record.activeTurn = turn;
-  record.thread.turns.push(turn.wire);
-  record.thread.status = { type: "active", activeFlags: [] };
-  notify("thread/status/changed", { threadId, status: record.thread.status });
-  notify("turn/started", { threadId, turn: { ...turn.wire, items: [] } });
+const SKILLS_HISTORY_TEXT = 'The user explicitly invoked the "ulw-loop" and "mass-ulw" skills. Follow the instructions in <skill-instruction> as binding for this request, while respecting higher-priority instructions.\n\n'
+  + '<skill-instruction name="ulw-loop" location="/fake/skills/ulw-loop/SKILL.md">Run the loop. Literal <skill-instruction example> stays text.</skill-instruction>\n\n'
+  + '<skill-instruction name="mass-ulw" location="/fake/skills/mass-ulw/SKILL.md">Dispatch the workflow.</skill-instruction>\n\n'
+  + '<user-request>build the thing</user-request>\n'
+  + '<omo-ulw-loop-pointer>Follow the synthetic loop. Literal <omo-example stays text.</omo-ulw-loop-pointer>\n'
+  + '<system-reminder>Keep the synthetic context.</system-reminder>';
 
-  const text = firstText(input);
-  startItem(turn, { type: "userMessage", id: nextItemId(turn), clientId: clientId ?? null, content: input });
-  finishItem(turn, turn.wire.items[0]);
-  if (record.thread.preview === "") record.thread.preview = text;
-  const storedText = text === "SCENARIO:skills-history"
-    ? 'The user explicitly invoked the "ulw-loop" and "mass-ulw" skills. Follow the instructions in <skill-instruction> as binding for this request, while respecting higher-priority instructions.\n\n'
-      + '<skill-instruction name="ulw-loop" location="/fake/skills/ulw-loop/SKILL.md">Run the loop. Literal <skill-instruction example> stays text.</skill-instruction>\n\n'
-      + '<skill-instruction name="mass-ulw" location="/fake/skills/mass-ulw/SKILL.md">Dispatch the workflow.</skill-instruction>\n\n'
-      + '<user-request>build the thing</user-request>\n'
-      + '<omo-ulw-loop-pointer>Follow the synthetic loop. Literal <omo-example stays text.</omo-ulw-loop-pointer>\n'
-      + '<system-reminder>Keep the synthetic context.</system-reminder>'
-    : expandSkills(text);
-  recordEntry(record, userEntry(storedText));
+/**
+ * One agent run, in the records omo emits: agent_start, the user message, the scenario's messages and tool calls, then
+ * agent_end and agent_settled. SCENARIO:lost-completion drops agent_settled; SCENARIO:silent-end drops both, so the client
+ * still believes the run is going and its next steer is refused.
+ */
+async function runTurn(record, turn, text, images) {
+  event(record, "agent_start");
+  const user = { role: "user", content: [{ type: "text", text }, ...images], timestamp: Date.now() };
+  event(record, "message_start", { message: user });
+  event(record, "message_end", { message: user });
+  recordEntry(record, userEntry(text === "SCENARIO:skills-history" ? SKILLS_HISTORY_TEXT : expandSkills(text), images));
 
+  let failure = null;
   try {
     await runScenario(record, turn, text);
-    turn.wire.status = turn.interrupted ? "interrupted" : "completed";
   } catch (error) {
-    if (error instanceof Interrupted) {
-      turn.wire.status = "interrupted";
-    } else {
-      turn.wire.status = "failed";
-      turn.wire.error = { message: error instanceof Error ? error.message : String(error) };
-    }
+    if (!(error instanceof Interrupted)) failure = error instanceof Error ? error.message : String(error);
   }
-
-  turn.wire.completedAt = Math.floor(nowSec());
-  turn.wire.durationMs = Date.now() - turn.startMs;
-  record.thread.updatedAt = nowSec();
-  record.thread.status = { type: "idle" };
   record.activeTurn = null;
-  // SCENARIO:lost-completion ends the turn like omo does when its turn/completed never reaches this client: only the
-  // broadcast thread/status/changed to idle arrives. SCENARIO:silent-end sends neither, so the client still believes
-  // the turn runs and its next steer is rejected.
-  const silent = text.includes("SCENARIO:silent-end");
-  if (!silent && !text.includes("SCENARIO:lost-completion")) notify("turn/completed", { threadId, turn: turn.wire });
-  if (!silent) notify("thread/status/changed", { threadId, status: { type: "idle" } });
+  if (failure !== null) event(record, "message_end", { message: assistantMessage([], "error", { errorMessage: failure }) });
+  if (!text.includes("SCENARIO:silent-end")) {
+    event(record, "agent_end", { messages: [] });
+    if (!text.includes("SCENARIO:lost-completion")) event(record, "agent_settled");
+  }
+  turn.finished();
 }
 
-// ---- request handlers ---------------------------------------------------------------------
+// ---- commands -----------------------------------------------------------------------------
 
-const MODELS = (DEMO?.models ?? [
-  { id: "fake/alpha", model: "alpha", displayName: "Fake Alpha", isDefault: true },
-  { id: "fake/beta", model: "beta", displayName: "Fake Beta", isDefault: false },
-  ...[ ["claude-opus-5-5", "Claude Opus 5.5"], ["claude-fable-5-1", "Claude Fable 5.1"], ["gpt-6-astra", "GPT-6 Astra"], ["gpt-6-sol-fast", "GPT-6 Sol Fast"] ].map(([id, displayName]) => ({ id, model: id, displayName, isDefault: false })) ,
-]).map((model) => ({
-  ...model,
-  description: "",
-  hidden: false,
-  defaultReasoningEffort: "medium",
-  supportedReasoningEfforts: ["low", "medium", "high", "xhigh"].map((reasoningEffort) => ({ reasoningEffort, description: "" })),
-}));
+const MODELS = DEMO?.models ?? [
+  { id: "fake/alpha", model: "alpha", displayName: "Fake Alpha" },
+  { id: "fake/beta", model: "beta", displayName: "Fake Beta" },
+  ...[
+    ["anthropic-subscription", "claude-opus-5-5", "Claude Opus 5.5"],
+    ["anthropic-subscription", "claude-fable-5-1", "Claude Fable 5.1"],
+    ["chatgpt-subscription", "gpt-6-astra", "GPT-6 Astra"],
+    ["chatgpt-subscription", "gpt-6-sol-fast", "GPT-6 Sol Fast"],
+  ].map(([provider, model, displayName]) => ({ id: `${provider}/${model}`, model, displayName })),
+];
+
+/** A get_available_models row: omo's Model object, keyed by provider and bare id. */
+function nativeModel(model) {
+  const cut = model.id.indexOf("/");
+  return {
+    id: model.model, provider: cut > 0 ? model.id.slice(0, cut) : DEFAULT_MODEL.provider, name: model.displayName,
+    reasoning: true, supportedThinkingLevels: ["off", "low", "medium", "high", "xhigh"], defaultThinkingLevel: "medium", contextWindow: 128000,
+  };
+}
 
 // Secret-free descriptors like omo's account/providerAccounts/read; pin and remove change them in memory.
 const providerAccounts = {
@@ -999,298 +968,235 @@ const DEFAULT_SKILLS = [
   { name: "long-description-skill", description: "L".repeat(400), scope: "user", enabled: true },
 ].map((skill) => ({ ...skill, path: `/fake/skills/${skill.name}/SKILL.md` }));
 
-// FAKE_OMO_SKILLS uses the wire response fields: { data: [{ cwd, skills, errors }] }.
-function listSkills(params) {
-  if (
-    (params.cwds !== undefined && (!Array.isArray(params.cwds) || params.cwds.some((cwd) => typeof cwd !== "string"))) ||
-    (params.forceReload !== undefined && typeof params.forceReload !== "boolean")
-  ) throw new RpcFailure(INVALID_PARAMS, "Invalid params: skills/list");
-  const cwds = params.cwds?.length > 0 ? params.cwds : [process.cwd()];
+// FAKE_OMO_SKILLS names each cwd's skills in the wire fields: { data: [{ cwd, skills: [{ name, description, path, scope, enabled }] }] }.
+function skillCommands(record) {
   const configured = process.env.FAKE_OMO_SKILLS === undefined ? null : JSON.parse(process.env.FAKE_OMO_SKILLS);
+  const skills = configured?.data.find((entry) => entry.cwd === record.thread.cwd)?.skills ?? DEFAULT_SKILLS;
+  return skills.map((skill) => ({
+    name: `skill:${skill.name}`, description: skill.description, source: "skill", syntax: "slash", filePath: skill.path,
+    sourceInfo: { path: skill.path, scope: skill.scope === "repo" ? "project" : skill.scope }, disableModelInvocation: skill.enabled === false,
+  }));
+}
+
+function sessionState(record) {
   return {
-    data: cwds.map((cwd) => {
-      const loaded = [...threads.values()].some((record) => record.loaded && record.thread.cwd === cwd);
-      if (!loaded) {
-        return { cwd, skills: DEFAULT_SKILLS.filter((skill) => skill.name === "plan" || skill.name === "long-description-skill"), errors: [] };
-      }
-      return configured?.data.find((entry) => entry.cwd === cwd) ?? { cwd, skills: DEFAULT_SKILLS, errors: [] };
-    }),
+    sessionId: record.thread.id,
+    sessionFile: record.thread.path,
+    cwd: record.thread.cwd,
+    model: { provider: record.settings.provider, id: record.settings.modelId, name: record.settings.modelId },
+    thinkingLevel: record.settings.thinkingLevel,
+    isStreaming: record.activeTurn !== null,
+    isCompacting: false,
+    messageCount: 0,
+    pendingMessageCount: 0,
+    ...(record.thread.name ? { sessionName: record.thread.name } : {}),
   };
 }
 
-function listThreads(params) {
-  const cwdFilter = typeof params.cwd === "string" ? [params.cwd] : Array.isArray(params.cwd) ? params.cwd : null;
-  const term = typeof params.searchTerm === "string" ? params.searchTerm.toLowerCase() : "";
-  const wantArchived = params.archived === true;
-  let data = [...threads.values()]
-    .filter((record) => record.archived === wantArchived)
-    .filter((record) => cwdFilter === null || cwdFilter.includes(record.thread.cwd))
-    .filter((record) => `${record.thread.name ?? ""} ${record.thread.preview}`.toLowerCase().includes(term))
-    .map((record) => threadView(record, false))
-    .sort((a, b) => b.updatedAt - a.updatedAt);
-  const offset = typeof params.cursor === "string" ? Number(params.cursor) : 0;
-  const limit = typeof params.limit === "number" ? params.limit : data.length;
-  const nextOffset = offset + limit;
-  return { data: data.slice(offset, nextOffset), nextCursor: nextOffset < data.length ? String(nextOffset) : null };
+function openSession(frame) {
+  const settings = {
+    provider: typeof frame.provider === "string" ? frame.provider : DEFAULT_MODEL.provider,
+    modelId: typeof frame.modelId === "string" ? frame.modelId : DEFAULT_MODEL.id,
+    thinkingLevel: "medium",
+  };
+  let record;
+  if (typeof frame.sessionPath === "string" && existsSync(frame.sessionPath)) {
+    record = [...threads.values()].find((open) => open.thread.path === frame.sessionPath) ?? { ...loadSession(frame.sessionPath), activeTurn: null, settings };
+  } else {
+    const id = randomUUID();
+    const cwd = typeof frame.cwd === "string" ? frame.cwd : home;
+    const path = typeof frame.sessionPath === "string" ? frame.sessionPath : join(sessionsDir, `${id}.jsonl`);
+    record = { thread: { id, path, cwd, createdAt: nowSec(), name: null }, lastEntryId: null, activeTurn: null, settings };
+    recordEntry(record, { type: "model_change", provider: settings.provider, modelId: settings.modelId });
+  }
+  record.handle = `rpc-${nextHandle++}`;
+  threads.set(record.thread.id, record);
+  handles.set(record.handle, record);
+  return { sessionId: record.handle, state: sessionState(record) };
 }
 
-function startTurn(id, params) {
-  const record = getThread(requireString(params, "threadId"));
-  if (record.activeTurn !== null) {
-    throw new RpcFailure(INVALID_REQUEST, `Thread already has an active turn: ${record.thread.id}`);
+async function goalCommand(record, args) {
+  const current = readGoal(record);
+  const now = Math.floor(nowSec());
+  if (args === "") return;
+  if (args === "clear") {
+    writeGoal(record, null);
+    return;
   }
-  const input = Array.isArray(params.input) ? params.input : [];
-  // omo 5.1.4's app-server rejects these input item types; attachments must travel as paths in the text.
-  const unsupported = input.find((item) => isRecord(item) && ["skill", "image", "localImage", "mention"].includes(String(item.type)));
-  if (unsupported !== undefined) {
-    throw new RpcFailure(INVALID_PARAMS, `Invalid params: unsupported input item type ${unsupported.type}`);
+  if (args === "pause" || args === "resume") {
+    if (current === null) throw new CommandFailure("No goal is set", "no_goal");
+    writeGoal(record, { ...current, status: args === "pause" ? "paused" : "active", updatedAt: now });
+    return;
   }
-  const clientId = typeof params.clientUserMessageId === "string" ? params.clientUserMessageId : null;
-  const turn = createTurn(record.thread.id);
-  respond(id, { turn: { ...turn.wire, items: [] } });
-  runTurn(record, turn, input, clientId).catch((error) => {
+  if (current !== null && current.status !== "complete") {
+    const choice = await uiRequest(record, { method: "select", title: `Replace goal?\n\nCurrent goal: ${current.objective}`, options: ["Replace current goal", "Cancel"] });
+    if (choice.value !== "Replace current goal") return;
+  }
+  writeGoal(record, { objective: args, status: "active", tokensUsed: 0, timeUsedSeconds: 0, createdAt: now, updatedAt: now });
+}
+
+async function prompt(frame, record, reply) {
+  const message = typeof frame.message === "string" ? frame.message : "";
+  const goal = /^\/goal(?:\s+([\s\S]*))?$/.exec(message.trim());
+  if (goal !== null) {
+    await goalCommand(record, (goal[1] ?? "").trim());
+    reply({ disposition: "handled" });
+    return;
+  }
+  if (record.activeTurn !== null) throw new CommandFailure("Agent is already processing a prompt", "already_streaming");
+  if (message.includes("SCENARIO:fail")) throw new CommandFailure("Simulated turn failure", "simulated_failure");
+  const images = Array.isArray(frame.images) ? frame.images.filter(isRecord) : [];
+  const turn = createTurn(record);
+  record.activeTurn = turn;
+  reply({});
+  runTurn(record, turn, message, images).catch((error) => {
     process.stderr.write(`fake-omo: turn crashed: ${error instanceof Error ? error.stack : String(error)}\n`);
   });
 }
 
-function steerTurn(id, params) {
-  const threadId = requireString(params, "threadId");
-  const turn = threads.get(threadId)?.activeTurn ?? null;
-  if (turn === null || turn.wire.id !== params.expectedTurnId) {
-    throw new RpcFailure(INVALID_REQUEST, `No active turn for thread ${threadId}`);
-  }
-  const input = Array.isArray(params.input) ? params.input : [];
-  const unsupported = input.find((item) => isRecord(item) && ["skill", "image", "localImage", "mention"].includes(String(item.type)));
-  if (unsupported !== undefined) {
-    throw new RpcFailure(INVALID_PARAMS, `Invalid params: unsupported input item type ${unsupported.type}`);
-  }
-  respond(id, { turnId: turn.wire.id });
-  const item = { type: "userMessage", id: nextItemId(turn), clientId: null, content: input };
-  startItem(turn, item);
-  finishItem(turn, item);
-  recordEntry(threads.get(threadId), userEntry(firstText(input)));
-}
-
-function waitForFile(file, done) {
-  if (existsSync(file)) {
-    done();
-    return;
-  }
-  const timer = setTimeout(() => {
-    timers.delete(timer);
-    waitForFile(file, done);
-  }, 50);
-  timers.add(timer);
-}
-
-let mcpVersion = "1.0.0";
-
-function handleRequest(id, method, params) {
-  if (method === "initialize") {
-    if (initialized) throw new RpcFailure(SERVER_ERROR, "Already initialized");
-    initialized = true;
-    const result = { userAgent: "fake-omo/5.1.4", codexHome: home, platformFamily: "unix", platformOs: "macos" };
-    const gate = process.env.FAKE_OMO_INIT_GATE;
-    if (gate) waitForFile(gate, () => respond(id, result));
-    else respond(id, result);
-    return;
-  }
-  if (!initialized) throw new RpcFailure(SERVER_ERROR, "Not initialized");
-
-  switch (method) {
-    case "thread/compact/start":
-      getThread(requireString(params, "threadId"));
-      respond(id, {});
-      return;
-    case "thread/goal/get":
-      respond(id, { goal: getThread(requireString(params, "threadId")).goal ?? null });
-      return;
-    case "thread/goal/clear": {
-      const threadId = requireString(params, "threadId");
-      const record = getThread(threadId);
-      const existed = record.goal != null;
-      record.goal = null;
-      respond(id, {});
-      if (existed) notify("thread/goal/cleared", { threadId });
-      return;
-    }
-    case "thread/goal/set": {
-      const threadId = requireString(params, "threadId");
-      const record = getThread(threadId);
-      const previous = record.goal;
-      const now = Math.floor(Date.now() / 1000);
-      const goal = {
-        threadId, objective: params.objective ?? previous?.objective ?? "",
-        status: params.status ?? previous?.status ?? "active", tokenBudget: params.tokenBudget === undefined ? previous?.tokenBudget ?? null : params.tokenBudget,
-        tokensUsed: previous?.tokensUsed ?? 0, timeUsedSeconds: previous?.timeUsedSeconds ?? 0, createdAt: previous?.createdAt ?? now, updatedAt: now,
-      };
-      record.goal = goal;
-      respond(id, { goal });
-      notify("thread/goal/updated", { threadId, turnId: record.activeTurn?.id ?? null, goal });
-      return;
-    }
-    case "extension_request": {
-      if (params.name === "omo-ui.task.send") { respond(id, { delivered: true }); break; }
-      if (params.name === "omo-ui.task.cancel") {
-        respond(id, { cancelled: true });
-        getThread(requireString(params, "threadId")).cancelTask?.(params.data?.taskId);
-        break;
+function waitForFile(file) {
+  return new Promise((resolve) => {
+    const check = () => {
+      if (existsSync(file)) {
+        resolve();
+        return;
       }
-      const record = getThread(requireString(params, "threadId"));
-      if (params.name !== "fake.advance") throw new RpcFailure(NOT_FOUND, "Extension not found");
-      record.advanceLive?.();
-      respond(id, {});
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        check();
+      }, 50);
+      timers.add(timer);
+    };
+    check();
+  });
+}
+
+async function handleCommand(frame, record, reply) {
+  switch (frame.type) {
+    case "get_protocol_info": {
+      const gate = process.env.FAKE_OMO_INIT_GATE;
+      if (gate) await waitForFile(gate);
+      reply({ mode: "multi", serverVersion: SERVER_VERSION, protocolVersion: 1 });
       return;
     }
-    case "account/providerAccounts/read": {
-      const provider = requireString(params, "provider");
-      respond(id, { provider, accounts: providerAccounts[provider] ?? [] });
+    case "set_client_info":
+      reply({});
+      return;
+    case "open_session":
+      reply(openSession(frame));
+      return;
+    default:
+      break;
+  }
+  if (record === undefined) {
+    if (typeof frame.sessionId !== "string") throw new CommandFailure(`${frame.type} needs a sessionId`, "missing_session_id");
+    throw new CommandFailure(`Unknown session: ${frame.sessionId}`, "unknown_session");
+  }
+  switch (frame.type) {
+    case "get_state":
+      reply(sessionState(record));
+      return;
+    case "prompt":
+      await prompt(frame, record, reply);
+      return;
+    case "steer": {
+      if (record.activeTurn === null) throw new CommandFailure("No agent run to steer", "not_streaming");
+      const message = typeof frame.message === "string" ? frame.message : "";
+      reply({});
+      const user = { role: "user", content: [{ type: "text", text: message }], timestamp: Date.now() };
+      event(record, "message_start", { message: user });
+      event(record, "message_end", { message: user });
+      recordEntry(record, userEntry(message));
       return;
     }
-    case "account/providerAccounts/pin": {
-      const accounts = providerAccounts[requireString(params, "provider")] ?? [];
-      for (const account of accounts) account.pinned = account.name === params.name;
-      respond(id, {});
+    case "abort": {
+      const turn = record.activeTurn;
+      if (turn !== null) {
+        turn.interrupt();
+        await turn.done;
+      }
+      reply({});
       return;
     }
-    case "account/providerAccounts/remove": {
-      const provider = requireString(params, "provider");
-      providerAccounts[provider] = (providerAccounts[provider] ?? []).filter((account) => account.name !== params.name);
+    case "set_session_name":
+      record.thread.name = String(frame.name);
+      recordEntry(record, { type: "session_info", name: record.thread.name });
+      reply({});
+      return;
+    case "set_model":
+      record.settings.provider = String(frame.provider);
+      record.settings.modelId = String(frame.modelId);
+      recordEntry(record, { type: "model_change", provider: record.settings.provider, modelId: record.settings.modelId });
+      reply(sessionState(record).model);
+      return;
+    case "set_thinking_level":
+      record.settings.thinkingLevel = String(frame.level);
+      recordEntry(record, { type: "thinking_level_change", thinkingLevel: record.settings.thinkingLevel });
+      reply({});
+      return;
+    case "close_session":
+      record.activeTurn?.interrupt();
+      handles.delete(record.handle);
+      reply({});
+      return;
+    case "compact":
+      event(record, "compaction_start", { reason: "manual" });
+      event(record, "compaction_end", { reason: "manual", result: { summary: "", tokensBefore: 0 }, aborted: false, willRetry: false });
+      reply({ summary: "", tokensBefore: 0 });
+      return;
+    case "get_available_models":
+      reply({ models: MODELS.map(nativeModel) });
+      return;
+    case "get_commands":
+      reply({ commands: skillCommands(record) });
+      return;
+    case "get_loaded_surfaces":
+      reply({ extensions: [], mcpServers: process.env.FAKE_OMO_MCP_EMPTY === "1" ? [] : [
+        { name: "demo-tools", toolCount: 3, status: "connected", authStatus: "unsupported" },
+        { name: "pganalyze", toolCount: 0, status: "failed", authStatus: "notLoggedIn" },
+      ] });
+      return;
+    case "get_provider_accounts": {
+      const provider = String(frame.provider);
+      reply({ provider, accounts: providerAccounts[provider] ?? [] });
+      return;
+    }
+    case "account_pin": {
+      const accounts = providerAccounts[String(frame.provider)] ?? [];
+      for (const account of accounts) account.pinned = account.name === frame.name;
+      reply({});
+      return;
+    }
+    case "account_remove": {
+      const provider = String(frame.provider);
+      providerAccounts[provider] = (providerAccounts[provider] ?? []).filter((account) => account.name !== frame.name);
       // Like omo, removal also drops the stored credential from auth.json.
       const authFile = join(home, "auth.json");
       if (existsSync(authFile)) {
         const auth = JSON.parse(readFileSync(authFile, "utf8"));
         const pool = auth[provider]?.accounts;
-        if (Array.isArray(pool)) auth[provider].accounts = pool.filter((account) => account?.name !== params.name);
+        if (Array.isArray(pool)) auth[provider].accounts = pool.filter((account) => account?.name !== frame.name);
         writeFileSync(authFile, JSON.stringify(auth));
       }
-      respond(id, {});
+      reply({});
       return;
     }
-    case "mcpServerStatus/list":
-      respond(id, { data: process.env.FAKE_OMO_MCP_EMPTY === "1" ? [] : [
-        { name: "demo-tools", serverInfo: { name: "demo-tools", version: mcpVersion },
-          tools: {
-            search: { name: "search", description: "Search the demo knowledge base." },
-            read_document: { name: "read_document", description: "Read a demo document by ID." },
-            list_projects: { name: "list_projects", description: "List available demo projects." },
-          }, resources: [], resourceTemplates: [], authStatus: "unsupported" },
-        { name: "pganalyze", serverInfo: null, tools: {}, resources: [], resourceTemplates: [], authStatus: "notLoggedIn" },
-      ], nextCursor: null });
-      return;
-    case "model/list":
-      respond(id, { data: MODELS, nextCursor: null });
-      return;
-    case "skills/list":
-      respond(id, listSkills(params));
-      return;
-    case "thread/list":
-      respond(id, listThreads(params));
-      return;
-    case "thread/loaded/list":
-      respond(id, { data: [...threads.values()].filter((record) => record.loaded).map((record) => record.thread.id) });
-      return;
-    case "thread/start": {
-      const thread = { ...defaultThread(randomUUID()), cwd: requireString(params, "cwd") };
-      const record = addThread(thread, { loaded: true });
-      recordEntry(record, { type: "model_change", provider: "fake", modelId: "alpha" });
-      notify("thread/started", { thread: threadView(record, false) });
-      respond(id, sessionResult(record));
-      mcpVersion = "1.1.0";
-      notify("mcpServer/startupStatus/updated", { threadId: thread.id, name: "demo-tools", status: "connected" });
-      return;
-    }
-    case "thread/fork": {
-      const original = getThread(requireString(params, "threadId"));
-      const thread = {
-        ...structuredClone(original.thread), ...defaultThread(randomUUID()),
-        cwd: requireString(params, "cwd"), forkedFromId: original.thread.id,
-        preview: original.thread.preview, turns: structuredClone(original.thread.turns),
-        name: `${original.thread.name ?? (original.thread.preview || "Session")} (fork)`,
-      };
-      const record = addThread(thread, { loaded: true, settings: structuredClone(original.settings) });
-      const originalFile = original.thread.path;
-      if (originalFile !== null && existsSync(originalFile)) {
-        for (const line of readFileSync(originalFile, "utf8").split("\n").slice(1)) {
-          if (line.trim() === "") continue;
-          const entry = JSON.parse(line);
-          if (entry.type === "session_info" || (entry.type === "custom" && ["fake-omo.archived", "fake-omo.unarchived"].includes(entry.customType))) continue;
-          recordEntry(record, entry);
-        }
+    case "extension_request":
+      if (frame.name === "omo-ui.task.send") {
+        reply({ delivered: true });
+        return;
       }
-      recordEntry(record, { type: "session_info", name: thread.name });
-      notify("thread/started", { thread: threadView(record, false) });
-      respond(id, sessionResult(record));
-      return;
-    }
-    case "thread/resume": {
-      const record = getThread(requireString(params, "threadId"));
-      record.loaded = true;
-      respond(id, sessionResult(record));
-      return;
-    }
-    case "thread/read":
-      respond(id, { thread: threadView(getThread(requireString(params, "threadId")), params.includeTurns === true) });
-      return;
-    case "thread/name/set": {
-      const record = getThread(requireString(params, "threadId"));
-      const name = requireString(params, "name");
-      record.thread.name = name;
-      recordEntry(record, { type: "session_info", name });
-      notify("thread/name/updated", { threadId: record.thread.id, threadName: name });
-      respond(id, {});
-      return;
-    }
-    case "thread/settings/update": {
-      const record = getThread(requireString(params, "threadId"));
-      record.settings = { ...record.settings, ...(typeof params.model === "string" ? { model: params.model } : {}), ...(typeof params.effort === "string" ? { effort: params.effort } : {}) };
-      respond(id, {});
-      return;
-    }
-    case "thread/archive": {
-      const record = getThread(requireString(params, "threadId"));
-      record.archived = true;
-      record.loaded = false;
-      recordEntry(record, { type: "custom", customType: "fake-omo.archived", data: {} });
-      notify("thread/archived", { threadId: record.thread.id });
-      respond(id, {});
-      return;
-    }
-    case "thread/unarchive": {
-      const record = getThread(requireString(params, "threadId"));
-      record.archived = false;
-      record.loaded = false;
-      record.thread.status = { type: "notLoaded" };
-      recordEntry(record, { type: "custom", customType: "fake-omo.unarchived", data: {} });
-      respond(id, { status: { type: "notLoaded" } });
-      notify("thread/unarchived", { threadId: record.thread.id });
-      return;
-    }
-    case "thread/delete": {
-      const record = getThread(requireString(params, "threadId"));
-      threads.delete(record.thread.id);
-      rmSync(record.thread.path ?? sessionPath(record.thread.id), { force: true });
-      notify("thread/deleted", { threadId: record.thread.id });
-      respond(id, {});
-      return;
-    }
-    case "turn/start":
-      if (firstText(Array.isArray(params.input) ? params.input : []).includes("SCENARIO:fail")) {
-        throw new RpcFailure(SERVER_ERROR, "Simulated turn failure");
+      if (frame.name === "omo-ui.task.cancel") {
+        reply({ cancelled: true });
+        record.cancelTask?.(frame.data?.taskId);
+        return;
       }
-      startTurn(id, params);
+      if (frame.name !== "fake.advance") throw new CommandFailure(`No extension request handler named ${String(frame.name)}`, "not_found");
+      record.advanceLive?.();
+      reply({});
       return;
-    case "turn/steer":
-      steerTurn(id, params);
-      return;
-    case "turn/interrupt": {
-      const turn = threads.get(requireString(params, "threadId"))?.activeTurn ?? null;
-      if (turn !== null && turn.wire.id === params.turnId) turn.interrupt();
-      respond(id, {});
-      return;
-    }
     default:
-      throw new RpcFailure(NOT_FOUND, "Method not found");
+      throw new CommandFailure(`Unknown command: ${String(frame.type)}`, "unknown_command");
   }
 }
 
@@ -1300,22 +1206,22 @@ function onLine(line) {
   try {
     frame = JSON.parse(line);
   } catch (error) {
-    write({ id: null, error: { code: -32700, message: `Parse error: ${error.message}` } });
+    process.stderr.write(`fake-omo: unparseable command line: ${error.message}\n`);
     return;
   }
-  if (logPath !== undefined) appendFileSync(logPath, `${JSON.stringify(frame)}\n`);
-  if (!isRecord(frame) || !("id" in frame)) return;
-
-  if (typeof frame.method !== "string") {
-    pendingResponses.get(frame.id)?.(frame.result);
+  if (!isRecord(frame)) return;
+  const record = typeof frame.sessionId === "string" ? handles.get(frame.sessionId) : undefined;
+  // The log adds the durable session id so tests can find a thread's commands by the id the app shows.
+  if (logPath !== undefined) appendFileSync(logPath, `${JSON.stringify(record === undefined ? frame : { ...frame, threadId: record.thread.id })}\n`);
+  if (frame.type === "extension_ui_response") {
+    pendingResponses.get(frame.id)?.(frame);
     return;
   }
-  try {
-    handleRequest(frame.id, frame.method, isRecord(frame.params) ? frame.params : {});
-  } catch (error) {
-    if (!(error instanceof RpcFailure)) throw error;
-    fail(frame.id, error.code, error.message);
-  }
+  const reply = (data) => write({ id: frame.id, type: "response", command: frame.type, success: true, data });
+  handleCommand(frame, record, reply).catch((error) => {
+    if (!(error instanceof CommandFailure)) process.stderr.write(`fake-omo: ${String(frame.type)} crashed: ${error instanceof Error ? error.stack : String(error)}\n`);
+    write({ id: frame.id, type: "response", command: frame.type, success: false, error: error instanceof Error ? error.message : String(error), ...(error.errorCode ? { errorCode: error.errorCode } : {}) });
+  });
 }
 
 function serve() {
@@ -1324,8 +1230,8 @@ function serve() {
   mkdirSync(sessionsDir, { recursive: true });
   logPath = process.env.FAKE_OMO_LOG;
   writeLongSession();
-  loadPersistedThreads();
-  process.stderr.write("fake app-server listening on stdio://\n");
+  writeSeedSessions();
+  process.stderr.write("fake omo rpc host ready\n");
   const lines = createInterface({ input: process.stdin });
   lines.on("line", onLine);
   lines.on("close", () => {
@@ -1422,9 +1328,10 @@ function serveCatalog() {
 }
 
 const argv = process.argv.slice(2);
+const hostArgs = ["--mode", "rpc", "--multi-session", "--session-runtime", "in-process"];
 if (argv.length === 1 && argv[0] === "--version") {
   process.stdout.write(`${VERSION_LINE}\n`);
-} else if ((argv.length === 3 || (argv.length === 5 && argv[3] === "--extension")) && argv[0] === "app-server" && argv[1] === "--listen" && argv[2] === "stdio://") {
+} else if ((argv.length === 5 || (argv.length === 7 && argv[5] === "--extension")) && hostArgs.every((arg, index) => argv[index] === arg)) {
   serve();
 } else if (argv.length === 7 && argv[0] === "--mode" && argv[1] === "rpc" && argv[2] === "--session" && argv[4] === "--no-extensions" && argv[5] === "--extension") {
   serveTree(argv[3]);

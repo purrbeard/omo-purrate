@@ -35,10 +35,10 @@ test("Accounts lists omo's accounts with their quota state, and pins and removes
     await row(claude, "old").getByTestId(TESTID.accountRemove).click();
     await row(claude, "old").getByTestId(TESTID.accountRemoveConfirm).click();
     await expect(row(claude, "old")).toHaveCount(0);
-    const calls = (await readFakeLog()).filter((entry) => String(entry["method"]).startsWith("account/providerAccounts/") && !String(entry["method"]).endsWith("/read"));
-    expect(calls.map((entry) => [entry["method"], entry["params"]])).toEqual([
-      ["account/providerAccounts/pin", { provider: "anthropic-subscription", name: "work" }],
-      ["account/providerAccounts/remove", { provider: "anthropic-subscription", name: "old" }],
+    const calls = (await readFakeLog()).filter((entry) => entry["type"] === "account_pin" || entry["type"] === "account_remove");
+    expect(calls.map((entry) => [entry["type"], { provider: entry["provider"], name: entry["name"] }])).toEqual([
+      ["account_pin", { provider: "anthropic-subscription", name: "work" }],
+      ["account_remove", { provider: "anthropic-subscription", name: "old" }],
     ]);
     await shot(page, "accounts-after");
   } finally {

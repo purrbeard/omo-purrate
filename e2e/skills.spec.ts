@@ -2,7 +2,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, lastTurn, launchApp, newSession, send, setTheme, shot, tempDir, threadRow, type LaunchedApp } from "./helpers.ts";
+import { byTestId, lastTurn, launchApp, newSession, send, setTheme, shot, tempDir, threadRow, type LaunchedApp, prompts, newSessions } from "./helpers.ts";
 
 test.describe.configure({ mode: "serial" });
 
@@ -74,8 +74,8 @@ test("hero hints at session loading without priming the skill catalog", async ()
   await expect(menu.getByRole("status")).toBeVisible();
   await expect(menu.getByRole("status")).toHaveText("Start the session to load its skills");
   await expect(byTestId(page, TESTID.skillOption)).toHaveCount(0);
-  expect(readFakeLog().filter((frame) => frame["method"] === "skills/list")).toEqual([]);
-  expect(readFakeLog().filter((frame) => frame["method"] === "thread/start")).toEqual([]);
+  expect(readFakeLog().filter((frame) => frame["type"] === "get_commands")).toEqual([]);
+  expect(newSessions(readFakeLog())).toEqual([]);
   await byTestId(page, TESTID.composerInput).fill("");
 });
 
@@ -102,11 +102,11 @@ test("open session lists bundled and user-only skills in both themes", async () 
   await setTheme(page, "light");
   await input.fill("");
   const log = readFakeLog();
-  const loaded = log.findIndex((frame) => frame["method"] === "thread/start");
-  const catalog = log.findIndex((frame) => frame["method"] === "skills/list");
+  const loaded = log.findIndex((frame) => frame["type"] === "open_session" && frame["sessionPath"] === undefined);
+  const catalog = log.findIndex((frame) => frame["type"] === "get_commands");
   expect(loaded).toBeGreaterThanOrEqual(0);
   expect(catalog).toBeGreaterThan(loaded);
-  expect(log[catalog]).toMatchObject({ params: { cwds: [pickDir] } });
+  expect(log[loaded]).toMatchObject({ cwd: pickDir });
 });
 
 test("arrows wrap, filtering ranks ulw-loop, Tab inserts and Escape preserves", async () => {
@@ -132,7 +132,7 @@ test("arrows wrap, filtering ranks ulw-loop, Tab inserts and Escape preserves", 
   await expect(input).toHaveValue("/ulw-loop ");
   await expect(input).toBeFocused();
   await expect(byTestId(page, TESTID.skillMenu)).toBeHidden();
-  expect(readFakeLog().filter((frame) => frame["method"] === "turn/start")).toEqual([]);
+  expect(prompts(readFakeLog())).toEqual([]);
   await input.press("/");
   await expect(byTestId(page, TESTID.skillMenu)).toBeVisible();
   await input.press("Escape");
@@ -153,11 +153,9 @@ test("two selections send one canonical text message and show two chips", async 
   await input.press("Enter");
   await expect(input).toHaveValue("");
   await expect(lastTurn(page)).toHaveAttribute("data-status", "completed");
-  const starts = readFakeLog().filter((frame) => frame["method"] === "turn/start");
+  const starts = prompts(readFakeLog());
   expect(starts).toHaveLength(1);
-  expect(starts[0]).toMatchObject({
-    params: { input: [{ type: "text", text: "/skill:ulw-loop /skill:mass-ulw build the thing", text_elements: [] }] },
-  });
+  expect(starts[0]?.message).toBe("/skill:ulw-loop /skill:mass-ulw build the thing");
   const bubble = byTestId(page, TESTID.userMessage);
   await expect(bubble).toHaveCount(1);
   await expect(bubble.locator(`[data-testid="${TESTID.skillChip}"]`)).toHaveCount(2);
@@ -182,7 +180,7 @@ test("word-internal slashes and paths leave the skill menu closed", async () => 
 test("a sixth distinct selection shows the five-skill limit", async () => {
   const { page, readFakeLog } = current();
   const input = byTestId(page, TESTID.composerInput);
-  const before = readFakeLog().filter((frame) => frame["method"] === "turn/start").length;
+  const before = prompts(readFakeLog()).length;
   for (const name of ["ulw-loop", "mass-ulw", "plan", "user-only-skill", "long-description-skill"]) {
     await input.press("/");
     await input.pressSequentially(name);
@@ -194,7 +192,7 @@ test("a sixth distinct selection shows the five-skill limit", async () => {
   await page.locator(`[data-testid="${TESTID.skillOption}"][data-skill-name="sixth-skill"]`).click();
   await expect(byTestId(page, TESTID.skillLimit)).toHaveText("Up to 5 skills per message");
   await expect(input).toHaveValue(draft);
-  expect(readFakeLog().filter((frame) => frame["method"] === "turn/start")).toHaveLength(before);
+  expect(prompts(readFakeLog())).toHaveLength(before);
   await input.press("Escape");
   await input.fill("");
 });

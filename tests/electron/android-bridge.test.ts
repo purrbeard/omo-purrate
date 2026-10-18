@@ -1,9 +1,14 @@
+import { spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { createContext, runInContext } from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AndroidBridge, parseDevices, type AdbExec } from "../../electron/android/bridge";
 import { OmoSupervisor, type SupervisedClient } from "../../electron/omo/supervisor";
-import { RpcRequestError } from "../../electron/omo/app-server-client";
+import { RpcRequestError, type SpawnImpl } from "../../electron/omo/app-server-client";
+import { NativeAppServerClient } from "../../electron/omo/native/client";
 import type { RpcNotification, RpcServerRequest } from "../../shared/protocol";
 
 const devices = "List of devices attached\n192.168.1.10:39421 device product:dm1q model:SM_S911B device:dm1q\nemulator-5560 device product:sdk model:SDK_Phone device:emu\nlocked unauthorized\nlost offline\n";
@@ -214,5 +219,51 @@ describe("Android local HTTP and real supervisor integration", () => {
     expect((await phone.post("/answer", { id: "approval-1", result: { decision: "decline" } })).status).toBe(409);
     const disconnected = stream.next(); await h.supervisor.stop(); expect(await disconnected).toEqual({ type: "bridgeStatus", state: "stopped" });
     expect((await phone.post("/rpc", { method: "thread/list", params: {} })).status).toBe(502);
+  });
+  it("runs a phone turn through the Native RPC adapter against the fake omo host", async () => {
+    const fixture = path.join(__dirname, "..", "fixtures", "fake-omo.mjs");
+    const root = await mkdtemp(path.join(tmpdir(), "android-native-"));
+    cleanup.push(() => rm(root, { recursive: true, force: true }));
+    const home = path.join(root, "home"), cwd = root;
+    // On Windows the connection already runs an .mjs command through Node with the script as its first argument.
+    const spawnFixture: SpawnImpl = (_command, args, options) => spawn(process.execPath, args[0] === fixture ? args : [fixture, ...args], options);
+    const supervisor = new OmoSupervisor({
+      homeDir: cwd, baseEnv: {}, clientVersion: "test", restartDelaysMs: [],
+      resolveEnv: async () => ({ env: {}, fromLoginShell: false }),
+      locate: async () => ({ ok: true, binary: { path: fixture, version: "test", source: "override" } }),
+      createClient: (options) => new NativeAppServerClient({
+        ...options, command: fixture, args: ["--mode", "rpc", "--multi-session", "--session-runtime", "in-process"], cwd, spawnImpl: spawnFixture, agentDir: home, stateDir: path.join(root, "state"),
+        env: { ...process.env as Record<string, string>, FAKE_OMO_HOME: home, FAKE_OMO_LOG: path.join(root, "fake.log") },
+      }),
+    });
+    await supervisor.start(); cleanup.push(() => supervisor.stop());
+    const exec = vi.fn<AdbExec>().mockImplementation(async (_file, args) => ({ stdout: args[0] === "devices" ? devices : "", stderr: "" }));
+    const bridge = new AndroidBridge(supervisor, { adbPath: "fake-adb", execFile: exec, port: 0 });
+    cleanup.push(() => bridge.stop());
+    const status = await bridge.connect("192.168.1.10:39421");
+    const url = new URL(status.url!), token = new URLSearchParams(url.hash.slice(1)).get("token")!;
+    const call = async (method: string, params: unknown) => {
+      const response = await fetch(url.origin + "/rpc", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ method, params }) });
+      return (await response.json()) as { result: Record<string, unknown> };
+    };
+    const stream = await events(url.origin, token);
+    expect(await stream.next()).toEqual({ type: "bridgeStatus", state: "connected" });
+    const thread = (await call("thread/start", { cwd })).result["thread"] as { id: string };
+    await call("turn/start", { threadId: thread.id, input: [{ type: "text", text: "Reply with exactly: pong", text_elements: [] }] });
+    const texts: string[] = [];
+    for (;;) {
+      const frame = await stream.next();
+      const notification = frame["notification"] as RpcNotification | undefined;
+      if (notification?.method === "item/completed") {
+        const item = (notification.params as { item: { type: string; text?: string } }).item;
+        if (item.type === "agentMessage") texts.push(item.text ?? "");
+      }
+      if (notification?.method === "turn/completed") {
+        expect((notification.params as { threadId: string; turn: { status: string } })).toMatchObject({ threadId: thread.id, turn: { status: "completed" } });
+        break;
+      }
+    }
+    expect(texts).toEqual(["pong"]);
+    expect(((await call("thread/list", {})).result["data"] as Array<{ id: string }>).map((entry) => entry.id)).toContain(thread.id);
   });
 });

@@ -29,8 +29,8 @@ if (command === "--version") {
   if (process.env.HOME !== home) throw new Error("installer must use temporary HOME");
   appendFileSync(join(home, "update.log"), "install\n");
   writeFileSync(marker, "5.1.5");
-} else if (command === "app-server") {
-  appendFileSync(join(home, "update.log"), `app-server ${version}\n`);
+} else if (command === "--mode" && args[2] === "--multi-session") {
+  appendFileSync(join(home, "update.log"), `rpc ${version}\n`);
   await import("../../fixtures/fake-omo.mjs");
 } else {
   throw new Error(`unexpected command ${command}`);

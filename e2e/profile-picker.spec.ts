@@ -59,15 +59,8 @@ test("profile drag resolves the turn; specific model search and persistence stil
       "data-status",
       "completed",
     );
-    expect(launched.readFakeLog()).toContainEqual(
-      expect.objectContaining({
-        method: "turn/start",
-        params: expect.objectContaining({
-          model: "gpt-6-astra",
-          effort: "xhigh",
-        }),
-      }),
-    );
+    expect(launched.readFakeLog()).toContainEqual(expect.objectContaining({ type: "set_model", modelId: "gpt-6-astra" }));
+    expect(launched.readFakeLog()).toContainEqual(expect.objectContaining({ type: "set_thinking_level", level: "xhigh" }));
     const persisted = JSON.parse(
       readFileSync(path.join(userData, "preferences.json"), "utf8"),
     ) as Record<string, unknown>;
@@ -157,10 +150,8 @@ test("custom profile models persist, drive previews and turns, and restore Autom
     await newSession(page);
     await send(page, "SCENARIO:echo custom heavy profile");
     await expect(byTestId(page, TESTID.turn).last()).toHaveAttribute("data-status", "completed");
-    expect(launched.readFakeLog()).toContainEqual(expect.objectContaining({
-      method: "turn/start",
-      params: expect.objectContaining({ model: "fake/beta", effort: "xhigh" }),
-    }));
+    expect(launched.readFakeLog()).toContainEqual(expect.objectContaining({ type: "set_model", modelId: "beta" }));
+    expect(launched.readFakeLog()).toContainEqual(expect.objectContaining({ type: "set_thinking_level", level: "xhigh" }));
     await byTestId(page, TESTID.modelPicker).click();
     handle = byTestId(page, TESTID.profileDot);
     await handle.focus();
@@ -189,13 +180,12 @@ test("custom profile models persist, drive previews and turns, and restore Autom
     await send(page, "SCENARIO:echo custom normal profile");
     await expect(byTestId(page, TESTID.turn)).toHaveCount(turnsBefore + 1);
     await expect(byTestId(page, TESTID.turn).last()).toHaveAttribute("data-status", "completed");
-    expect(launched.readFakeLog()).toContainEqual(expect.objectContaining({
-      method: "turn/start",
-      params: expect.objectContaining({ model: "gpt-6-astra", effort: "medium" }),
-    }));
+    expect(launched.readFakeLog()).toContainEqual(expect.objectContaining({ type: "set_model", modelId: "gpt-6-astra" }));
+    expect(launched.readFakeLog()).toContainEqual(expect.objectContaining({ type: "set_thinking_level", level: "medium" }));
     const persisted = JSON.parse(readFileSync(path.join(userData, "preferences.json"), "utf8")) as Record<string, unknown>;
     expect(persisted["modelProfile"]).toBe("daily-normal");
-    expect(persisted["profileModels"]).toEqual({ "geeky-heavy": "fake/beta", "daily-normal": "gpt-6-astra" });
+    // Native RPC lists every model as provider/id, so the stored mapping names its provider too.
+    expect(persisted["profileModels"]).toEqual({ "geeky-heavy": "fake/beta", "daily-normal": "chatgpt-subscription/gpt-6-astra" });
     await byTestId(page, TESTID.modelPicker).click();
     await page.locator('[data-profile-configure="daily-normal"]').click();
     await page.locator('[data-profile-automatic="daily-normal"]').click();

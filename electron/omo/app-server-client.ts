@@ -49,6 +49,10 @@ export interface AppServerClientOptions {
   /** Grace periods of stop(): wait after closing stdin, then after SIGTERM, before SIGKILL. */
   stopTimeoutsMs?: StopTimeouts;
   spawnImpl?: SpawnImpl;
+  /** omo's agent directory (sessions, goal stores); the native client lists threads from it. */
+  agentDir?: string;
+  /** App-owned scratch directory for the native client's utility sessions. */
+  stateDir?: string;
 }
 
 type Listener<T> = (value: T) => void;

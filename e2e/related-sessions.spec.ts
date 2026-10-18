@@ -225,15 +225,14 @@ test("native inventory pages reveal older sessions and managed IDs survive app r
     const ids = await page.evaluate(async cwd => {
       const ids: string[] = [];
       for (let i = 0; i < 52; i++) ids.push((await window.omo.request("thread/start", { cwd })).thread.id);
+      // A rename appends to omo's session file and makes that session the most recent, so the target is renamed first.
+      await window.omo.request("thread/name/set", { threadId: ids[0]!, name: "Older inventory search target" });
+      for (let i = 1; i < ids.length; i++) await window.omo.request("thread/name/set", { threadId: ids[i]!, name: `Inventory filler ${i}` });
       return ids;
     }, workspace);
-    const older = await page.evaluate(async ids => {
-      const firstPage = await window.omo.request("thread/list", { limit: 50 });
-      return ids.find(id => !firstPage.data.some(thread => thread.id === id));
-    }, ids);
-    expect(older).toBeTruthy();
-    if (older === undefined) throw new Error("Expected a native session outside the first inventory page");
-    await page.evaluate(async id => window.omo.request("thread/name/set", { threadId: id, name: "Older inventory search target" }), older);
+    const older = ids[0]!;
+    const firstPage = await page.evaluate(async () => (await window.omo.request("thread/list", { limit: 50 })).data.map(thread => thread.id));
+    expect(firstPage).not.toContain(older);
     await page.reload();
     await expect(page.getByTestId("thread-row")).toHaveCount(0);
     await page.getByTestId("native-sessions-open").click();

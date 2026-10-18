@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, newSession, send, setTheme, shot, WT } from "./helpers.ts";
+import { byTestId, launchApp, newSession, send, setTheme, shot, WT, prompts, newSessions } from "./helpers.ts";
 
 test("workflow graph and background work stay in the same conversation after main completion", async () => {
   const launched = await launchApp({ omo: "fake", pickDir: WT, size: { width: 1440, height: 900 } });
@@ -113,10 +113,10 @@ test("workflow graph and background work stay in the same conversation after mai
     await finished;
     await expect(page.getByTestId("workflow-activity-entry").filter({ hasText: "Build compact panel" })).toHaveAttribute("data-state", "completed");
     await shot(page, "workflow-selected-activity");
-    expect(launched.readFakeLog().filter(entry => entry["method"] === "thread/start")).toHaveLength(1);
-    const turns = launched.readFakeLog().filter(entry => entry["method"] === "turn/start");
+    expect(newSessions(launched.readFakeLog())).toHaveLength(1);
+    const turns = prompts(launched.readFakeLog());
     expect(turns).toHaveLength(2);
-    expect(turns[0]?.["params"]).toMatchObject({ threadId: id, input: [{ type: "text", text: "mass ulw: SCENARIO:workflow-background" }] });
+    expect(turns[0]).toEqual({ threadId: id, message: "mass ulw: SCENARIO:workflow-background" });
   } finally { await launched.close(); }
 });
 
@@ -144,6 +144,6 @@ test("ordinary tasks never become graph nodes and stay in their request groups",
     await page.getByTestId("workflow-log-view").click();
     await expect(panel.getByTestId(TESTID.omoTask)).toHaveCount(0);
     await expect(panel.getByTestId("workflow-activity-log")).toBeVisible();
-    expect(launched.readFakeLog().filter(entry => entry["method"] === "thread/start")).toHaveLength(1);
+    expect(newSessions(launched.readFakeLog())).toHaveLength(1);
   } finally { await launched.close(); }
 });

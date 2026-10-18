@@ -4,7 +4,7 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { ENV } from "../shared/ipc.ts";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, newSession, setTheme, shot, WT } from "./helpers.ts";
+import { byTestId, launchApp, newSession, setTheme, shot, WT, prompts } from "./helpers.ts";
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1sAAAAASUVORK5CYII=";
 
@@ -24,7 +24,7 @@ test("picker sends local images and echoes user thumbnails", async () => {
     await expect(byTestId(page, TESTID.userMessage).locator("img")).toBeVisible();
     await expect(byTestId(page, TESTID.userMessage)).toContainText("Describe this image");
     await expect(byTestId(page, TESTID.userMessage)).not.toContainText("Attached images");
-    expect(readFakeLog()).toContainEqual(expect.objectContaining({ method: "turn/start", params: expect.objectContaining({ input: [{ type: "text", text: `Describe this image\n\n${ATTACHMENT_HEADER}\n- ${image}`, text_elements: [] }] }) }));
+    expect(prompts(readFakeLog())).toContainEqual(expect.objectContaining({ message: `Describe this image\n\n${ATTACHMENT_HEADER}\n- ${image}` }));
   } finally { await launched.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -52,9 +52,9 @@ test("paste and drop preview, remove, and send image-only", async () => {
     await expect(byTestId(page, TESTID.composerSend)).toBeEnabled();
     await byTestId(page, TESTID.composerSend).click();
     await expect(byTestId(page, TESTID.userMessage).locator("img")).toBeVisible();
-    const request = readFakeLog().find((entry) => entry["method"] === "turn/start");
-    expect(request).toMatchObject({ params: { input: [{ type: "text", text: expect.stringMatching(new RegExp(`^${ATTACHMENT_HEADER.replace(/[()]/g, "\\$&")}\\n- .+[\\\\/]attachments[\\\\/][0-9a-f-]+\\.png$`)) }] } });
-    const saved = String((request?.["params"] as { input: { text: string }[] }).input[0]?.text).split("\n- ")[1] ?? "";
+    const request = prompts(readFakeLog())[0];
+    expect(request?.message).toEqual(expect.stringMatching(new RegExp(`^${ATTACHMENT_HEADER.replace(/[()]/g, "\\$&")}\\n- .+[\\\\/]attachments[\\\\/][0-9a-f-]+\\.png$`)));
+    const saved = String(request?.message).split("\n- ")[1] ?? "";
     expect(readFileSync(saved).equals(Buffer.from(PNG, "base64"))).toBe(true);
     await expect(byTestId(page, TESTID.userMessage).locator("img")).toHaveJSProperty("complete", true);
     expect(await byTestId(page, TESTID.userMessage).locator("img").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
@@ -78,8 +78,8 @@ test("the paperclip attaches any file type as a file reference", async () => {
     await expect(byTestId(page, TESTID.attachmentNotice)).toHaveCount(0);
     await byTestId(page, TESTID.composerInput).fill("Read these");
     await byTestId(page, TESTID.composerSend).click();
-    const request = readFakeLog().find((entry) => entry["method"] === "turn/start");
-    const text = String((request?.["params"] as { input: { text: string }[] }).input[0]?.text);
+    const request = prompts(readFakeLog())[0];
+    const text = String(request?.message);
     expect(text).toContain(JSON.stringify(document));
     expect(text).toContain(JSON.stringify(archive));
   } finally { await launched.close(); rmSync(dir, { recursive: true, force: true }); }

@@ -309,6 +309,8 @@ export interface McpServerStatus {
   resourceTemplates: unknown[];
   authStatus: string;
   status?: string;
+  /** omo's Native RPC reports how many tools a server lists, not their names. */
+  toolCount?: number;
 }
 
 /** A secret-free descriptor of one stored provider account; `name` is the immutable id, `displayName` a label. */

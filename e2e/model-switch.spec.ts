@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, newSession, send, shot, tempDir } from "./helpers.ts";
+import { byTestId, launchApp, newSession, send, shot, tempDir, prompts } from "./helpers.ts";
 
 test("continuing a conversation on another model is held once with a warning, then goes through", async () => {
   const launched = await launchApp({ omo: "fake", pickDir: tempDir("model-switch") });
@@ -24,17 +24,17 @@ test("continuing a conversation on another model is held once with a warning, th
     await expect(toast).toContainText("Fake Beta");
     await expect(input).toHaveValue("second question");
     await expect(turns).toHaveCount(1);
-    expect(launched.readFakeLog().filter(entry => entry.method === "turn/start")).toHaveLength(1);
+    expect(prompts(launched.readFakeLog())).toHaveLength(1);
     await shot(page, "model-switch-warning", { maxSettleMs: 500 });
 
     await byTestId(page, TESTID.composerSend).click();
     await expect(turns).toHaveCount(2);
     await expect(turns.last()).toHaveAttribute("data-status", "completed");
-    expect(launched.readFakeLog().filter(entry => entry.method === "thread/settings/update").at(-1)?.params).toMatchObject({ threadId, model: "fake/beta" });
+    expect(launched.readFakeLog().filter(entry => entry["type"] === "set_model").at(-1)).toMatchObject({ threadId, provider: "fake", modelId: "beta" });
 
     await send(page, "third question");
     await expect(turns).toHaveCount(3);
     await expect(turns.last()).toHaveAttribute("data-status", "completed");
-    expect(launched.readFakeLog().filter(entry => entry.method === "turn/start")).toHaveLength(3);
+    expect(prompts(launched.readFakeLog())).toHaveLength(3);
   } finally { await launched.close(); }
 });

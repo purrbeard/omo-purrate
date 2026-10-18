@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, lastTurn, launchApp, newSession, send, shot } from "./helpers.ts";
+import { byTestId, lastTurn, launchApp, newSession, send, shot, prompts } from "./helpers.ts";
 
 test("an unanswered question remains after turn end and sends a follow-up answer", async () => {
   const pickDir = test.info().outputPath("workspace");
@@ -21,10 +21,10 @@ test("an unanswered question remains after turn end and sends a follow-up answer
     await expect(question).toBeHidden();
     await expect(byTestId(page, TESTID.userMessage)).toHaveCount(2);
     await expect(lastTurn(page)).toHaveAttribute("data-status", "completed");
-    const starts = (await readFakeLog()).filter((entry) => entry.method === "turn/start");
+    const starts = prompts(await readFakeLog());
     expect(starts).toHaveLength(2);
-    expect(starts[1]?.params).toMatchObject({ input: [{ type: "text", text: "Pick A or B?\nB" }] });
-    expect((starts[1]?.params as { threadId: string }).threadId).toBe((starts[0]?.params as { threadId: string }).threadId);
+    expect(starts[1]?.message).toBe("Pick A or B?\nB");
+    expect(starts[1]?.threadId).toBe(starts[0]?.threadId);
     await shot(page, "async-question-answered");
   } finally {
     await launched.close();

@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, lastTurn, launchApp, newSession, send, setTheme, shot, threadRow } from "./helpers.ts";
+import { byTestId, lastTurn, launchApp, newSession, send, setTheme, shot, threadRow, newSessions } from "./helpers.ts";
 
 test("native same-parent tasks have one turn owner and settled answers copy their recorded text", async () => {
   const workspace = test.info().outputPath("workspace");
@@ -74,7 +74,7 @@ test("native same-parent tasks have one turn owner and settled answers copy thei
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1280, 820));
     }
-    expect(launched.readFakeLog().filter(entry => entry["method"] === "thread/start")).toHaveLength(1);
+    expect(newSessions(launched.readFakeLog())).toHaveLength(1);
   } finally { await launched.close(); }
 });
 

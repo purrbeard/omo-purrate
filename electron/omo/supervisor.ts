@@ -5,6 +5,7 @@ import type { ClientMethod, ClientParams, ClientResult, RequestId, RpcNotificati
 import { AppServerClient, AppServerStartError, BRIDGE_ERROR_CODES, RpcRequestError } from "./app-server-client";
 import type { AppServerClientOptions, ExitInfo, InitializeResult } from "./app-server-client";
 import { locateOmo } from "./locate";
+import { NativeAppServerClient } from "./native/client";
 import type { LocateOptions, LocateResult } from "./locate";
 import { resolveLoginShellEnv, scrubChildEnv } from "./shell-env";
 import type { LoginShellEnv, ResolveLoginShellEnvOptions } from "./shell-env";
@@ -25,6 +26,10 @@ export interface OmoSupervisorOptions {
   locate?: (options: LocateOptions) => Promise<LocateResult>;
   resolveEnv?: (options: ResolveLoginShellEnvOptions) => Promise<LoginShellEnv>;
   createClient?: (options: AppServerClientOptions) => SupervisedClient;
+  /** App-owned scratch directory handed to the native client (utility sessions). */
+  stateDir?: string;
+  /** Task-message extension omo loads; a packaged app must pass a file outside app.asar, which omo cannot read. */
+  extensionPath?: string;
   /** When supplied, updates once per app lifetime before the first app-server launch. */
   autoUpdate?: AutoUpdateOptions;
 }
@@ -220,13 +225,17 @@ export class OmoSupervisor {
   private async launch(generation: number, binary: OmoBinary, login: LoginShellEnv): Promise<void> {
     const env = scrubChildEnv(login.env);
     this.childPath = env["PATH"] ?? null;
-    const createClient = this.options.createClient ?? ((options: AppServerClientOptions) => new AppServerClient(options));
+    const createClient = this.options.createClient ?? ((options: AppServerClientOptions) => new NativeAppServerClient(options));
+    // omo 5.1.34 removed `omo app-server`; one multi-session Native RPC host serves every thread.
     const client = createClient({
       command: binary.path,
-      args: ["app-server", "--listen", "stdio://", "--extension", path.join(__dirname, "task-message-extension.js")],
+      args: ["--mode", "rpc", "--multi-session", "--session-runtime", "in-process", "--extension", this.options.extensionPath ?? path.join(__dirname, "task-message-extension.js")],
       cwd: this.options.homeDir,
-      env,
+      env: { ...env, OMO_RPC_CLIENT_CAPABILITIES: "extension_events" },
       clientVersion: this.options.clientVersion,
+      // The child env drops OMO_* overrides, so omo itself uses <home>/.omo/agent.
+      agentDir: this.options.baseEnv[ENV.qaAgentDir] ?? path.join(this.options.homeDir, ".omo", "agent"),
+      ...(this.options.stateDir === undefined ? {} : { stateDir: this.options.stateDir }),
     });
     this.client = client;
     this.setStatus({ state: "starting", omo: binary, userAgent: null });

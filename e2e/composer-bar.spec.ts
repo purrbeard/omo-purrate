@@ -63,12 +63,8 @@ test("checkout bar shows branch and counts; reasoning writes turn/start effort; 
     await expect(reasoning).toHaveText("High");
     await send(page, "SCENARIO:echo reasoning effort");
     await expect(byTestId(page, TESTID.turn).last()).toHaveAttribute("data-status", "completed");
-    expect(launched.readFakeLog()).toContainEqual(
-      expect.objectContaining({
-        method: "turn/start",
-        params: expect.objectContaining({ model: "fake/beta", effort: "high" }),
-      }),
-    );
+    expect(launched.readFakeLog()).toContainEqual(expect.objectContaining({ type: "set_model", modelId: "beta" }));
+    expect(launched.readFakeLog()).toContainEqual(expect.objectContaining({ type: "set_thinking_level", level: "high" }));
 
     await byTestId(page, TESTID.modelPicker).click();
     await byTestId(page, TESTID.profileTab).click();
