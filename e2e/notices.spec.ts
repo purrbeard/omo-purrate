@@ -2,7 +2,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, newSession, shot, tempDir, threadRow } from "./helpers.ts";
+import { byTestId, lastTurn, launchApp, newSession, shot, tempDir, threadRow } from "./helpers.ts";
 
 test("session-only provider errors appear live and after restoring history", async () => {
   const userData = tempDir("error-user-data");
@@ -68,5 +68,27 @@ test("a failed turn surfaces as an error toast", async () => {
   } finally {
     await launched.close();
     rmSync(pickDir, { recursive: true, force: true });
+  }
+});
+
+test("an auto-retried turn stays running with a retry notice and finishes in the same turn", async () => {
+  const pickDir = tempDir("retry-workspace");
+  const fakeHome = tempDir("retry-home");
+  const launched = await launchApp({ omo: "fake", fakeHome, pickDir });
+  try {
+    const { page } = launched;
+    await newSession(page);
+    const input = byTestId(page, TESTID.composerInput);
+    await input.fill("SCENARIO:retry");
+    await input.press("Enter");
+    // The error stop and agent_end(willRetry) must not end the turn: it keeps its stop button and shows the retry.
+    await expect(byTestId(page, TESTID.turnError)).toContainText("Retrying (attempt 1/3)");
+    await expect(byTestId(page, TESTID.composerStop)).toBeVisible();
+    await expect(lastTurn(page)).toContainText("recovered", { timeout: 5000 });
+    await expect(byTestId(page, TESTID.turnError)).toHaveCount(0);
+    await expect(byTestId(page, TESTID.composerStop)).toHaveCount(0);
+  } finally {
+    await launched.close();
+    for (const dir of [pickDir, fakeHome]) rmSync(dir, { recursive: true, force: true });
   }
 });

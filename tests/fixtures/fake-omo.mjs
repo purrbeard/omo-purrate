@@ -100,6 +100,7 @@ function recordEntry(record, entry) {
   const line = { ...entry, id, parentId: record.lastEntryId, timestamp: new Date().toISOString() };
   appendFileSync(record.thread.path, `${JSON.stringify(line)}\n`);
   record.lastEntryId = id;
+  return line;
 }
 
 const zeroUsage = () => ({
@@ -738,6 +739,29 @@ function runScenario(record, turn, text) {
       display: false,
     });
     return;
+  }
+  // SCENARIO:live-notice: a displayable custom_message entry and a fallback model switch, announced live.
+  if (text.includes("SCENARIO:live-notice")) {
+    const item = openAgentMessage(turn);
+    appendAgentDelta(turn, item, "Noticed.");
+    closeAgentMessage(record, turn, item, "stop");
+    const entry = recordEntry(record, { type: "custom_message", customType: "omo-kibitzer:recall", display: true, content: "<recalled-memory source=\"[[notes/live.md]]\">Live recall line.</recalled-memory>" });
+    event(record, "entry_appended", { entry });
+    event(record, "entry_appended", { entry });
+    event(record, "model_changed", { model: { provider: "fake", id: "beta" }, thinkingLevel: "high", source: "fallback" });
+    return;
+  }
+  // SCENARIO:retry: a transient error stop, an auto-retry delay, then a recovered answer in the same turn.
+  if (text.includes("SCENARIO:retry")) {
+    event(record, "message_end", { message: assistantMessage([], "error", { errorMessage: "529 overloaded" }) });
+    event(record, "auto_retry_start", { attempt: 1, maxAttempts: 3, delayMs: 800, errorMessage: "529 overloaded" });
+    event(record, "agent_end", { messages: [], willRetry: true });
+    return sleep(turn, 800).then(() => {
+      event(record, "auto_retry_end", { success: true, attempt: 1 });
+      const item = openAgentMessage(turn);
+      appendAgentDelta(turn, item, "recovered");
+      closeAgentMessage(record, turn, item, "stop");
+    });
   }
   if (text.includes("SCENARIO:silent-error")) {
     const entry = assistantEntry([{ type: "text", text: "" }], "error");

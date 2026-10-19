@@ -398,17 +398,17 @@ describe("session lifecycle", () => {
     expect(bridge.historyLoads).toContain(BRANCH_PATH);
   });
 
-  it("pauses, resumes, completes and clears goals, propagating errors to controls", async () => {
+  it("pauses, resumes and clears goals, propagating errors to controls", async () => {
     const { actions, bridge, store } = setup();
     await actions.newThread("/source");
-    for (const status of ["paused", "active", "complete"] as const) {
+    for (const status of ["paused", "active"] as const) {
       await actions.setGoalStatus(THREAD_ID, status);
       expect(store.getState().conversations[THREAD_ID]?.live.goal?.status).toBe(status);
       expect(bridge.calls).toContainEqual({ method: "thread/goal/set", params: { threadId: THREAD_ID, status } });
     }
     bridge.failing.add("thread/goal/clear");
     await expect(actions.clearGoal(THREAD_ID)).rejects.toThrow("thread/goal/clear failed");
-    expect(store.getState().conversations[THREAD_ID]?.live.goal?.status).toBe("complete");
+    expect(store.getState().conversations[THREAD_ID]?.live.goal?.status).toBe("active");
     bridge.failing.delete("thread/goal/clear");
     await actions.clearGoal(THREAD_ID);
     expect(store.getState().conversations[THREAD_ID]?.live.goal).toBeNull();

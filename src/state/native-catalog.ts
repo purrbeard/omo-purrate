@@ -14,6 +14,22 @@ function createCatalogCache() {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
+    /** Drops every cached catalog and re-reads the ones a mounted consumer still shows, bypassing the main-process cache. */
+    invalidate(): void {
+      const stale = [...entries.keys()];
+      entries.clear();
+      for (const cwd of stale) {
+        const request = window.omo.loadNativeCatalog(cwd, true)
+          .catch((error: unknown): NativeCatalog => ({ commands: [], contextWindows: {}, error: String(error) }))
+          .then(catalog => {
+            entries.set(cwd, catalog);
+            pending.delete(cwd);
+            for (const listener of listeners) listener();
+          });
+        pending.set(cwd, request);
+      }
+      for (const listener of listeners) listener();
+    },
     load(cwd: string): Promise<void> {
       if (entries.has(cwd)) return Promise.resolve();
       const existing = pending.get(cwd);

@@ -57,10 +57,11 @@ export function ApprovalCard({
   const code = useMemo(() => (command === null ? relatedCode(related) : null), [command, related]);
   const workingDirectory = request.kind === "commandApproval" ? (request.params.cwd ?? null) : null;
   const grantRoot = request.kind === "fileChangeApproval" ? (request.params.grantRoot ?? null) : null;
-  const changedPaths = useMemo(
-    () => (related?.type === "fileChange" ? related.changes.map((change) => displayPath(change.path, cwd)) : []),
-    [related, cwd],
-  );
+  const requestPaths = request.kind === "fileChangeApproval" ? request.params.paths : undefined;
+  const changedPaths = useMemo(() => {
+    const fromItem = related?.type === "fileChange" ? related.changes.map((change) => change.path) : [];
+    return [...new Set([...(requestPaths ?? []), ...fromItem])].map((path) => displayPath(path, cwd));
+  }, [related, cwd, requestPaths]);
   const decisions =
     request.kind === "commandApproval" ? (request.params.availableDecisions ?? ALL_DECISIONS) : ALL_DECISIONS;
   const offers = (decision: ApprovalDecision): boolean => decisions.includes(decision);

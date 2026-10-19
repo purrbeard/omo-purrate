@@ -13,6 +13,7 @@ import { resolveComposerModel, selectIsTurnActive, selectSkillCatalog } from "./
 import { object, parseGoal } from "./live-wire";
 
 import { normalizeMcpPage, type McpServer } from "./mcp";
+import { nativeCatalogCache } from "./native-catalog";
 
 const THREAD_PAGE_SIZE = 50;
 const EFFORTS: ReadonlySet<string> = new Set<ReasoningEffort>(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
@@ -131,7 +132,7 @@ export interface AppActions {
   listArchivedThreads(): Promise<Thread[]>;
   forkThread(threadId: string): Promise<string>;
   pinThread(threadId: string, pinned: boolean): Promise<void>;
-  setGoalStatus(threadId: string, status: "active" | "paused" | "complete"): Promise<void>;
+  setGoalStatus(threadId: string, status: "active" | "paused"): Promise<void>;
   clearGoal(threadId: string): Promise<void>;
   answerApproval(id: RequestId, decision: ApprovalDecision, reason?: string): Promise<void>;
   answerUserInput(id: RequestId, answers: Record<string, string[]>, comment?: string): Promise<void>;
@@ -763,6 +764,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
             }
           }
           if (parseNotification(notification)?.method === "skills/changed") {
+            nativeCatalogCache(store).invalidate();
             const state = store.getState();
             const cwd = state.activeThreadId === null ? undefined : state.threads[state.activeThreadId]?.cwd;
             if (cwd !== undefined) void ensureSkills(cwd);
