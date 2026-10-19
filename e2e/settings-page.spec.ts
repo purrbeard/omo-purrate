@@ -126,7 +126,7 @@ test("appearance changes the scheme and palette, and restore device defaults res
     await expect.poll(() => sidebarFill(page)).toBe(omoLightFill);
     expect(await page.evaluate(() => window.omo.getPreferences())).toMatchObject({
       theme: "system",
-      palette: "omo",
+      palette: "noir",
       modelId: null,
       lastWorkspace: null,
     });

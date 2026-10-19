@@ -87,7 +87,7 @@ export interface Diagnostics {
 }
 
 export type ThemePreference = "system" | "light" | "dark";
-export type PalettePreference = "omo" | "classic" | "mint" | "ocean" | "sbd";
+export type PalettePreference = "noir" | "omo" | "classic" | "mint" | "ocean" | "sbd";
 export type LocalePreference = "system" | "en" | "ko";
 
 
@@ -193,7 +193,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   omoAutoUpdate: true,
   theme: "system",
   locale: "system",
-  palette: "omo",
+  palette: "noir",
   lastWorkspace: null,
   recentWorkspaces: [],
   modelId: null,

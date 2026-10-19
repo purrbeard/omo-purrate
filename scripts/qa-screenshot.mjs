@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Visual QA driver: launches the built app through Playwright's Electron support, runs
 // optional steps, and writes a screenshot. See --help.
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -185,7 +186,7 @@ async function main() {
     await screenshot(page, options.out);
   } finally {
     if (app) await app.close();
-    for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+    if (tempDirs.length > 0) execFileSync("trash", tempDirs, { shell: process.platform === "win32" });
   }
 }
 

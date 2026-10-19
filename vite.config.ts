@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, type Plugin } from "vite";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -38,7 +39,7 @@ function vendored(name: string, dir: string, entry = "index.ts"): { find: RegExp
 
 export default defineConfig({
   base: "./",
-  plugins: [react(), productionCsp()],
+  plugins: [react(), tailwindcss(), productionCsp()],
   resolve: {
     alias: [
       ...vendored("@deepseek-ai/dsh-client-ui-primitives", "src/dsh/primitives"),

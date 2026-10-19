@@ -293,6 +293,22 @@ export function threadRow(page: Page, threadId: string): Locator {
 }
 
 function luminance(color: string): number {
+  // Chromium preserves oklch() in computed styles for semantic theme tokens.
+  const oklch = /^oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)$/.exec(color);
+  if (oklch) {
+    const lightness = Number(oklch[1]);
+    const chroma = Number(oklch[2]);
+    const hue = Number(oklch[3]) * Math.PI / 180;
+    const a = chroma * Math.cos(hue);
+    const b = chroma * Math.sin(hue);
+    const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+    const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+    const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
+    const clamp = (value: number): number => Math.max(0, Math.min(1, value));
+    return 0.2126 * clamp(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)
+      + 0.7152 * clamp(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)
+      + 0.0722 * clamp(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s);
+  }
   const match = /^rgba?\(([^)]+)\)$/.exec(color);
   if (match === null) throw new Error(`not an rgb() color: ${color}`);
   const [r = 0, g = 0, b = 0] = (match[1] ?? "").split(",").slice(0, 3).map((part) => Number(part.trim()) / 255);
@@ -300,7 +316,7 @@ function luminance(color: string): number {
   return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
 }
 
-/** WCAG contrast ratio of two computed rgb()/rgba() colors; alpha is ignored, so pass opaque colors. */
+/** WCAG contrast ratio of computed rgb()/rgba()/oklch() colors; pass opaque colors. */
 export function contrastRatio(foreground: string, background: string): number {
   const [lighter = 0, darker = 0] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
   return (lighter + 0.05) / (darker + 0.05);

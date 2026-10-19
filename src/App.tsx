@@ -235,9 +235,22 @@ export function App() {
   }, [models, store, profile, preferences?.profileModels]);
 
   const theme = preferences?.theme ?? "system";
-  useEffect(() => applyThemePreference(theme), [theme]);
-  const palette = preferences?.palette ?? "omo";
-  useEffect(() => { document.body.dataset.palette = palette; }, [palette]);
+  useEffect(() => {
+    if (preferences) applyThemePreference(theme);
+  }, [theme, preferences !== null]);
+  const palette = preferences?.palette ?? "noir";
+  useEffect(() => {
+    if (!preferences) return;
+    document.body.dataset.palette = palette;
+    document.documentElement.style.backgroundColor = getComputedStyle(document.body).getPropertyValue("--background").trim();
+    // A paint-only cache for the synchronous splash; preferences remain authoritative.
+    try {
+      localStorage.setItem("omo-ui-appearance", JSON.stringify({
+        theme, palette, dark: document.body.hasAttribute("data-ds-dark-theme"),
+        background: getComputedStyle(document.body).getPropertyValue("--background").trim(),
+      }));
+    } catch { /* A disabled storage area must not prevent theme application. */ }
+  }, [palette, theme, preferences !== null]);
 
 
   const locale = resolveLocale(preferences?.locale ?? "system", navigator.language);

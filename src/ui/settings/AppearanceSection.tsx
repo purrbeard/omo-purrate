@@ -12,6 +12,7 @@ import settings from "./SettingsDialog.module.css";
 
 const schemes = ["system", "light", "dark"] as const;
 const palettes: readonly { id: PalettePreference; name: string; light: string; dark: string; accent: string }[] = [
+  { id: "noir", name: "Noir", light: "#ffffff", dark: "#0a0a0a", accent: "#e0323b" },
   { id: "omo", name: "OmO", light: "#f5f0fc", dark: "#181121", accent: "#6656d9" },
   { id: "classic", name: "Classic", light: "#faf3ef", dark: "#21171b", accent: "#996b51" },
   { id: "mint", name: "Mint", light: "#edf7f0", dark: "#14211a", accent: "#248567" },
@@ -28,13 +29,13 @@ export function AppearanceSection() {
     void updatePreferences(patch).then(() => setError(null), (reason: unknown) => setError(errorMessage(reason)));
   };
   const theme = preferences?.theme ?? "system";
-  const palette = preferences?.palette ?? "omo";
-  const swatch = palettes.find((item) => item.id === palette) ?? { light: "#f5f0fc", dark: "#181121", accent: "#6656d9" };
+  const palette = preferences?.palette ?? "noir";
+  const swatch = palettes.find((item) => item.id === palette) ?? { light: "#ffffff", dark: "#0a0a0a", accent: "#e0323b" };
   const preview = { "--preview-light": swatch.light, "--preview-dark": swatch.dark, "--preview-accent": swatch.accent } as CSSProperties;
   return <section className={`${settings.section} ${css.page}`}>
     <div className={css.heading}>
       <SectionHeading title={t("shell.settings.nav.appearance")} intro={t("shell.settings.appearance.intro")} />
-      <button className={css.reset} data-testid="appearance-reset" onClick={() => save({ theme: "system", palette: "omo", locale: "system" })}>{t("shell.settings.appearance.reset")}</button>
+      <button className={css.reset} data-testid="appearance-reset" onClick={() => save({ theme: "system", palette: "noir", locale: "system" })}>{t("shell.settings.appearance.reset")}</button>
     </div>
     <h3 className={css.title}>{t("shell.settings.appearance.scheme")}</h3>
     <div className={css.schemes} role="group" aria-label={t("shell.settings.appearance.scheme")} style={preview}>
@@ -49,7 +50,7 @@ export function AppearanceSection() {
     <div className={css.palettes} role="group" aria-label={t("shell.settings.appearance.palettes")}>
       {palettes.map((item) => <button key={item.id} className={css.choice} data-testid={`settings-palette-${item.id}`} aria-pressed={palette === item.id}
         style={{ "--preview-light": item.light, "--preview-dark": item.dark, "--preview-accent": item.accent } as CSSProperties} onClick={() => save({ palette: item.id })}>
-        <span className={css.swatches} aria-hidden="true"><span /><span /></span><span>{item.name}</span>
+        <span className={css.swatches} aria-hidden="true"><span /><span /></span><span>{item.id === "noir" ? t("shell.settings.appearance.noir") : item.name}</span>
       </button>)}
     </div>
     <div className={settings.card}><SettingRow title={t("shell.settings.language")} hint={t("shell.settings.language.hint")}>

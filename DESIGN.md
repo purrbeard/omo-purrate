@@ -16,7 +16,19 @@ Creator classification uses structured native provenance or recorded automation 
 
 Confirmed native parent/child task links and explicitly related sessions appear beneath their main session in a collapsible group. Child tasks with no standalone session remain visible as status rows; saved child sessions open their original conversation. Session files, IDs and cwd are never rewritten. Ordinary sessions are not assigned by title or path guesses; their menu can create a related session or explicitly attach/detach one. Existing settle preferences remain intact. Child search/running filters keep the parent reachable.
 
-This Windows port preserves the upstream design system documented in `src/ui/README.md`, `src/dsh/README.md`, and `src/ui/theme/omo-theme.css`. It is not a visual redesign. Existing typography, spacing, colors, sidebar, composer, conversation, and theme tokens remain the source of truth.
+## Design foundation
+
+New UI uses Tailwind CSS 4, semantic oklch tokens in `src/ui/theme/tokens.css`, headless `@base-ui/react` behavior, and `lucide-react` icons through `src/ui/kit`. Tailwind's Vite plugin compiles utilities; preflight is deliberately omitted so existing CSS modules keep their element defaults and layout. `omo-theme.css` owns the shared Geist fonts and radius scale, not colors.
+
+Noir is the default for new preferences and missing palette values: white/near-black in light mode, #0a0a0a/#121212/#1a1a1a surfaces and white text in dark mode. The single red `--primary` is reserved for the main action, brand, and selected indicators. Ordinary hover surfaces, checked switches, links, input borders and focus rings are neutral. `--ring` is dark in light mode and near-white in dark mode, independent of every palette accent. Keep OmO, Classic, Mint, Ocean and SBD selectable; `palettes.css` expresses their colors through the same roles without changing status or focus semantics.
+
+Use `bg-background`, `text-muted-foreground`, `border-border`, `ring-ring` and the card/popover/primary/secondary/muted/accent/destructive roles. App roles are grouped as `--sidebar-*`, `--composer-*`, `--toolbar-*`, `--message-*` and `--terminal-*`. Brightness remains `body[data-ds-dark-theme]`; palette remains `body[data-palette]`. `public/theme-splash.js` paints the cached appearance synchronously before React, with a noir-dark fallback; IPC preferences remain authoritative.
+
+`src/ui/theme/dsw-bridge.css` is the only compatibility mapping for legacy DSW color names. It covers every platform alias/specific color plus OmO extensions; static swatches, geometry and typography stay vendored. Existing screens keep CSS modules until their separate migration. When migrating a screen, use kit components and semantic tokens, then remove a bridge entry only after its last consumer has gone. Do not reintroduce palette-specific DSW overrides.
+
+Destructive and error surfaces never rely on hue alone. Kit destructive Button, Badge and Menu variants pair an icon with a visible text label; error Toast always includes its icon and title, with a close button. Primary is a solid red action; destructive is a quiet tinted surface with contrasting error ink. Icon-only destructive actions are excluded from IconButton. Dialog, Menu, Tabs, Switch and Tooltip keep Base UI keyboard, focus and accessibility behavior. Toast owns configurable dismissal; long-lived errors can disable automatic dismissal. Screen workers must preserve those label/icon contracts when migrating existing errors.
+
+This increment changes the design foundation and palette bridge only. Sidebar, conversation, composer and settings screen structure and interactions remain owned by their subsequent migrations.
 
 ## Windows shell
 

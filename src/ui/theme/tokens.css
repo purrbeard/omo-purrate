@@ -1,0 +1,159 @@
+/* No preflight: legacy CSS modules retain their element defaults and geometry. */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+@import './palettes.css';
+
+@custom-variant dark (&:where([data-ds-dark-theme], [data-ds-dark-theme] *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-sidebar: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-composer: var(--composer-background);
+  --color-composer-foreground: var(--composer-foreground);
+  --color-composer-border: var(--composer-border);
+  --color-composer-placeholder: var(--composer-placeholder);
+  --color-composer-send: var(--composer-send);
+  --color-composer-send-foreground: var(--composer-send-foreground);
+  --color-toolbar: var(--toolbar-background);
+  --color-toolbar-foreground: var(--toolbar-foreground);
+  --color-toolbar-border: var(--toolbar-border);
+  --color-message-user: var(--message-user-background);
+  --color-message-user-foreground: var(--message-user-foreground);
+  --color-message-assistant: var(--message-assistant-background);
+  --color-message-assistant-foreground: var(--message-assistant-foreground);
+  --color-message-code: var(--message-code-background);
+  --color-message-code-foreground: var(--message-code-foreground);
+  --color-message-border: var(--message-border);
+  --color-terminal: var(--terminal-background);
+  --color-terminal-foreground: var(--terminal-foreground);
+  --color-terminal-cursor: var(--terminal-cursor);
+  --color-terminal-selection: var(--terminal-selection);
+  --font-sans: var(--dsw-font-family);
+  --font-mono: var(--ds-font-family-code);
+}
+
+/* Noir is the fallback, including before preferences arrive. Theme and palette
+   are independent: palettes override only their hue/surface roles below. */
+:root,
+body {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(0.985 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.57 0.22 25);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.96 0 0);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.45 0 0);
+  --accent: oklch(0.94 0 0);
+  --accent-foreground: var(--foreground);
+  /* Destructive uses a quiet surface + contrasting ink, never a primary fill.
+     Kit destructive variants always add an icon AND visible text. */
+  --destructive: oklch(0.95 0.025 25);
+  --destructive-foreground: oklch(0.43 0.17 25);
+  --border: oklch(0.88 0 0);
+  --input: oklch(0.75 0 0);
+  --ring: oklch(0.25 0 0);
+  --success: oklch(0.43 0.12 150);
+  --warning: oklch(0.46 0.1 75);
+  --sidebar-background: oklch(0.97 0 0);
+  --composer-background: oklch(1 0 0);
+  --message-user-background: oklch(0.95 0 0);
+  --terminal-background: oklch(0.985 0 0);
+  --terminal-red: oklch(0.48 0.17 25);
+  --terminal-green: oklch(0.43 0.12 150);
+  --terminal-yellow: oklch(0.46 0.1 75);
+  --terminal-blue: oklch(0.48 0.16 260);
+  --terminal-magenta: oklch(0.48 0.16 310);
+  --terminal-cyan: oklch(0.46 0.09 210);
+}
+
+body[data-ds-dark-theme] {
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.182 0 0);
+  --popover: oklch(0.218 0 0);
+  --secondary: oklch(0.218 0 0);
+  --muted: oklch(0.218 0 0);
+  --muted-foreground: oklch(0.715 0 0);
+  --accent: oklch(0.27 0 0);
+  --destructive: oklch(0.25 0.045 25);
+  --destructive-foreground: oklch(0.8 0.12 25);
+  --border: oklch(0.32 0 0);
+  --input: oklch(0.43 0 0);
+  --ring: oklch(0.9 0 0);
+  --success: oklch(0.76 0.15 150);
+  --warning: oklch(0.81 0.14 80);
+  --sidebar-background: oklch(0.182 0 0);
+  --composer-background: oklch(0.218 0 0);
+  --message-user-background: oklch(0.218 0 0);
+  --terminal-background: oklch(0.145 0 0);
+  --terminal-red: oklch(0.75 0.15 25);
+  --terminal-green: oklch(0.76 0.15 150);
+  --terminal-yellow: oklch(0.81 0.14 80);
+  --terminal-blue: oklch(0.75 0.12 260);
+  --terminal-magenta: oklch(0.75 0.12 310);
+  --terminal-cyan: oklch(0.77 0.09 210);
+}
+
+body {
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --composer-foreground: var(--foreground);
+  --composer-border: var(--input);
+  --composer-placeholder: var(--muted-foreground);
+  --composer-send: var(--primary);
+  --composer-send-foreground: var(--primary-foreground);
+  --toolbar-background: var(--card);
+  --toolbar-foreground: var(--muted-foreground);
+  --toolbar-border: var(--border);
+  --message-user-foreground: var(--foreground);
+  --message-assistant-background: var(--background);
+  --message-assistant-foreground: var(--foreground);
+  --message-code-background: var(--card);
+  --message-code-foreground: var(--foreground);
+  --message-border: var(--border);
+  --terminal-foreground: var(--foreground);
+  --terminal-cursor: var(--foreground);
+  --terminal-selection: color-mix(in oklch, var(--foreground) 18%, transparent);
+  --terminal-black: var(--terminal-background);
+  --terminal-white: var(--foreground);
+}

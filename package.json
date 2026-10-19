@@ -40,9 +40,11 @@
     "postinstall": "node node_modules/electron/install.js"
   },
   "devDependencies": {
+    "@base-ui/react": "^1.9.0",
     "@playwright/test": "^1.63.0",
     "@resvg/resvg-js": "^2.6.2",
     "@shikijs/langs": "^4.3.1",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/mdast": "^4.0.4",
     "@types/node": "^22.20.4",
     "@types/react": "^19.3.0",
@@ -59,6 +61,7 @@
     "immer": "^10.1.1",
     "json5": "^2.2.3",
     "katex": "^0.16.47",
+    "lucide-react": "^1.59.0",
     "mdast-util-from-markdown": "^2.0.3",
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-math": "^3.0.0",
@@ -75,6 +78,7 @@
     "react-dom": "^19.3.1",
     "shiki": "^4.3.1",
     "simple-icons": "16.31.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
     "vite": "^6.4.3",
     "vitest": "^4.1.8",

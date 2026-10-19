@@ -13,6 +13,15 @@ const DARK_QUERY = "(prefers-color-scheme: dark)";
 function setDark(dark: boolean): void {
   if (dark) document.body.setAttribute(DARK_ATTRIBUTE, "");
   else document.body.removeAttribute(DARK_ATTRIBUTE);
+  document.documentElement.style.backgroundColor = getComputedStyle(document.body).getPropertyValue("--background").trim();
+  document.documentElement.style.colorScheme = dark ? "dark" : "light";
+  // System appearance can change without a new React preference value.
+  try {
+    const saved = JSON.parse(localStorage.getItem("omo-ui-appearance") ?? "null") as Record<string, unknown> | null;
+    if (saved) localStorage.setItem("omo-ui-appearance", JSON.stringify({
+      ...saved, dark, background: getComputedStyle(document.body).getPropertyValue("--background").trim(),
+    }));
+  } catch { /* The paint cache is optional when storage is unavailable. */ }
 }
 
 /** Applies brightness and follows OS changes while the system preference is selected. */

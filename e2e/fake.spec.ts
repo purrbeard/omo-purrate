@@ -129,7 +129,7 @@ test("relaunch lists the thread and restores its history", async () => {
 
 test("dark primary buttons keep readable text, and the send arrow stays white in both themes", async () => {
   const { page } = current();
-  const white = "rgb(255, 255, 255)";
+  const white = (await tokenColors(page, "--primary-foreground", "--primary")).color;
   await setTheme(page, "dark");
   await newSession(page);
   await send(page, "SCENARIO:full");

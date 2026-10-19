@@ -70,7 +70,10 @@ describe("PreferencesStore", () => {
   });
   it("persists palette independently of color scheme and rejects unknown palettes", () => {
     const prefs = new PreferencesStore(dir);
-    expect(prefs.get().palette).toBe("omo");
+    expect(prefs.get().palette).toBe("noir");
+    for (const palette of ["noir", "omo", "classic", "mint", "ocean", "sbd"]) {
+      expect(prefs.set({ palette }).palette).toBe(palette);
+    }
     prefs.set({ palette: "sbd", theme: "dark" });
     expect(prefs.set({ palette: "unknown" })).toMatchObject({ palette: "sbd", theme: "dark" });
     expect(new PreferencesStore(dir).get()).toMatchObject({ palette: "sbd", theme: "dark" });

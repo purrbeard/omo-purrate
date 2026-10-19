@@ -8,7 +8,7 @@ import type { LocalePreference, ModelProfile, PalettePreference, Preferences, Th
 export { DEFAULT_PREFERENCES };
 
 const THEMES: readonly ThemePreference[] = ["system", "light", "dark"];
-const PALETTES: readonly PalettePreference[] = ["omo", "classic", "mint", "ocean", "sbd"];
+const PALETTES: readonly PalettePreference[] = ["noir", "omo", "classic", "mint", "ocean", "sbd"];
 const LOCALES: readonly LocalePreference[] = ["system", "en", "ko"];
 const PROFILES: readonly ModelProfile[] = ["daily-normal", "daily-heavy", "geeky-normal", "geeky-heavy"];
 const MAX_RECENT = 10;
@@ -104,7 +104,7 @@ function merge(current: Preferences, patch: unknown): Preferences {
       : current.threadCreators ?? {},
     omoAutoUpdate: typeof patch["omoAutoUpdate"] === "boolean" ? patch["omoAutoUpdate"] : current.omoAutoUpdate ?? true,
     theme: has("theme") ? pick(THEMES, patch["theme"], current.theme) : current.theme,
-    palette: has("palette") ? pick(PALETTES, patch["palette"], current.palette ?? "omo") : current.palette ?? "omo",
+    palette: has("palette") ? pick(PALETTES, patch["palette"], current.palette ?? "noir") : current.palette ?? "noir",
     locale: has("locale") ? pick(LOCALES, patch["locale"], current.locale) : current.locale,
     lastWorkspace: has("lastWorkspace") ? nullableString(patch["lastWorkspace"], current.lastWorkspace) : current.lastWorkspace,
     recentWorkspaces: has("recentWorkspaces") ? recent(patch["recentWorkspaces"], current.recentWorkspaces) : current.recentWorkspaces,
