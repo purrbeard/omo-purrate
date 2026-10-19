@@ -6,6 +6,7 @@ import "./ui/theme/legacy-tokens.css";
 import "./ui/theme/omo-theme.css";
 import "./ui/theme/tokens.css";
 import "./ui/theme/dsw-bridge.css";
+import "./ui/theme/appearance.css";
 import "./ui/app.css";
 import "./ui/lib/input-modality";
 import { App } from "./App";

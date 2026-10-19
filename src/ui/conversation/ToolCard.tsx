@@ -276,7 +276,7 @@ export const ToolCard = memo(function ToolCard({
           )}
           {totals !== null && (
             <TextShimmer className="ml-2.5 flex-none font-mono text-[11px] leading-6 whitespace-nowrap">
-              <span className="group-hover/row:text-success group-aria-expanded/row:text-success">{`+${totals.added}`}</span>{" "}
+              <span className="group-hover/row:text-(--diff-add) group-aria-expanded/row:text-(--diff-add)">{`+${totals.added}`}</span>{" "}
               <span className="group-hover/row:text-destructive-foreground group-aria-expanded/row:text-destructive-foreground">{`-${totals.removed}`}</span>
             </TextShimmer>
           )}

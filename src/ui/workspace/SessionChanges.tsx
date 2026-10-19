@@ -12,7 +12,7 @@ import { useUiState } from "../ui-state";
 
 const EMPTY_TURNS: ConversationTurn[] = [];
 const MONO = "[font-family:ui-monospace,SFMono-Regular,Consolas,monospace]";
-const LINES = clsx("inline-flex flex-none gap-1 text-[10px] leading-4 font-medium text-muted-foreground [&_[data-kind=added]]:text-success [&_[data-kind=removed]]:text-destructive-foreground", MONO);
+const LINES = clsx("inline-flex flex-none gap-1 text-[10px] leading-4 font-medium text-muted-foreground [&_[data-kind=added]]:text-(--diff-add) [&_[data-kind=removed]]:text-(--diff-remove)", MONO);
 
 export interface SessionChangeGroup {
   turnId: string;
