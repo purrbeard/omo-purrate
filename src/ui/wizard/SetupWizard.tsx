@@ -2,14 +2,11 @@ import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
-import {
-  Button,
-  IconCheckOutlineRegular,
-  IconChevronDownOutlineRegular,
-  IconCloseOutlineRegular,
-  focusWithoutRing,
-  useModalLayer,
-} from "@deepseek-ai/dsh-client-ui-primitives";
+import { focusWithoutRing, useModalLayer } from "@deepseek-ai/dsh-client-ui-primitives";
+import { Check, ChevronDown, X } from "lucide-react";
+import { Button } from "../kit/Button";
+import { IconButton } from "../kit/IconButton";
+import { focusRing } from "../kit/shared";
 import type { Model } from "../../../shared/protocol";
 import type { Preferences } from "../../../shared/ipc";
 import { selectThreadsByWorkspace, selectUnknownThreadsByWorkspace } from "../../state";
@@ -22,7 +19,6 @@ import { formatThreadTime } from "../sidebar/thread-time";
 import { WorkspaceBadge } from "../sidebar/WorkspaceBadge";
 import { TESTID } from "../testids";
 import { updatePreferences, uiState, useUiState } from "../ui-state";
-import css from "./SetupWizard.module.css";
 
 const STEPS = ["welcome", "model", "project", "ready"] as const;
 type Step = (typeof STEPS)[number];
@@ -199,41 +195,38 @@ export function SetupWizard() {
   const onPrimary = step === "ready" ? () => finish(true) : next;
 
   return createPortal(
-    <div className={css.overlay} role="presentation">
-      <div className={css.mask} aria-hidden="true" onClick={close} />
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center font-sans" role="presentation">
+      <div className="absolute inset-x-0 top-[var(--dsh-frame-chrome-top,0px)] bottom-0 bg-background/70 backdrop-blur-xs" aria-hidden="true" onClick={close} />
       <div
         ref={panel}
         tabIndex={-1}
-        className={css.panel}
+        className="relative z-1 box-border flex max-h-[min(680px,calc(100vh-2*max(24px,var(--dsh-frame-overlay-top,24px))))] w-[min(620px,calc(100vw-48px))] flex-col overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-xl outline-none [word-break:keep-all] [overflow-wrap:break-word]"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         data-testid={TESTID.wizard}
         onKeyDown={onPanelKeyDown}
       >
-        <header className={css.header}>
-          <span className={css.brand}>
-            <BrandMark size={20} className={css.brandMark} />
-            <span className={css.brandName}>{t("app.brand")}</span>
+        <header className="flex shrink-0 items-center justify-between pt-[18px] pr-3.5 pb-1.5 pl-6">
+          <span className="inline-flex select-none items-center gap-2 text-base font-semibold tracking-[0.04em] text-primary">
+            <BrandMark size={20} />
+            <span>{t("app.brand")}</span>
           </span>
-          <button
-            type="button"
-            className={css.close}
-            aria-label={t("common.close")}
+          <IconButton
+            label={t("common.close")}
+            icon={<X />}
             data-testid={TESTID.wizardClose}
             onClick={close}
-          >
-            <IconCloseOutlineRegular size={14} />
-          </button>
+          />
         </header>
-        <ol className={css.stepper} aria-label={t("wizard.aria.steps")}>
+        <ol className="mt-3 mx-6 mb-0 flex shrink-0 list-none items-center gap-1 rounded-md bg-background p-2" aria-label={t("wizard.aria.steps")}>
           {STEPS.map((id, index) => {
             const state = index < stepIndex ? "done" : index === stepIndex ? "current" : "todo";
             return (
-              <li key={id} className={css.stepItem}>
+              <li key={id} className="flex min-w-0 flex-1 items-center">
                 <button
                   type="button"
-                  className={clsx(css.step, css[state])}
+                  className={clsx("inline-flex min-w-0 items-center gap-1.5 rounded-sm border-0 bg-transparent px-1.5 py-1 font-sans text-xs leading-[18px]", focusRing, state === "done" ? "cursor-pointer text-muted-foreground hover:bg-accent" : state === "current" ? "cursor-default font-medium text-foreground" : "cursor-default text-muted-foreground")}
                   data-testid={TESTID.wizardStep}
                   data-step={id}
                   data-state={state}
@@ -241,24 +234,24 @@ export function SetupWizard() {
                   disabled={state !== "done"}
                   onClick={state === "done" ? () => setStep(id) : undefined}
                 >
-                  <span className={css.stepBadge} aria-hidden="true">
-                    {state === "done" ? <IconCheckOutlineRegular size={11} /> : index + 1}
+                  <span className={clsx("box-border inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-solid text-[11px] leading-none", state === "current" ? "border-transparent bg-primary text-primary-foreground" : state === "done" ? "border-transparent bg-secondary text-secondary-foreground" : "border-border text-muted-foreground")} aria-hidden="true">
+                    {state === "done" ? <Check size={11} /> : index + 1}
                   </span>
-                  <span className={css.stepLabel}>{t(STEP_KEY[id])}</span>
+                  <span className="truncate">{t(STEP_KEY[id])}</span>
                 </button>
-                {index < STEPS.length - 1 && <span className={css.stepConnector} aria-hidden="true" />}
+                {index < STEPS.length - 1 && <span className="mx-1 h-px flex-1 bg-border" aria-hidden="true" />}
               </li>
             );
           })}
         </ol>
-        <div className={css.body}>
-          <h2 className={css.title} id={titleId}>
+        <div className="flex min-h-[220px] flex-1 flex-col gap-2.5 overflow-y-auto px-6 pt-4 pb-2">
+          <h2 className="m-0 text-xl leading-7 font-medium" id={titleId}>
             {t(TITLE_KEY[step])}
           </h2>
           {step === "welcome" ? (
             <>
-              <p className={css.intro}>{t("wizard.welcome.body")}</p>
-              <p className={css.version}>
+              <p className="m-0 text-[13px] leading-[21px] text-muted-foreground">{t("wizard.welcome.body")}</p>
+              <p className="m-0 font-mono text-xs leading-[18px] text-muted-foreground">
                 {bridge?.omo?.version === undefined
                   ? t("wizard.welcome.versionPending")
                   : t("wizard.welcome.version", { version: bridge.omo.version })}
@@ -266,9 +259,9 @@ export function SetupWizard() {
             </>
           ) : step === "model" ? (
             models.length === 0 ? (
-              <p className={css.hint}>{t("wizard.model.loading")}</p>
+              <p className="m-0 py-6 text-center text-[13px] leading-[21px] text-muted-foreground">{t("wizard.model.loading")}</p>
             ) : (
-              <div className={css.modelList} role="radiogroup" aria-label={t("wizard.model.title")}>
+              <div className="flex flex-col gap-1.5" role="radiogroup" aria-label={t("wizard.model.title")}>
                 {models.map((model) => {
                   const checked = model.id === modelId;
                   return (
@@ -277,17 +270,17 @@ export function SetupWizard() {
                       type="button"
                       role="radio"
                       aria-checked={checked}
-                      className={clsx(css.modelRow, checked && css.modelRowActive)}
+                      className={clsx("flex cursor-pointer items-center gap-3 rounded-md border border-solid px-3 py-2.5 text-left font-sans text-foreground hover:bg-accent", focusRing, checked ? "border-primary bg-primary/8" : "border-border bg-transparent")}
                       data-testid={TESTID.wizardModelOption}
                       data-model-id={model.id}
                       title={model.id}
                       onClick={() => pickModel(model)}
                     >
-                      <span className={css.modelCopy}>
-                        <span className={css.modelName}>{model.displayName}</span>
-                        {model.description !== "" && <span className={css.modelDescription}>{model.description}</span>}
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="text-[13px] leading-5 font-medium">{model.displayName}</span>
+                        {model.description !== "" && <span className="text-xs leading-[18px] text-muted-foreground">{model.description}</span>}
                       </span>
-                      {checked && <IconCheckOutlineRegular size={16} className={css.modelCheck} />}
+                      {checked && <Check aria-hidden="true" size={16} className="shrink-0 text-primary" />}
                     </button>
                   );
                 })}
@@ -295,67 +288,71 @@ export function SetupWizard() {
             )
           ) : step === "project" ? (
             <>
-              <p className={css.intro}>{t("wizard.project.body")}</p>
+              <p className="m-0 text-[13px] leading-[21px] text-muted-foreground">{t("wizard.project.body")}</p>
               {projects.length === 0 ? (
-                <p className={css.hint}>{threadsLoaded ? t("wizard.project.empty") : t("wizard.project.loading")}</p>
+                <p className="m-0 py-6 text-center text-[13px] leading-[21px] text-muted-foreground">{threadsLoaded ? t("wizard.project.empty") : t("wizard.project.loading")}</p>
               ) : (
                 <>
-                  <div className={css.selectBar}>
-                    <span className={css.selectedCount} data-testid={TESTID.wizardSelectedCount}>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="flex-1 text-xs leading-[18px] text-muted-foreground" data-testid={TESTID.wizardSelectedCount}>
                       {t("wizard.project.selectedCount", { selected: selected.size, total: projects.length })}
                     </span>
-                    <button
+                    <Button
                       type="button"
-                      className={css.linkButton}
+                      variant="ghost"
+                      size="sm"
                       data-testid={TESTID.wizardSelectAll}
                       disabled={selected.size === projects.length}
                       onClick={selectAll}
                     >
                       {t("wizard.project.selectAll")}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
-                      className={css.linkButton}
+                      variant="ghost"
+                      size="sm"
                       data-testid={TESTID.wizardSelectNone}
                       disabled={selected.size === 0}
                       onClick={selectNone}
                     >
                       {t("wizard.project.selectNone")}
-                    </button>
+                    </Button>
                   </div>
-                  <button
+                  <Button
                     type="button"
-                    className={css.groupToggle}
+                    variant="ghost"
+                    size="sm"
+                    className="self-start"
                     data-testid={TESTID.wizardProjectGroup}
                     aria-expanded={groupOpen}
                     onClick={() => setGroupOpen((open) => !open)}
                   >
-                    <IconChevronDownOutlineRegular
-                      size={12}
-                      className={clsx(css.chevron, !groupOpen && css.chevronClosed)}
+                    <ChevronDown
+                      aria-hidden="true"
+                      className={clsx("transition-transform duration-150 motion-reduce:transition-none", !groupOpen && "-rotate-90")}
                     />
                     {t("wizard.project.group", { count: projects.length })}
-                  </button>
+                  </Button>
                   {groupOpen && (
-                    <ul className={css.projectList}>
+                    <ul className="m-0 flex list-none flex-col gap-1 p-0">
                       {projects.map((project) => (
                         <li key={project.cwd}>
                           <label
-                            className={css.projectRow}
+                            className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 hover:bg-accent"
                             data-testid={TESTID.wizardProjectRow}
                             data-cwd={project.cwd}
                             title={project.cwd}
                           >
                             <input
                               type="checkbox"
-                              className={css.projectCheck}
+                              className={clsx("m-0 shrink-0 accent-foreground", focusRing)}
                               data-testid={TESTID.wizardProjectCheckbox}
                               checked={selected.has(project.cwd)}
                               onChange={(event) => toggleProject(project.cwd, event.target.checked)}
                             />
                             <WorkspaceBadge cwd={project.cwd} size="sm" />
-                            <span className={css.projectName}>{project.label}</span>
-                            <span className={css.projectMeta}>
+                            <span className="min-w-0 flex-1 truncate font-mono text-xs leading-[18px]">{project.label}</span>
+                            <span className="inline-flex shrink-0 items-center gap-2.5 text-xs leading-[18px] text-muted-foreground">
                               <span>{t("wizard.project.threadCount", { count: project.count })}</span>
                               {project.lastActivity !== null && project.lastActivity > 0 && (
                                 <span>{formatThreadTime(project.lastActivity, nowMs, t, timeFormat, locale)}</span>
@@ -371,19 +368,19 @@ export function SetupWizard() {
             </>
           ) : (
             <>
-              <dl className={css.summary}>
+              <dl className="m-0 flex flex-col gap-2 [&_dt]:text-xs [&_dt]:leading-[18px] [&_dt]:font-medium [&_dt]:text-muted-foreground [&_dd]:m-0 [&_dd]:text-[13px] [&_dd]:leading-[21px]">
                 <dt>{t("wizard.ready.model")}</dt>
-                <dd className={css.summaryValue}>{selectedModel?.displayName ?? t("composer.model.none")}</dd>
+                <dd>{selectedModel?.displayName ?? t("composer.model.none")}</dd>
                 <dt>{t("wizard.ready.projects")}</dt>
-                <dd className={css.summaryValue}>
+                <dd>
                   {selectedNames.length === 0 ? t("wizard.ready.noProjects") : selectedNames.join(" · ")}
                 </dd>
               </dl>
-              <p className={css.telemetry}>{t("wizard.ready.telemetry")}</p>
+              <p className="m-0 border-0 border-t border-solid border-border pt-2.5 text-xs leading-[18px] text-muted-foreground">{t("wizard.ready.telemetry")}</p>
             </>
           )}
         </div>
-        <footer className={css.footer}>
+        <footer className="flex shrink-0 flex-wrap justify-end gap-2 px-6 pt-3.5 pb-5">
           {step === "project" && (
             <>
               <Button variant="outline" data-testid={TESTID.wizardNoProject} onClick={noProject}>

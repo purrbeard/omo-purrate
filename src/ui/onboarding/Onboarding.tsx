@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
-import {
-  Button,
-  IconCheckOutlineRegular,
-  IconCopyOutlineRegular,
-  IconDownloadOutlineRegular,
-} from "@deepseek-ai/dsh-client-ui-primitives";
+import { Check, CircleAlert, Copy, Download } from "lucide-react";
+import { Button } from "../kit/Button";
+import { InputError } from "../kit/Input";
 import { OMO_INSTALL_COMMAND } from "../../../shared/ipc";
 import type { OmoSource } from "../../../shared/ipc";
 import { useT } from "../../i18n";
@@ -12,7 +9,6 @@ import { useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
 import { InstallStatus } from "./InstallStatus";
 import { useInstaller } from "./install";
-import css from "./Onboarding.module.css";
 
 const COPY_FEEDBACK_MS = 2000;
 const NOT_FOUND_PREFIX = "omo was not found. Tried: ";
@@ -80,23 +76,23 @@ export function Onboarding() {
   if (copyFeedback?.kind === "failed") copyLabel = t("shell.onboarding.copyFailed");
 
   return (
-    <main className={css.root} data-testid={TESTID.onboarding}>
-      <div className={css.dragBand} data-window-drag />
-      <div className={css.card}>
-        <span className={css.brand}>{t("app.brand")}</span>
-        <div className={css.intro}>
-          <h1 className={css.title}>{t("shell.onboarding.title")}</h1>
-          <p className={css.body}>{t("shell.onboarding.body")}</p>
+    <main className="relative box-border flex h-full flex-col items-center overflow-y-auto bg-background px-6 pt-16 pb-10 font-sans text-foreground [word-break:keep-all] [overflow-wrap:break-word]" data-testid={TESTID.onboarding}>
+      <div className="pointer-events-none fixed inset-x-0 top-0 h-[52px]" data-window-drag />
+      <div className="my-auto box-border flex w-full max-w-[560px] flex-col gap-5 rounded-xl bg-card p-8 shadow-xl">
+        <span className="select-none text-xl leading-7 font-semibold tracking-[0.04em] text-primary">{t("app.brand")}</span>
+        <div className="flex flex-col gap-2">
+          <h1 className="m-0 text-2xl leading-8 font-medium">{t("shell.onboarding.title")}</h1>
+          <p className="m-0 text-sm leading-[22px] text-muted-foreground">{t("shell.onboarding.body")}</p>
         </div>
-        <div className={css.block}>
-          <div className={css.label}>{t("shell.onboarding.command")}</div>
-          <div className={css.commandRow}>
-            <code className={css.command}>{command}</code>
+        <div className="flex flex-col gap-2">
+          <div className="text-xs leading-[18px] font-medium text-muted-foreground">{t("shell.onboarding.command")}</div>
+          <div className="flex items-center gap-3 rounded-md bg-muted p-2.5 pl-3.5">
+            <code className="min-w-0 flex-1 font-mono text-xs leading-[18px] [font-variant-ligatures:none] [overflow-wrap:anywhere]">{command}</code>
             <Button
               size="sm"
               variant="outline"
-              className={css.copy}
-              icon={copyFeedback?.kind === "copied" ? <IconCheckOutlineRegular /> : <IconCopyOutlineRegular />}
+              className="min-w-[76px]"
+              icon={copyFeedback?.kind === "failed" ? <CircleAlert /> : copyFeedback?.kind === "copied" ? <Check /> : <Copy />}
               data-testid={TESTID.onboardingCopy}
               onClick={copy}
             >
@@ -104,7 +100,7 @@ export function Onboarding() {
             </Button>
           </div>
         </div>
-        <div className={css.actions}>
+        <div className="flex flex-wrap justify-end gap-2">
           <Button
             variant="outline"
             data-testid={TESTID.onboardingRetry}
@@ -115,7 +111,7 @@ export function Onboarding() {
           </Button>
           <Button
             variant="primary"
-            icon={<IconDownloadOutlineRegular />}
+            icon={<Download />}
             data-testid={TESTID.onboardingInstall}
             disabled={installing}
             onClick={installer.start}
@@ -124,26 +120,27 @@ export function Onboarding() {
           </Button>
         </div>
         {check.kind === "failed" && (
-          <p className={css.error} role="alert">
-            {t("shell.onboarding.checkFailed", { message: check.message })}
-          </p>
+          <div className="flex flex-col gap-1" role="alert">
+            <InputError>{t("shell.onboarding.checkFailed", { message: "" }).replace(/:\s*$/, "")}</InputError>
+            <p className="m-0 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">{check.message.replace(/^-?\d+:\s*/, "")}</p>
+          </div>
         )}
         <InstallStatus installer={installer} />
         {tried.length > 0 && (
-          <section className={css.tried} aria-label={t("shell.onboarding.tried")}>
-            <div className={css.label}>{t("shell.onboarding.tried")}</div>
-            <ul className={css.triedList}>
+          <section className="flex flex-col gap-2 border-0 border-t border-solid border-border pt-4" aria-label={t("shell.onboarding.tried")}>
+            <div className="text-xs leading-[18px] font-medium text-muted-foreground">{t("shell.onboarding.tried")}</div>
+            <ul className="m-0 flex max-h-[156px] list-none flex-col gap-2.5 overflow-y-auto p-0">
               {tried.map((location, index) => (
-                <li key={index} className={css.triedItem}>
+                <li key={index} className="flex min-w-0 flex-col gap-0.5">
                   {location.path !== null && (
-                    <span className={css.triedHead}>
-                      <code className={css.triedPath}>{location.path}</code>
+                    <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                      <code className="min-w-0 font-mono text-xs leading-[18px] text-muted-foreground [overflow-wrap:anywhere]">{location.path}</code>
                       {location.source !== null && (
-                        <span className={css.triedSource}>{t(`shell.settings.omo.source.${location.source}`)}</span>
+                        <span className="text-xs leading-[18px] text-muted-foreground [overflow-wrap:anywhere]">{t(`shell.settings.omo.source.${location.source}`)}</span>
                       )}
                     </span>
                   )}
-                  <span className={css.triedDetail}>{location.detail}</span>
+                  <span className="text-xs leading-[18px] text-muted-foreground [overflow-wrap:anywhere]">{location.detail}</span>
                 </li>
               ))}
             </ul>

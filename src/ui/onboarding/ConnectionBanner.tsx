@@ -1,17 +1,13 @@
 import { useState } from "react";
 import clsx from "clsx";
-import {
-  Button,
-  IconChevronDownOutlineRegular,
-  IconRefreshOutlineRegular,
-  StateDot,
-} from "@deepseek-ai/dsh-client-ui-primitives";
+import { ChevronDown, CircleAlert, LoaderCircle, RefreshCw } from "lucide-react";
+import { Button } from "../kit/Button";
+import { InputError } from "../kit/Input";
 import type { BridgeState, BridgeStatus } from "../../../shared/ipc";
 import { useT } from "../../i18n";
 import type { Translate } from "../../i18n";
 import { useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
-import css from "./ConnectionBanner.module.css";
 
 type VisibleState = Exclude<BridgeState, "connected">;
 
@@ -62,31 +58,31 @@ function BannerBody({ state, bridge }: { state: VisibleState; bridge: BridgeStat
 
   return (
     <div
-      className={css.root}
+      className={clsx("absolute top-[calc(var(--dsh-frame-top-clearance,0px)+12px)] inset-x-6 z-30 mx-auto box-border flex w-fit max-w-[min(560px,calc(100%_-_48px))] flex-col gap-2 rounded-lg bg-popover py-1.5 pl-3.5 text-[13px] leading-5 text-popover-foreground shadow-xl [word-break:keep-all] [overflow-wrap:break-word]", busy ? "pr-3.5" : "pr-1.5")}
       role={busy ? "status" : "alert"}
       data-testid={TESTID.connectionBanner}
       data-state={state}
     >
-      <div className={css.row}>
-        <StateDot state={busy ? "ongoing" : "error"} className={css.dot} />
-        <span className={css.text}>{bannerText(state, bridge, t)}</span>
+      <div className="flex min-h-7 items-center gap-2.5">
+        {busy ? <LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" /> : <CircleAlert aria-hidden="true" className="size-3.5 shrink-0 text-destructive-foreground" />}
+        <span className="min-w-0 flex-auto">{bannerText(state, bridge, t)}</span>
         {details !== null && (
-          <button
+          <Button
             type="button"
-            className={css.disclosure}
+            variant="ghost"
+            size="sm"
             aria-expanded={detailsOpen}
             onClick={() => setDetailsOpen((open) => !open)}
           >
             {t("shell.banner.details")}
-            <IconChevronDownOutlineRegular size={12} className={clsx(css.chevron, detailsOpen && css.chevronOpen)} />
-          </button>
+            <ChevronDown aria-hidden="true" className={clsx("transition-transform duration-150 motion-reduce:transition-none", detailsOpen && "rotate-180")} />
+          </Button>
         )}
         {!busy && (
           <Button
             size="sm"
             variant="outline"
-            className={css.restart}
-            icon={<IconRefreshOutlineRegular />}
+            icon={<RefreshCw />}
             data-testid={TESTID.restartOmo}
             onClick={restart}
           >
@@ -94,9 +90,12 @@ function BannerBody({ state, bridge }: { state: VisibleState; bridge: BridgeStat
           </Button>
         )}
       </div>
-      {detailsOpen && details !== null && <pre className={css.details}>{details}</pre>}
+      {detailsOpen && details !== null && <pre className="mt-0 mr-2 mb-1 ml-0 max-h-[200px] overflow-auto rounded-sm bg-muted px-2.5 py-2 font-mono text-[11px] leading-4 whitespace-pre-wrap text-muted-foreground [font-variant-ligatures:none] [overflow-wrap:anywhere]">{details}</pre>}
       {restartError !== null && (
-        <p className={css.error}>{t("shell.banner.restartFailed", { message: restartError })}</p>
+        <div className="mr-2 mb-1 flex flex-col gap-1">
+          <InputError>{t("shell.banner.restartFailed", { message: "" }).replace(/:\s*$/, "")}</InputError>
+          <p className="m-0 text-xs leading-[18px] text-muted-foreground [overflow-wrap:anywhere]">{restartError.replace(/^-?\d+:\s*/, "")}</p>
+        </div>
       )}
     </div>
   );
