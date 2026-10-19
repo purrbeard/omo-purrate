@@ -2,7 +2,7 @@
 // catalog and the FAKE_OMO_DEMO scenes that tests/fixtures/fake-omo.mjs plays. None of it ships in the app.
 import path from "node:path";
 
-export const WORKSPACES = ["acme-shop", "payments-api", "omo-ui-windows", "docs-site"];
+export const WORKSPACES = ["acme-shop", "payments-api", "omo-purrate", "docs-site"];
 
 /** Session names the capture script sets after sending, as omo names sessions from their first request. */
 export const NAMES = {
@@ -36,8 +36,8 @@ const SEEDS = [
   ["acme-shop", "Add Apple Pay to the payment step", DAY + 2 * HOUR],
   ["payments-api", "Rotate the webhook signing secret", 3 * HOUR],
   ["payments-api", "Retry failed payouts with exponential backoff", 2 * DAY],
-  ["omo-ui-windows", "Polish the side chat panel", 5 * HOUR],
-  ["omo-ui-windows", "Package the Windows installer for 0.1.4", DAY + 6 * HOUR],
+  ["omo-purrate", "Polish the side chat panel", 5 * HOUR],
+  ["omo-purrate", "Package the Windows installer for 0.1.4", DAY + 6 * HOUR],
   ["docs-site", "Rewrite the getting-started guide", 3 * DAY],
 ];
 
@@ -79,10 +79,11 @@ export function skillCatalog(root) {
 
 const tool = (name, args) => ({ type: "dynamicToolCall", namespace: null, tool: name, arguments: args, status: "inProgress", contentItems: null, success: null, durationMs: null });
 const done = (text, durationMs) => ({ status: "completed", success: true, contentItems: [{ type: "inputText", text }], durationMs });
+// omo records a new file as a `write` tool call; the app turns write/edit/apply_patch into a file-change card.
 const added = (file, lines) => ({
-  item: { type: "fileChange", changes: [{ path: file, kind: { type: "add" }, diff: `@@ -0,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}\n` }], status: "inProgress" },
+  item: tool("write", { path: file, content: `${lines.join("\n")}\n` }),
   ms: 300,
-  done: { status: "completed" },
+  done: done(`Wrote ${lines.length} lines to ${file}`, 300),
 });
 
 const checkout = {

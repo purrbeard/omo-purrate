@@ -6,6 +6,7 @@
 // `--only hero,migrate` limits the run to the named captures (hero, migrate, korean, onboarding, gif).
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,15 +44,17 @@ function parseOnly(argv) {
  * shell startup files or variables. `omo: null` leaves omo unresolvable for the onboarding screen. A setup failure
  * after the launch closes the app and rethrows the setup error.
  */
-async function launch({ theme, locale = "en", size = WIDE, omo = FAKE_OMO }) {
+async function launch({ theme, locale = "en", size = WIDE, omo = FAKE_OMO, extraEnv = {} }) {
   const run = path.join(temp, `run-${++launches}`);
   const userData = path.join(run, "user-data");
   const home = path.join(run, "home");
   for (const dir of [userData, home]) mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(userData, "preferences.json"), `${JSON.stringify({ theme, locale, onboardingCompleted: true, managedThreadIds: SEED_IDS })}\n`);
+  writeFileSync(path.join(userData, "preferences.json"), `${JSON.stringify({ theme, locale, onboardingCompleted: true, sessionImportCompleted: true, managedThreadIds: SEED_IDS })}\n`);
   const windows = process.platform === "win32";
   // node's directory is on PATH only for the fake omo, whose shebang is `#!/usr/bin/env node`.
-  const system = windows ? [path.join(process.env.SystemRoot ?? "C:\\Windows", "System32"), process.env.SystemRoot ?? "C:\\Windows"] : ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+  const root = process.env.SystemRoot ?? "C:\\Windows";
+  // Windows PowerShell's directory lets the terminal start the shell a user would get.
+  const system = windows ? [path.join(root, "System32"), root, path.join(root, "System32", "WindowsPowerShell", "v1.0")] : ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
   const searchPath = [...(omo === null ? [] : [path.dirname(process.execPath)]), ...system];
   const env = {
     HOME: home,
@@ -62,6 +65,8 @@ async function launch({ theme, locale = "en", size = WIDE, omo = FAKE_OMO }) {
     OMO_UI_USER_DATA: userData,
     OMO_UI_QA_PICK_DIR: workspace(WORKSPACES[0]),
     FAKE_OMO_HOME: path.join(run, "fake-home"),
+    // The app reads session files from omo's agent directory; the fake keeps them under FAKE_OMO_HOME.
+    OMO_UI_QA_AGENT_DIR: path.join(run, "fake-home"),
     FAKE_OMO_DEMO: demoFile,
     FAKE_OMO_SEED_THREADS: seedFile,
     FAKE_OMO_SKILLS: JSON.stringify(skillCatalog(temp)),
@@ -75,6 +80,7 @@ async function launch({ theme, locale = "en", size = WIDE, omo = FAKE_OMO }) {
     for (const key of ["USER", "LOGNAME"]) if (process.env[key] !== undefined) env[key] = process.env[key];
   }
   if (omo !== null) env.OMO_UI_OMO_BIN = omo;
+  Object.assign(env, extraEnv);
   const app = await electron.launch({
     args: ["."],
     cwd: ROOT,
@@ -189,7 +195,12 @@ async function nameSession(page, name) {
 }
 
 async function waitFor(scope, text) {
-  await scope.getByText(text, { exact: false }).first().waitFor({ state: "visible", timeout: TIMEOUT_MS });
+  await scope.getByText(text, { exact: false }).first().waitFor({ state: "visible", timeout: TIMEOUT_MS }).catch(async (error) => {
+    // Outside `temp`, which the run removes on exit.
+    const file = path.join(tmpdir(), `omo-ui-readme-missing-${launches}.png`);
+    await scope.page().screenshot({ path: file }).catch(() => undefined);
+    throw new Error(`${error.message}\nwindow at the timeout: ${file}`);
+  });
 }
 
 async function askSide(page, typingDelayMs = 0) {
@@ -235,7 +246,8 @@ async function hero(theme) {
       await page.locator(tid("todo-dock")).click();
       await page.locator(tid("todo-phase")).first().waitFor({ state: "visible" });
       // The composer starts 8px below the goal strip; a 6px pad keeps its border out of the crop.
-      await shot(page, "todo-goal", [tid("todo-dock"), tid("goal-strip")], 6);
+      // The status line's own box: a pad would pull in the subagents card above the expanded list.
+      await shot(page, "todo-goal", [tid("composer-status-line")], 0);
     }
   } finally {
     await app.close();
@@ -246,7 +258,7 @@ async function hero(theme) {
 async function migrate() {
   const { app, page } = await launch({ theme: "dark" });
   try {
-    await newSession(page, "omo-ui-windows");
+    await newSession(page, "omo-purrate");
     await send(page, PROMPTS.chips, ["ulw-loop", "mass-ulw"]);
     await nameSession(page, NAMES.chips);
     await waitFor(page.locator(tid("conversation")), SETTLED.chips);
@@ -266,6 +278,104 @@ async function migrate() {
     await shot(page, "answer", [`${tid("assistant-message")} >> nth=-1`], 8);
   } finally {
     await app.close();
+  }
+}
+
+const SSH_CONFIG = [
+  "Host linux-box", "  HostName 10.0.0.5", "  User ubuntu",
+  "Host win-box", "  HostName 10.0.0.6", "  User admin", "  Port 2222",
+  "Host down", "  HostName 10.255.0.9", "",
+].join("\n");
+const SHOP_PAGE = `<!doctype html><title>acme-shop · Checkout</title>
+<body style="margin:0;font:15px system-ui;background:#fafafa;color:#111">
+<header style="display:flex;justify-content:space-between;padding:16px 28px;background:#111;color:#fff"><b>acme-shop</b><span>Cart (2)</span></header>
+<main style="max-width:560px;margin:32px auto;padding:0 24px">
+<h1 style="font-size:26px;margin:0 0 6px">Checkout</h1><p style="color:#666;margin:0 0 22px">Step 2 of 3 · Payment</p>
+<section style="background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px">
+<label style="display:block;font-size:13px;color:#555">Card number</label><div style="border:1px solid #ddd;border-radius:6px;padding:10px;margin:6px 0 14px">4242 4242 4242 4242</div>
+<div style="display:flex;justify-content:space-between;border-top:1px solid #eee;padding-top:14px"><span>Total</span><b>$128.40</b></div>
+<button style="margin-top:18px;width:100%;padding:12px;border:0;border-radius:8px;background:#d7263d;color:#fff;font-size:15px">Pay $128.40</button>
+</section></main></body>`;
+
+/** Runs one command in a terminal pane and waits for the line it prints, the way the terminal e2e does. */
+async function run(page, pane, input, expected) {
+  const output = page.locator(`${tid("terminal-pane")}[data-terminal-id="${pane}"] ${tid("terminal-output")}`);
+  const printed = output.evaluate((element, wanted) => new Promise((resolve, reject) => {
+    const terminal = element.terminal;
+    if (terminal === undefined) { reject(new Error("xterm is not exposed")); return; }
+    const check = () => {
+      const buffer = terminal.buffer.active;
+      for (let index = 0; index < buffer.length; index += 1) {
+        if (buffer.getLine(index)?.translateToString(true).trim() === wanted) { subscription.dispose(); clearTimeout(timer); resolve(); return; }
+      }
+    };
+    const subscription = terminal.onWriteParsed(check);
+    const timer = setTimeout(() => { subscription.dispose(); reject(new Error(`no terminal line: ${wanted}`)); }, 20_000);
+  }), expected);
+  await output.click();
+  await page.keyboard.type(input);
+  await page.keyboard.press("Enter");
+  await printed;
+}
+
+/** The workbench beside the conversation: split terminals, the in-app browser with its site tools, and SSH servers. */
+async function workbench() {
+  const sshDir = path.join(temp, "ssh");
+  mkdirSync(sshDir, { recursive: true });
+  writeFileSync(path.join(sshDir, "config"), SSH_CONFIG);
+  const server = http.createServer((request, response) => {
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(SHOP_PAGE);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const { app, page } = await launch({
+    theme: "dark",
+    extraEnv: { OMO_UI_SSH_CONFIG: path.join(sshDir, "config"), OMO_UI_SSH_BIN: path.join(ROOT, "tests", "fixtures", "fake-ssh.mjs") },
+  });
+  try {
+    await newSession(page);
+    await page.keyboard.press("Control+Backquote");
+    const panel = page.locator(tid("terminal-panel"));
+    await panel.locator(`${tid("terminal-pane")}[data-terminal-id="t1"][data-running="true"]`).waitFor({ timeout: TIMEOUT_MS });
+    // A short prompt keeps this machine's temp path out of the picture.
+    const prompt = "function prompt { 'PS acme-shop> ' }; Clear-Host; Write-Output 'shell-ready'";
+    await run(page, "t1", prompt, "shell-ready");
+    await page.locator(tid("terminal-split-horizontal")).click();
+    await panel.locator(`${tid("terminal-pane")}[data-terminal-id="t2"][data-running="true"]`).waitFor({ timeout: TIMEOUT_MS });
+    await run(page, "t2", prompt, "shell-ready");
+    await run(page, "t1", "Clear-Host; Write-Host 'acme-shop dev server' -ForegroundColor Cyan; Write-Host '  ready on http://127.0.0.1:5173' -ForegroundColor Green", "ready on http://127.0.0.1:5173");
+    await run(page, "t2", "Clear-Host; Write-Host 'PASS  checkout/payment.spec.ts' -ForegroundColor Green; Write-Host 'PASS  checkout/summary.spec.ts' -ForegroundColor Green; Write-Output '2 passed (4.1s)'", "2 passed (4.1s)");
+    await shot(page, "terminal");
+    await page.keyboard.press("Control+Backquote");
+    await page.locator(tid("terminal-drawer")).waitFor({ state: "hidden", timeout: TIMEOUT_MS });
+
+    await page.keyboard.press("Control+E");
+    await page.locator(tid("right-tab-browser")).click();
+    const browser = page.locator(tid("browser-panel"));
+    await page.locator(tid("browser-address")).fill(`${origin}/checkout`);
+    await page.locator(tid("browser-address")).press("Enter");
+    await page.waitForFunction((selector) => document.querySelector(selector)?.getAttribute("data-page-visible") === "true", tid("browser-panel"), { timeout: TIMEOUT_MS });
+    await page.locator(tid("browser-tools")).click();
+    await page.locator(tid("browser-tools-menu")).waitFor({ state: "visible" });
+    // The page view steps aside for the menu and leaves a still of the page under it, which CDP can capture.
+    await page.waitForFunction((selector) => document.querySelector(selector)?.getAttribute("data-page-visible") === "false", tid("browser-panel"));
+    await shot(page, "browser");
+    await page.keyboard.press("Escape");
+    await browser.waitFor({ state: "visible" });
+
+    await page.locator(tid("right-tab-servers")).click();
+    const servers = page.locator(tid("servers-panel"));
+    await servers.locator(tid("servers-check-all")).click();
+    const row = (alias) => servers.locator(`${tid("server-row")}[data-alias="${alias}"]`);
+    await page.waitForFunction((selector) => document.querySelector(selector)?.getAttribute("data-status") === "online", `${tid("server-row")}[data-alias="win-box"]`, { timeout: TIMEOUT_MS });
+    await row("linux-box").locator("button").first().click();
+    await servers.locator(tid("server-refresh")).click();
+    await servers.locator(tid("server-spec-gpu")).waitFor({ state: "visible", timeout: TIMEOUT_MS });
+    await shot(page, "servers");
+  } finally {
+    await app.close();
+    server.close();
   }
 }
 
@@ -368,7 +478,7 @@ function dimensions(file) {
 
 async function main() {
   const only = parseOnly(process.argv.slice(2));
-  const captures = { hero: async () => { await hero("dark"); await hero("light"); }, migrate, korean, onboarding, gif };
+  const captures = { hero: async () => { await hero("dark"); await hero("light"); }, migrate, workbench, korean, onboarding, gif };
   for (const name of only ?? []) if (!(name in captures)) throw new Error(`unknown capture ${name}`);
   for (const name of WORKSPACES) mkdirSync(workspace(name), { recursive: true });
   writeFileSync(demoFile, JSON.stringify(DEMO));

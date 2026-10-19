@@ -32,7 +32,7 @@ test("README real-omo capture", async () => {
   ].join("\n"));
   const userData = path.join(root, "user-data");
   mkdirSync(userData);
-  writeFileSync(path.join(userData, "preferences.json"), JSON.stringify({ locale: "en", theme: "dark", onboardingCompleted: true }));
+  writeFileSync(path.join(userData, "preferences.json"), JSON.stringify({ locale: "en", theme: "dark", onboardingCompleted: true, sessionImportCompleted: true }));
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value;
   for (const key of ["ELECTRON_RUN_AS_NODE", "OMO_UI_OMO_BIN", "FAKE_OMO_HOME", "FAKE_OMO_LOG"]) delete env[key];
