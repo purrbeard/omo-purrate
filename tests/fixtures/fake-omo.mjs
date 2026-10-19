@@ -924,6 +924,8 @@ async function runTurn(record, turn, text, images) {
   } catch (error) {
     if (!(error instanceof Interrupted)) failure = error instanceof Error ? error.message : String(error);
   }
+  if (turn.interrupted) record.queue = [];
+  else await deliverQueued(record);
   record.activeTurn = null;
   if (failure !== null) event(record, "message_end", { message: assistantMessage([], "error", { errorMessage: failure }) });
   if (!text.includes("SCENARIO:silent-end")) {
@@ -931,6 +933,28 @@ async function runTurn(record, turn, text, images) {
     if (!text.includes("SCENARIO:lost-completion")) event(record, "agent_settled");
   }
   turn.finished();
+}
+
+/** omo's `queue_update`: the pending steering/follow-up texts plus the ordered rows that carry each queuedId. */
+function queueUpdate(record) {
+  const queue = record.queue ?? [];
+  event(record, "queue_update", {
+    steering: queue.filter((entry) => entry.mode === "steer").map((entry) => entry.text),
+    followUp: queue.filter((entry) => entry.mode === "follow_up").map((entry) => entry.text),
+    ordered: queue.map((entry) => ({ queuedId: entry.queuedId, mode: entry.mode, text: entry.text })),
+  });
+}
+
+/** Follow-ups are delivered as user messages once the run has nothing left to do. */
+async function deliverQueued(record) {
+  while ((record.queue ?? []).length > 0) {
+    const next = record.queue.shift();
+    queueUpdate(record);
+    const user = { role: "user", content: [{ type: "text", text: next.text }], timestamp: Date.now() };
+    event(record, "message_start", { message: user });
+    event(record, "message_end", { message: user });
+    recordEntry(record, userEntry(next.text));
+  }
 }
 
 // ---- commands -----------------------------------------------------------------------------
@@ -1117,6 +1141,28 @@ async function handleCommand(frame, record, reply) {
       event(record, "message_start", { message: user });
       event(record, "message_end", { message: user });
       recordEntry(record, userEntry(message));
+      return;
+    }
+    case "follow_up": {
+      if (record.activeTurn === null) throw new CommandFailure("No agent run to follow up", "not_streaming");
+      const message = typeof frame.message === "string" ? frame.message : "";
+      record.queueSeq = (record.queueSeq ?? 0) + 1;
+      (record.queue ??= []).push({ queuedId: `q_${record.queueSeq}`, mode: "follow_up", text: message });
+      reply({ disposition: "queued" });
+      queueUpdate(record);
+      return;
+    }
+    case "dequeue_message":
+    case "edit_queued_message": {
+      const queued = (record.queue ?? []).find((entry) => entry.queuedId === frame.queuedId);
+      if (queued === undefined) {
+        reply({ queuedId: frame.queuedId, status: "not_found" });
+        return;
+      }
+      if (frame.type === "dequeue_message") record.queue.splice(record.queue.indexOf(queued), 1);
+      else queued.text = String(frame.text);
+      reply({ queuedId: frame.queuedId, status: frame.type === "dequeue_message" ? "removed" : "edited" });
+      queueUpdate(record);
       return;
     }
     case "abort": {

@@ -82,6 +82,7 @@ class FakeBridge implements OmoBridgeApi {
   onAppUpdateStatus(): () => void { return () => {}; }
   getDeviceOverview(): ReturnType<OmoBridgeApi["getDeviceOverview"]> { return Promise.resolve({ hostname: "test", platform: "win32", appVersion: "0.1.3", omoVersion: null, memory: { path: null, branch: null, lastCommitAt: null, changedFiles: 0, remoteConfigured: false, state: "unavailable" } }); }
   listWorkspaceFiles(): ReturnType<OmoBridgeApi["listWorkspaceFiles"]> { return Promise.resolve([]); }
+  searchWorkspaceFiles(): ReturnType<OmoBridgeApi["searchWorkspaceFiles"]> { return Promise.resolve([]); }
   readWorkspaceFile(): ReturnType<OmoBridgeApi["readWorkspaceFile"]> { return Promise.resolve({ path: "", text: "", language: "text" }); }
   getWorkspaceDiff(): ReturnType<OmoBridgeApi["getWorkspaceDiff"]> { return Promise.resolve(""); }
   listSessionWork(): ReturnType<OmoBridgeApi["listSessionWork"]> { return Promise.resolve([]); }
@@ -207,6 +208,7 @@ class FakeBridge implements OmoBridgeApi {
     "thread/settings/update": () => ({}),
     "turn/start": () => ({ turn: runningTurn }),
     "turn/steer": () => ({}),
+    "turn/followUp": () => ({}),
     "turn/interrupt": () => ({}),
     "thread/name/set": () => ({}),
     "thread/delete": () => ({}),
@@ -827,6 +829,17 @@ describe("createActions", () => {
       },
     ]);
     expect(context.store.getState().notices).toMatchObject([{ level: "info", threadId: THREAD_ID, code: "steered" }]);
+  });
+
+  it("queues a follow-up for after the running turn instead of steering it", async () => {
+    const context = setup();
+    await listThread(context);
+    await context.actions.openThread(THREAD_ID);
+    context.store.dispatch(notification("turn/started", { threadId: THREAD_ID, turn: runningTurn }));
+    expect(await context.actions.sendFollowUp("afterwards")).toBe(true);
+    expect(context.bridge.methods()).toContain("turn/followUp");
+    expect(context.bridge.methods()).not.toContain("turn/steer");
+    expect(context.bridge.calls.at(-1)).toEqual({ method: "turn/followUp", params: { threadId: THREAD_ID, input: [{ type: "text", text: "afterwards", text_elements: [] }] } });
   });
 
   it("resolves false and drops the pending message when turn/start fails", async () => {

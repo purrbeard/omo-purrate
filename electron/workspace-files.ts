@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { open, readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { SessionCommit, SessionWorktree, WorkspaceDocument, WorkspaceFile } from "../shared/workspace";
+import type { SessionCommit, SessionWorktree, WorkspaceDocument, WorkspaceFile, WorkspaceFileMatch } from "../shared/workspace";
 
 const exec = promisify(execFile);
 const MAX_FILES = 2_000;
@@ -298,4 +298,46 @@ export async function getWorkspaceDiff(cwd: string, relativePath: string): Promi
     return `${header}@@ -0,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}\n${newline ? "" : "\\ No newline at end of file\n"}`;
   }
   return [staged && `# Staged changes\n${staged}`, working && `# Working tree changes\n${working}`].filter(Boolean).join("\n");
+}
+
+const SEARCH_LIMIT = 20;
+const SEARCH_SCAN_LIMIT = 20_000;
+
+/** Every workspace file path (relative, forward slashes): git's tracked and unignored files, else a bounded walk. */
+async function searchCandidates(root: string): Promise<string[]> {
+  try {
+    await git(root, ["rev-parse", "--is-inside-work-tree"]);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("not a git repository")) throw error;
+    const files: string[] = [];
+    const directories = [""];
+    while (directories.length > 0 && files.length < SEARCH_SCAN_LIMIT) {
+      const directory = directories.pop()!;
+      for (const entry of await readdir(path.join(root, directory), { withFileTypes: true })) {
+        const relative = directory === "" ? entry.name : `${directory}/${entry.name}`;
+        if (!visible(relative) || entry.isSymbolicLink()) continue;
+        if (entry.isDirectory()) directories.push(relative);
+        else if (entry.isFile()) files.push(relative);
+        if (files.length === SEARCH_SCAN_LIMIT) break;
+      }
+    }
+    return files;
+  }
+  const listed = await git(root, ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "."]);
+  return listed.split("\0").filter(visible).slice(0, SEARCH_SCAN_LIMIT);
+}
+
+/** Workspace files whose path contains `query` (case-insensitive): file-name hits first, then shorter paths; at most 20. */
+export async function searchWorkspaceFiles(cwd: string, query: string): Promise<WorkspaceFileMatch[]> {
+  const root = await workspaceRoot(cwd);
+  const needle = query.trim().toLowerCase();
+  const ranked: Array<{ file: string; rank: number }> = [];
+  for (const file of await searchCandidates(root)) {
+    const lower = file.toLowerCase();
+    const name = lower.slice(lower.lastIndexOf("/") + 1);
+    const rank = needle === "" ? 2 : name.startsWith(needle) ? 0 : name.includes(needle) ? 1 : lower.includes(needle) ? 2 : -1;
+    if (rank >= 0) ranked.push({ file, rank });
+  }
+  ranked.sort((a, b) => a.rank - b.rank || a.file.length - b.file.length || a.file.localeCompare(b.file));
+  return ranked.slice(0, SEARCH_LIMIT).map(({ file }) => ({ path: file, absolute: path.join(root, file) }));
 }

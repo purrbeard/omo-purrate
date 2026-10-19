@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -416,6 +416,33 @@ describe("fake omo Native RPC host through the app's adapter", () => {
     const completed = await client.waitTurnCompleted(turnId);
 
     expect(at(completed, "params", "turn", "status")).toBe("interrupted");
+    expect(await client.close()).toBe(0);
+  });
+
+  it("queues follow-ups for after the turn, edits and withdraws them, and shows the delivered one as a user message", async () => {
+    const box = await sandbox();
+    const client = await box.launch();
+    const threadId = await client.startThread(box.dir);
+    // The gate keeps the run open until the queue has been changed, so the delivery order does not depend on timing.
+    const gate = join(box.dir, "release-follow-ups");
+    const turnId = await client.startTurn(threadId, `SCENARIO:gate:${gate}`);
+    const input = (text: string) => [{ type: "text" as const, text, text_elements: [] }];
+    await client.request("turn/followUp", { threadId, input: input("keep me") });
+    await client.request("turn/followUp", { threadId, input: input("drop me") });
+    type Row = { queuedId: string | null; mode: string; text: string };
+    const rows = (frame: Frame): Row[] => at(frame, "params", "data", "items") as Row[];
+    const queued = await client.waitFrame((frame) => frame.method === "extension_event" && at(frame, "params", "name") === "omo.queue.updated" && rows(frame).length === 2, "two queued messages");
+    const [keep, drop] = rows(queued) as [Row, Row];
+    expect(keep).toMatchObject({ mode: "followUp", text: "keep me" });
+    expect(await client.request("queue/edit", { threadId, queuedId: keep.queuedId!, text: "kept" })).toEqual({ status: "edited" });
+    expect(await client.request("queue/dequeue", { threadId, queuedId: drop.queuedId! })).toEqual({ status: "removed" });
+    writeFileSync(gate, "");
+    await client.waitTurnCompleted(turnId);
+    const userTexts = client.frames
+      .filter((frame) => frame.method === "item/completed" && at(frame, "params", "item", "type") === "userMessage")
+      .map((frame) => JSON.stringify(at(frame, "params", "item", "content")));
+    expect(userTexts.some((text) => text.includes("kept"))).toBe(true);
+    expect(userTexts.some((text) => text.includes("keep me") || text.includes("drop me"))).toBe(false);
     expect(await client.close()).toBe(0);
   });
 
