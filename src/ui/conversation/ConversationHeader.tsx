@@ -47,7 +47,7 @@ export const ConversationHeader = memo(function ConversationHeader({
   const t = useT();
   const ui = useUiState();
   const { sidebarVisible } = ui;
-  const dockOpen = shownTab(ui) !== null;
+  const dockOpen = shownTab(ui) !== null || ui.dockLauncher;
   const toggle = <span className={sidebarVisible ? css.narrowToggle : undefined}><SidebarToggle /></span>;
   if (!active) {
     return (

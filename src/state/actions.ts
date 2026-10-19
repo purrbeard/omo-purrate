@@ -409,7 +409,16 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       const archived = !append && missing.length > 0 ? new Set((await listArchivedThreads()).map(thread => thread.id)) : new Set<string>();
       if (!append) for (const threadId of restoreIds) {
         if (store.getState().threads[threadId] !== undefined || archived.has(threadId)) continue;
-        const { thread } = await bridge.request("thread/read", { threadId, includeTurns: false });
+        let thread: Thread;
+        try {
+          ({ thread } = await bridge.request("thread/read", { threadId, includeTurns: false }));
+        } catch (error) {
+          // A remembered session omo no longer knows (deleted file, another HOME) is left out of the list without a
+          // notice; its preference entry stays so the row returns if the session file reappears.
+          if (!/^-32600: thread not found:/.test(errorMessage(error))) throw error;
+          console.info(`Skipping remembered session ${threadId}: omo does not know it`);
+          continue;
+        }
         store.dispatch({ type: "threads/listed", threads: [thread], nextCursor, append: true });
       }
       const paths = Object.values(store.getState().threads).flatMap(thread => thread.path === null ? [] : [thread.path]);

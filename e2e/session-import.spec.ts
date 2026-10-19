@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { launchApp, newSession, send, tempDir, threadRow } from "./helpers.ts";
+import { launchApp, newSession, send, tempDir, threadRow, openNativeSessions } from "./helpers.ts";
 
 const UUID = /^omo-ui:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
@@ -108,7 +108,7 @@ test("skipping imports nothing, and the import stays reachable from the native s
     await expect(running.page.getByTestId("session-import-dialog")).toHaveCount(0);
     const stored = await running.page.evaluate(() => window.omo.getPreferences());
     expect([stored.managedThreadIds, stored.sessionImportCompleted]).toEqual([[], true]);
-    await running.page.getByTestId("native-sessions-open").click();
+    await openNativeSessions(running.page);
     await running.page.getByTestId("native-sessions-import").click();
     const dialog = running.page.getByTestId("session-import-dialog");
     await expect(dialog.locator(`[data-testid="session-import-row"][data-session-id="${seeds.tui!.id}"]`).getByRole("checkbox")).toBeChecked();

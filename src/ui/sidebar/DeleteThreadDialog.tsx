@@ -1,9 +1,8 @@
-import { useState } from "react";
-import clsx from "clsx";
-import { Button, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
+import { useRef, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { useT } from "../../i18n";
 import { useActions } from "../app-context";
-import css from "./Sidebar.module.css";
+import { Button, Dialog } from "../kit";
 
 export interface DeleteTarget {
   threadId: string;
@@ -14,6 +13,7 @@ export function DeleteThreadDialog({ target, onClose }: { target: DeleteTarget |
   const t = useT();
   const actions = useActions();
   const [deleting, setDeleting] = useState(false);
+  const cancel = useRef<HTMLButtonElement>(null);
 
   const confirm = async (): Promise<void> => {
     if (target === null) return;
@@ -24,36 +24,16 @@ export function DeleteThreadDialog({ target, onClose }: { target: DeleteTarget |
   };
 
   return (
-    <Modal
-      open={target !== null}
-      onClose={() => {
-        if (!deleting) onClose();
-      }}
-      className={css.deleteDialog}
-      title={t("shell.sidebar.deleteTitle")}
-      closeLabel={t("common.close")}
-      description={target === null ? undefined : t("shell.sidebar.deleteDescription", { name: target.title })}
-      footer={
-        <>
-          <Button variant="outline" className={css.dialogAction} disabled={deleting} data-modal-autofocus="" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            variant="outline"
-            className={clsx(css.dialogAction, css.deleteAction)}
-            disabled={deleting}
-            onClick={() => void confirm()}
-          >
-            {t("shell.sidebar.delete")}
-          </Button>
-        </>
-      }
-    >
-      {deleting ? (
-        <div className={css.deleteStatus} role="status">
-          {t("shell.sidebar.deleting")}
-        </div>
-      ) : undefined}
-    </Modal>
+    <Dialog.Root open={target !== null} onOpenChange={(open) => { if (!open && !deleting) onClose(); }}>
+      <Dialog.Content className="[word-break:keep-all] wrap-break-word" initialFocus={cancel}>
+        <Dialog.Title>{t("shell.sidebar.deleteTitle")}</Dialog.Title>
+        {target !== null && <Dialog.Description>{t("shell.sidebar.deleteDescription", { name: target.title })}</Dialog.Description>}
+        {deleting && <p className="m-0 text-xs leading-4 text-muted-foreground" role="status">{t("shell.sidebar.deleting")}</p>}
+        <Dialog.Footer>
+          <Button ref={cancel} variant="outline" disabled={deleting} onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="destructive" icon={<Trash2 />} disabled={deleting} onClick={() => void confirm()}>{t("shell.sidebar.delete")}</Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog.Root>
   );
 }

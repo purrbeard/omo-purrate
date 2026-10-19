@@ -279,9 +279,15 @@ export function lastTurn(page: Page): Locator {
   return byTestId(page, TESTID.turn).last();
 }
 
+/** Opens the existing-sessions inventory from the sidebar's session list menu. */
+export async function openNativeSessions(page: Page): Promise<void> {
+  await page.getByTestId("sidebar-managed-menu").click();
+  await page.getByTestId("native-sessions-open").click();
+}
+
 /** Adds a session to the sidebar through the native sessions dialog, as a user would; the sidebar lists managed sessions only. */
 export async function manageThread(page: Page, threadId: string): Promise<void> {
-  await page.getByTestId("native-sessions-open").click();
+  await openNativeSessions(page);
   const manage = page.locator(`[data-testid="native-session-row"][data-thread-id="${threadId}"]`).getByTestId("native-session-manage");
   await manage.click();
   await expect(manage).toHaveAttribute("aria-pressed", "true");

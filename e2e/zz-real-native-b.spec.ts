@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import path from "node:path";
 import os from "node:os";
 import { TESTID } from "../src/ui/testids.ts";
-import { send } from "./helpers.ts";
+import { send, openNativeSessions } from "./helpers.ts";
 
 test.skip(process.env["OMO_UI_REAL_NATIVE"] !== "1", "set OMO_UI_REAL_NATIVE=1");
 test.setTimeout(40 * 60_000);
@@ -62,7 +62,7 @@ test("REAL B: terminal-led session syncs into the UI and UI continuation does no
   let { app, page } = await launchInstalled(userData, PROJECT);
   try {
     await point("B0 terminal session imported into the sidebar", async () => {
-      await page.getByTestId("native-sessions-open").click();
+      await openNativeSessions(page);
       const manage = page.locator(`[data-testid="native-session-row"][data-thread-id="${THREAD}"]`).getByTestId("native-session-manage");
       await manage.click();
       await expect(manage).toHaveAttribute("aria-pressed", "true");

@@ -410,6 +410,21 @@ it("reloads saved linked children outside the first thread page", async () => {
   ]));
 });
 
+it("skips a remembered session omo no longer knows without a notice and keeps restoring the rest", async () => {
+  const { bridge, actions, store } = setup();
+  bridge.preferences.managedThreadIds = ["gone", "kept"];
+  const request = bridge.request.bind(bridge);
+  vi.spyOn(bridge, "request").mockImplementation(async (method, params) => {
+    if (method === "thread/read" && (params as { threadId: string }).threadId === "gone") throw new Error("-32600: thread not found: gone");
+    return request(method, params);
+  });
+  await actions.refreshThreads();
+  expect(store.getState().threads.kept?.id).toBe("kept");
+  expect(store.getState().threads.gone).toBeUndefined();
+  expect(store.getState().notices).toEqual([]);
+  expect(bridge.preferences.managedThreadIds).toEqual(["gone", "kept"]);
+});
+
 function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
   let settle: (value: T) => void = () => { throw new Error("not initialized"); };
   const promise = new Promise<T>((resolve) => { settle = resolve; });
