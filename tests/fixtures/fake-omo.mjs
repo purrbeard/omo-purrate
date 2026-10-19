@@ -101,6 +101,7 @@ function recordEntry(record, entry) {
   const line = { ...entry, id, parentId: record.lastEntryId, timestamp: new Date().toISOString() };
   appendFileSync(record.thread.path, `${JSON.stringify(line)}\n`);
   record.lastEntryId = id;
+  return line;
 }
 
 const zeroUsage = () => ({
@@ -740,6 +741,29 @@ function runScenario(record, turn, text) {
     });
     return;
   }
+  // SCENARIO:live-notice: a displayable custom_message entry and a fallback model switch, announced live.
+  if (text.includes("SCENARIO:live-notice")) {
+    const item = openAgentMessage(turn);
+    appendAgentDelta(turn, item, "Noticed.");
+    closeAgentMessage(record, turn, item, "stop");
+    const entry = recordEntry(record, { type: "custom_message", customType: "omo-kibitzer:recall", display: true, content: "<recalled-memory source=\"[[notes/live.md]]\">Live recall line.</recalled-memory>" });
+    event(record, "entry_appended", { entry });
+    event(record, "entry_appended", { entry });
+    event(record, "model_changed", { model: { provider: "fake", id: "beta" }, thinkingLevel: "high", source: "fallback" });
+    return;
+  }
+  // SCENARIO:retry: a transient error stop, an auto-retry delay, then a recovered answer in the same turn.
+  if (text.includes("SCENARIO:retry")) {
+    event(record, "message_end", { message: assistantMessage([], "error", { errorMessage: "529 overloaded" }) });
+    event(record, "auto_retry_start", { attempt: 1, maxAttempts: 3, delayMs: 800, errorMessage: "529 overloaded" });
+    event(record, "agent_end", { messages: [], willRetry: true });
+    return sleep(turn, 800).then(() => {
+      event(record, "auto_retry_end", { success: true, attempt: 1 });
+      const item = openAgentMessage(turn);
+      appendAgentDelta(turn, item, "recovered");
+      closeAgentMessage(record, turn, item, "stop");
+    });
+  }
   if (text.includes("SCENARIO:silent-error")) {
     const entry = assistantEntry([{ type: "text", text: "" }], "error");
     entry.message.errorMessage = "402: Insufficient Balance";
@@ -748,6 +772,17 @@ function runScenario(record, turn, text) {
     return;
   }
   if (text.includes("SCENARIO:full")) return runFull(record, turn);
+  if (text.includes("SCENARIO:extension-ui")) {
+    // A generic select dialog plus fire-and-forget notify / setStatus / set_editor_text; the chosen option is echoed.
+    event(record, "extension_ui_request", { id: randomUUID(), method: "notify", message: "Extension says hello", notifyType: "warning" });
+    event(record, "extension_ui_request", { id: randomUUID(), method: "setStatus", statusKey: "demo", statusText: "demo status" });
+    event(record, "extension_ui_request", { id: randomUUID(), method: "set_editor_text", text: "text from extension" });
+    return uiRequest(record, { method: "select", title: "Pick a flavor", options: ["Vanilla", "Mint"] }, turn).then((response) => {
+      const item = openAgentMessage(turn);
+      appendAgentDelta(turn, item, `Flavor: ${response.cancelled === true ? "none" : response.value}`);
+      closeAgentMessage(record, turn, item, "stop");
+    });
+  }
   if (text.includes("SCENARIO:async-question")) {
     // A non-blocking question: omo raises it, the turn ends at once, and the question is withdrawn with the turn.
     const id = randomUUID();
@@ -925,6 +960,8 @@ async function runTurn(record, turn, text, images) {
   } catch (error) {
     if (!(error instanceof Interrupted)) failure = error instanceof Error ? error.message : String(error);
   }
+  if (turn.interrupted) record.queue = [];
+  else await deliverQueued(record);
   record.activeTurn = null;
   if (failure !== null) event(record, "message_end", { message: assistantMessage([], "error", { errorMessage: failure }) });
   if (!text.includes("SCENARIO:silent-end")) {
@@ -932,6 +969,28 @@ async function runTurn(record, turn, text, images) {
     if (!text.includes("SCENARIO:lost-completion")) event(record, "agent_settled");
   }
   turn.finished();
+}
+
+/** omo's `queue_update`: the pending steering/follow-up texts plus the ordered rows that carry each queuedId. */
+function queueUpdate(record) {
+  const queue = record.queue ?? [];
+  event(record, "queue_update", {
+    steering: queue.filter((entry) => entry.mode === "steer").map((entry) => entry.text),
+    followUp: queue.filter((entry) => entry.mode === "follow_up").map((entry) => entry.text),
+    ordered: queue.map((entry) => ({ queuedId: entry.queuedId, mode: entry.mode, text: entry.text })),
+  });
+}
+
+/** Follow-ups are delivered as user messages once the run has nothing left to do. */
+async function deliverQueued(record) {
+  while ((record.queue ?? []).length > 0) {
+    const next = record.queue.shift();
+    queueUpdate(record);
+    const user = { role: "user", content: [{ type: "text", text: next.text }], timestamp: Date.now() };
+    event(record, "message_start", { message: user });
+    event(record, "message_end", { message: user });
+    recordEntry(record, userEntry(next.text));
+  }
 }
 
 // ---- commands -----------------------------------------------------------------------------
@@ -1153,6 +1212,28 @@ async function handleCommand(frame, record, reply) {
       event(record, "message_start", { message: user });
       event(record, "message_end", { message: user });
       recordEntry(record, userEntry(message));
+      return;
+    }
+    case "follow_up": {
+      if (record.activeTurn === null) throw new CommandFailure("No agent run to follow up", "not_streaming");
+      const message = typeof frame.message === "string" ? frame.message : "";
+      record.queueSeq = (record.queueSeq ?? 0) + 1;
+      (record.queue ??= []).push({ queuedId: `q_${record.queueSeq}`, mode: "follow_up", text: message });
+      reply({ disposition: "queued" });
+      queueUpdate(record);
+      return;
+    }
+    case "dequeue_message":
+    case "edit_queued_message": {
+      const queued = (record.queue ?? []).find((entry) => entry.queuedId === frame.queuedId);
+      if (queued === undefined) {
+        reply({ queuedId: frame.queuedId, status: "not_found" });
+        return;
+      }
+      if (frame.type === "dequeue_message") record.queue.splice(record.queue.indexOf(queued), 1);
+      else queued.text = String(frame.text);
+      reply({ queuedId: frame.queuedId, status: frame.type === "dequeue_message" ? "removed" : "edited" });
+      queueUpdate(record);
       return;
     }
     case "abort": {

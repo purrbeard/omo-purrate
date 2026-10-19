@@ -35,6 +35,12 @@ export interface SessionWorktree {
   changes: WorkspaceFile[];
 }
 
+/** One @ mention candidate: the workspace-relative path and the absolute path a reference chip carries. */
+export interface WorkspaceFileMatch {
+  path: string;
+  absolute: string;
+}
+
 export interface WorkspaceDocument {
   path: string;
   text: string;

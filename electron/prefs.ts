@@ -3,7 +3,7 @@ import path from "node:path";
 import { DEFAULT_PREFERENCES } from "../shared/ipc";
 import { THREAD_STATE_KEYS, ThreadDb } from "./store/thread-db";
 import type { ImportRecord, ThreadState } from "./store/thread-db";
-import type { LocalePreference, ModelProfile, PalettePreference, Preferences, ThemePreference, ThreadCreatorEvidence, ThreadNotificationPreference, ThreadOrigin, TimeFormatPreference } from "../shared/ipc";
+import type { LocalePreference, ModelProfile, PalettePreference, Preferences, SendKeyPreference, ThemePreference, ThreadCreatorEvidence, ThreadNotificationPreference, ThreadOrigin, TimeFormatPreference } from "../shared/ipc";
 
 export { DEFAULT_PREFERENCES };
 
@@ -15,6 +15,7 @@ const MAX_RECENT = 10;
 
 const THREAD_NOTIFICATION_MODES: readonly ThreadNotificationPreference[] = ["off", "background", "always"];
 const TIME_FORMATS: readonly TimeFormatPreference[] = ["system", "12h", "24h"];
+const SEND_KEYS: readonly SendKeyPreference[] = ["enter", "ctrlEnter"];
 const MIN_SETTLE_DAYS = 1;
 const MAX_SETTLE_DAYS = 365;
 const MAX_SETTLED = 200;
@@ -115,6 +116,7 @@ function merge(current: Preferences, patch: unknown): Preferences {
       : current.threadNotifications,
     inAppNotifications: typeof patch["inAppNotifications"] === "boolean" ? patch["inAppNotifications"] : current.inAppNotifications,
     timeFormat: has("timeFormat") ? pick(TIME_FORMATS, patch["timeFormat"], current.timeFormat) : current.timeFormat,
+    sendKey: has("sendKey") ? pick(SEND_KEYS, patch["sendKey"], current.sendKey ?? "enter") : current.sendKey ?? "enter",
     autoSettle: typeof patch["autoSettle"] === "boolean" ? patch["autoSettle"] : current.autoSettle,
     autoSettleDays: has("autoSettleDays") ? settleDays(patch["autoSettleDays"], current.autoSettleDays) : current.autoSettleDays,
     settledThreads: has("settledThreads") ? threadIds(patch["settledThreads"], current.settledThreads) : current.settledThreads,

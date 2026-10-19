@@ -17,6 +17,7 @@ import type {
   SessionStats,
   SkillMetadata,
   Thread,
+  ThreadAlertCode,
   ThreadSessionResult,
   ThreadStatus,
   Turn,
@@ -32,6 +33,7 @@ import { AppServerStartError, BRIDGE_ERROR_CODES, RpcRequestError } from "../rpc
 import { NativeCommandError, NativeConnection } from "./connection";
 import type { NativeRecord } from "./connection";
 import { TurnProjector } from "./projector";
+import type { QueuedInput } from "./projector";
 import { SessionIndex } from "./threads";
 import type { SessionRecord } from "./threads";
 import { UiBridge } from "./ui-bridge";
@@ -47,6 +49,10 @@ interface Loaded {
   projector: TurnProjector;
   holding: NativeRecord[] | null;
   goal: string | null;
+  /** Ids of custom_message entries already shown live, so one entry never produces two notices. */
+  noticeIds: Set<string>;
+  /** `extensionPath\0event` pairs already reported, so a failing extension warns once. */
+  extensionErrors: Set<string>;
 }
 
 const DEFAULT_STOP_TIMEOUTS: StopTimeouts = { afterStdinEnd: 2_000, afterSigterm: 3_000 };
@@ -57,6 +63,32 @@ const IMAGE_TYPES: Record<string, string> = { ".png": "image/png", ".jpg": "imag
 
 function isRecord(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** The extension_event name carrying omo's pending steering/follow-up queue to the renderer. */
+const QUEUE_EVENT = "omo.queue.updated";
+
+/**
+ * omo's `queue_update`: `ordered` rows carry the `queuedId` the withdraw and edit commands need (the row shape is not
+ * pinned in the 5.1.35 reference, so mode is read from the row and falls back to the legacy text lists).
+ */
+function queuedInputs(record: JsonObject): QueuedInput[] {
+  const ordered = record["ordered"];
+  const legacy = (key: string): string[] => (Array.isArray(record[key]) ? record[key].filter((entry): entry is string => typeof entry === "string") : []);
+  if (Array.isArray(ordered)) {
+    const rows = ordered.flatMap((row): QueuedInput[] => {
+      if (!isRecord(row) || typeof row["queuedId"] !== "string") return [];
+      const text = [row["text"], row["message"]].find((value): value is string => typeof value === "string") ?? "";
+      const kind = String(row["mode"] ?? row["deliverAs"] ?? row["kind"] ?? row["queue"] ?? "");
+      const followUp = /follow/i.test(kind) || (kind === "" && legacy("followUp").includes(text) && !legacy("steering").includes(text));
+      return [{ queuedId: row["queuedId"], mode: followUp ? "followUp" : "steer", text }];
+    });
+    if (rows.length > 0) return rows;
+  }
+  return [
+    ...legacy("steering").map((text): QueuedInput => ({ queuedId: null, mode: "steer", text })),
+    ...legacy("followUp").map((text): QueuedInput => ({ queuedId: null, mode: "followUp", text })),
+  ];
 }
 
 function params(value: unknown): JsonObject {
@@ -211,7 +243,7 @@ export class NativeAppServerClient {
       const info = params(await this.connection.send("get_protocol_info", {}, startTimeoutMs));
       if (info["mode"] !== "multi") throw new Error(`omo answered in ${String(info["mode"])} mode, not multi-session`);
       try {
-        await this.connection.send("set_client_info", { width: 120, capabilities: ["extension_events", "question"] }, startTimeoutMs);
+        await this.connection.send("set_client_info", { width: 120, capabilities: ["extension_events", "question", "media_placeholders"] }, startTimeoutMs);
       } catch (error) {
         if (!(error instanceof NativeCommandError)) throw error;
       }
@@ -318,6 +350,12 @@ export class NativeAppServerClient {
         return this.steer(requiredString(input, "threadId"), input);
       case "turn/interrupt":
         return this.interrupt(requiredString(input, "threadId"), requiredString(input, "turnId"));
+      case "turn/followUp":
+        return this.followUp(requiredString(input, "threadId"), input);
+      case "queue/dequeue":
+        return this.dequeue(requiredString(input, "threadId"), requiredString(input, "queuedId"));
+      case "queue/edit":
+        return this.editQueued(requiredString(input, "threadId"), requiredString(input, "queuedId"), requiredString(input, "text"));
       case "model/list":
         return this.listModels();
       case "skills/list":
@@ -377,7 +415,10 @@ export class NativeAppServerClient {
   private apply(loaded: Loaded, record: NativeRecord): void {
     switch (record.type) {
       case "extension_ui_request":
-        this.ui.handle({ threadId: loaded.threadId, handle: loaded.handle, cwd: loaded.cwd, activeTurnId: loaded.projector.activeTurnId }, record);
+        this.ui.handle({
+          threadId: loaded.threadId, handle: loaded.handle, cwd: loaded.cwd, activeTurnId: loaded.projector.activeTurnId,
+          filePaths: (toolCallId) => loaded.projector.filePathsOf(toolCallId),
+        }, record);
         return;
       case "question_resolved":
         this.ui.resolved(record);
@@ -391,22 +432,80 @@ export class NativeAppServerClient {
           const name = typeof entry["name"] === "string" && entry["name"].trim() !== "" ? entry["name"] : undefined;
           this.emit({ method: "thread/name/updated", params: name === undefined ? { threadId: loaded.threadId } : { threadId: loaded.threadId, threadName: name } });
         }
+        if (isRecord(entry) && entry["type"] === "custom_message") this.showCustomMessage(loaded, entry);
         return;
       }
+      case "model_changed": {
+        const model = isRecord(record["model"]) ? record["model"] : {};
+        if (typeof model["provider"] !== "string" || typeof model["id"] !== "string") return;
+        const id = `${model["provider"]}/${model["id"]}`;
+        const level = record["thinkingLevel"];
+        const source = typeof record["source"] === "string" ? record["source"] : "set";
+        this.emit({
+          method: "thread/settings/changed",
+          params: { threadId: loaded.threadId, model: id, effort: typeof level === "string" ? (level === "off" ? "none" : level) : null, source },
+        });
+        if (source === "fallback") this.alert(loaded, `fallback:${id}`, "info", "modelFallback", { model: id });
+        return;
+      }
+      case "transcript_write_failed":
+        this.alert(loaded, `transcript:${Date.now()}`, "error", "transcriptWriteFailed", { error: typeof record["errorMessage"] === "string" ? record["errorMessage"] : "unknown error" }, true);
+        return;
+      case "extension_error": {
+        const extension = typeof record["extensionPath"] === "string" ? record["extensionPath"] : "unknown";
+        const event = typeof record["event"] === "string" ? record["event"] : "unknown";
+        const key = `${extension}\u0000${event}`;
+        if (loaded.extensionErrors.has(key)) return;
+        loaded.extensionErrors.add(key);
+        this.alert(loaded, `extension:${key}`, "warning", "extensionError", { extension, event, error: typeof record["error"] === "string" ? record["error"] : "unknown error" });
+        return;
+      }
+      case "commands_changed":
+      case "loaded_surfaces_changed":
+        this.emit({ method: "skills/changed", params: {} });
+        return;
+      case "agent_end":
+        loaded.projector.handle(record);
+        void this.refreshGoal(loaded);
+        return;
+      case "agent_settled":
+        loaded.projector.handle(record);
+        void this.refreshGoal(loaded);
+        this.emit({ method: "mcpServer/startupStatus/updated", params: { threadId: loaded.threadId } });
+        return;
+      case "tool_execution_end":
+        loaded.projector.handle(record);
+        void this.refreshGoal(loaded);
+        return;
       case "session_closed":
       case "session_parked":
         this.forget(loaded);
         this.emit({ method: "thread/status/changed", params: { threadId: loaded.threadId, status: { type: "notLoaded" } } });
         return;
-      case "agent_end":
-      case "agent_settled":
-      case "tool_execution_end":
-        loaded.projector.handle(record);
-        void this.refreshGoal(loaded);
+      case "queue_update": {
+        const visible = loaded.projector.setQueue(queuedInputs(record));
+        this.emit({ method: "extension_event", params: { type: "extension_event", threadId: loaded.threadId, name: QUEUE_EVENT, data: { items: visible } } });
         return;
+      }
       default:
         loaded.projector.handle(record);
     }
+  }
+
+  private alert(loaded: Loaded, key: string, level: "info" | "warning" | "error", code: ThreadAlertCode, params: Record<string, string>, pinned = false): void {
+    this.emit({ method: "thread/alert", params: { threadId: loaded.threadId, key, level, code, params, pinned } });
+  }
+
+  private showCustomMessage(loaded: Loaded, entry: JsonObject): void {
+    const id = entry["id"];
+    const customType = entry["customType"];
+    if (typeof id !== "string" || typeof customType !== "string" || entry["display"] === false || loaded.noticeIds.has(id)) return;
+    loaded.noticeIds.add(id);
+    const content = entry["content"];
+    const text = typeof content === "string" ? content : Array.isArray(content)
+      ? content.map((block) => (isRecord(block) && block["type"] === "text" && typeof block["text"] === "string" ? block["text"] : "")).filter((part) => part !== "").join("\n") : "";
+    const at = typeof entry["timestamp"] === "string" ? Date.parse(entry["timestamp"]) : typeof entry["timestamp"] === "number" ? entry["timestamp"] : Number.NaN;
+    this.emit({ method: "thread/notice/added", params: { threadId: loaded.threadId, notice: { id, customType, display: true, text, timestamp: Number.isFinite(at) ? at : null } } });
   }
 
   private release(loaded: Loaded): void {
@@ -436,6 +535,8 @@ export class NativeAppServerClient {
       projector: new TurnProjector(threadId, cwd, (notification) => this.emit(notification)),
       holding: null,
       goal: null,
+      noticeIds: new Set(),
+      extensionErrors: new Set(),
     };
     this.sessions.set(threadId, loaded);
     this.byHandle.set(handle, loaded);
@@ -446,7 +547,9 @@ export class NativeAppServerClient {
     const data = params(await this.connection.send("open_session", { promptSurface: "app", ...fields }, this.options.startTimeoutMs ?? 60_000));
     const handle = data["sessionId"];
     if (typeof handle !== "string") throw new Error("omo open_session returned no session handle");
-    return this.register(handle, params(data["state"]), fallbackCwd);
+    const loaded = this.register(handle, params(data["state"]), fallbackCwd);
+    this.emit({ method: "mcpServer/startupStatus/updated", params: { threadId: loaded.threadId } });
+    return loaded;
   }
 
   private load(threadId: string): Promise<Loaded> {
@@ -641,7 +744,9 @@ export class NativeAppServerClient {
   private async compact(threadId: string): Promise<Record<string, never>> {
     const loaded = await this.load(threadId);
     this.command(loaded.handle, "compact", {}, PROMPT_TIMEOUT_MS).catch((error: unknown) => {
-      console.warn(`[omo-ui] compaction of ${threadId} failed: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[omo-ui] compaction of ${threadId} failed: ${message}`);
+      this.alert(loaded, `compact:${Date.now()}`, "error", "compactFailed", { error: message });
     });
     return {};
   }
@@ -796,6 +901,38 @@ export class NativeAppServerClient {
     return { turnId: active };
   }
 
+  private async followUp(threadId: string, input: JsonObject): Promise<{ turnId: string }> {
+    const loaded = await this.load(threadId);
+    const active = loaded.projector.activeTurnId;
+    if (active === null) throw new RpcRequestError(-32600, `No active turn for thread ${threadId}`);
+    const { message, images } = await this.promptContent(input["input"]);
+    let data: JsonObject;
+    try {
+      data = params(await this.command(loaded.handle, "follow_up", { message, ...(images.length > 0 ? { images } : {}) }, PROMPT_TIMEOUT_MS));
+    } catch (error) {
+      if (error instanceof NativeCommandError) await this.closeStaleTurn(loaded);
+      throw error;
+    }
+    // An input handler that consumed the message leaves nothing in the queue to deliver.
+    if (data["disposition"] !== "handled") loaded.projector.expectFollowUp(message);
+    return { turnId: active };
+  }
+
+  private async dequeue(threadId: string, queuedId: string): Promise<{ status: string }> {
+    const loaded = await this.load(threadId);
+    const data = params(await this.command(loaded.handle, "dequeue_message", { queuedId }));
+    const status = typeof data["status"] === "string" ? data["status"] : "removed";
+    if (status === "removed") loaded.projector.dropFollowUp(queuedId);
+    return { status };
+  }
+
+  private async editQueued(threadId: string, queuedId: string, text: string): Promise<{ status: string }> {
+    const loaded = await this.load(threadId);
+    const data = params(await this.command(loaded.handle, "edit_queued_message", { queuedId, text }));
+    const status = typeof data["status"] === "string" ? data["status"] : "edited";
+    return { status };
+  }
+
   /**
    * The projected turn outlived omo's run when its end events were lost: ends it once omo reports the session idle.
    * Resolves true when the session really is still running.
@@ -813,6 +950,8 @@ export class NativeAppServerClient {
     if (loaded === undefined || active === null) return {};
     if (active !== turnId) throw new RpcRequestError(-32600, `Turn id mismatch: expected ${turnId} but active turn is ${active}`);
     loaded.projector.markInterrupted();
+    // A pending auto-retry is cancelled first; abort alone would let omo schedule the next attempt.
+    if (loaded.projector.retryPending) await this.command(loaded.handle, "abort_retry");
     await this.command(loaded.handle, "abort");
     // An aborted run closes its permission dialogs without a record, so their cards are withdrawn here.
     this.ui.dropSession(loaded.handle);

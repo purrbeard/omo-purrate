@@ -82,6 +82,7 @@ class FakeBridge implements OmoBridgeApi {
   onAppUpdateStatus(): () => void { return () => {}; }
   getDeviceOverview(): ReturnType<OmoBridgeApi["getDeviceOverview"]> { return Promise.resolve({ hostname: "test", platform: "win32", appVersion: "0.1.3", omoVersion: null, memory: { path: null, branch: null, lastCommitAt: null, changedFiles: 0, remoteConfigured: false, state: "unavailable" } }); }
   listWorkspaceFiles(): ReturnType<OmoBridgeApi["listWorkspaceFiles"]> { return Promise.resolve([]); }
+  searchWorkspaceFiles(): ReturnType<OmoBridgeApi["searchWorkspaceFiles"]> { return Promise.resolve([]); }
   readWorkspaceFile(): ReturnType<OmoBridgeApi["readWorkspaceFile"]> { return Promise.resolve({ path: "", text: "", language: "text" }); }
   getWorkspaceDiff(): ReturnType<OmoBridgeApi["getWorkspaceDiff"]> { return Promise.resolve(""); }
   listSessionWork(): ReturnType<OmoBridgeApi["listSessionWork"]> { return Promise.resolve([]); }
@@ -208,6 +209,7 @@ class FakeBridge implements OmoBridgeApi {
     "thread/settings/update": () => ({}),
     "turn/start": () => ({ turn: runningTurn }),
     "turn/steer": () => ({}),
+    "turn/followUp": () => ({}),
     "turn/interrupt": () => ({}),
     "thread/name/set": () => ({}),
     "thread/delete": () => ({}),
@@ -399,17 +401,17 @@ describe("session lifecycle", () => {
     expect(bridge.historyLoads).toContain(BRANCH_PATH);
   });
 
-  it("pauses, resumes, completes and clears goals, propagating errors to controls", async () => {
+  it("pauses, resumes and clears goals, propagating errors to controls", async () => {
     const { actions, bridge, store } = setup();
     await actions.newThread("/source");
-    for (const status of ["paused", "active", "complete"] as const) {
+    for (const status of ["paused", "active"] as const) {
       await actions.setGoalStatus(THREAD_ID, status);
       expect(store.getState().conversations[THREAD_ID]?.live.goal?.status).toBe(status);
       expect(bridge.calls).toContainEqual({ method: "thread/goal/set", params: { threadId: THREAD_ID, status } });
     }
     bridge.failing.add("thread/goal/clear");
     await expect(actions.clearGoal(THREAD_ID)).rejects.toThrow("thread/goal/clear failed");
-    expect(store.getState().conversations[THREAD_ID]?.live.goal?.status).toBe("complete");
+    expect(store.getState().conversations[THREAD_ID]?.live.goal?.status).toBe("active");
     bridge.failing.delete("thread/goal/clear");
     await actions.clearGoal(THREAD_ID);
     expect(store.getState().conversations[THREAD_ID]?.live.goal).toBeNull();
@@ -828,6 +830,17 @@ describe("createActions", () => {
       },
     ]);
     expect(context.store.getState().notices).toMatchObject([{ level: "info", threadId: THREAD_ID, code: "steered" }]);
+  });
+
+  it("queues a follow-up for after the running turn instead of steering it", async () => {
+    const context = setup();
+    await listThread(context);
+    await context.actions.openThread(THREAD_ID);
+    context.store.dispatch(notification("turn/started", { threadId: THREAD_ID, turn: runningTurn }));
+    expect(await context.actions.sendFollowUp("afterwards")).toBe(true);
+    expect(context.bridge.methods()).toContain("turn/followUp");
+    expect(context.bridge.methods()).not.toContain("turn/steer");
+    expect(context.bridge.calls.at(-1)).toEqual({ method: "turn/followUp", params: { threadId: THREAD_ID, input: [{ type: "text", text: "afterwards", text_elements: [] }] } });
   });
 
   it("resolves false and drops the pending message when turn/start fails", async () => {

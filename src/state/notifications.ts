@@ -21,6 +21,7 @@ import type { AppState, Conversation, ConversationItem } from "./types";
 import type { ServerNotification } from "./wire";
 import { invalidateSkillCatalogs } from "./skills";
 import { applyLiveExtension } from "./live";
+import { applyUiExtension, UI_EXTENSION_PREFIX } from "./ui-extension";
 import { forgetThread, holdPendingSide } from "./btw";
 
 interface ItemPlacement {
@@ -200,7 +201,38 @@ export function applyNotification(state: AppState, notification: ServerNotificat
       }
       return dropRequest(state, notification.params.requestId);
     }
+    case "thread/settings/changed": {
+      const { threadId, model, effort } = notification.params;
+      const cut = model.indexOf("/");
+      const name = state.models.find((entry) => entry.id === model)?.model ?? (cut > 0 ? model.slice(cut + 1) : model);
+      const updated = updateExistingConversation(state, threadId, (conversation) => ({
+        ...conversation,
+        session: {
+          modelProvider: cut > 0 ? model.slice(0, cut) : conversation.session?.modelProvider ?? "",
+          model: name,
+          reasoningEffort: effort ?? conversation.session?.reasoningEffort ?? null,
+        },
+      }));
+      // The composer follows the active thread so the next send does not force the old model back.
+      return state.activeThreadId === threadId
+        ? { ...updated, composer: { ...updated.composer, modelId: model, effort: effort ?? updated.composer.effort } }
+        : updated;
+    }
+    case "thread/notice/added": {
+      const { threadId, notice } = notification.params;
+      return updateExistingConversation(state, threadId, (conversation) => {
+        if (conversation.annotations.notices.some((existing) => existing.id === notice.id)) return conversation;
+        const index = Math.max(0, conversation.turns.length - 1);
+        const placed = { ...notice, turnIndex: index, afterItems: conversation.turns[index]?.items.length ?? 0 };
+        return { ...conversation, annotations: { ...conversation.annotations, notices: [...conversation.annotations.notices, placed] } };
+      });
+    }
+    case "thread/alert": {
+      const { threadId, key, level, code, params, pinned } = notification.params;
+      return pushNotice(state, { id: `alert:${threadId}:${key}`, level, message: params["error"] ?? code, params, threadId, code, ...(pinned ? { pinned } : {}) });
+    }
     case "extension_event":
+      if (notification.params.name.startsWith(UI_EXTENSION_PREFIX)) return applyUiExtension(state, notification.params.threadId, notification.params.name, notification.params.data);
       return applyLiveExtension(state, notification.params.threadId, notification.params.name, notification.params.data, receivedAtMs);
   }
 }

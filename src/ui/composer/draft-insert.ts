@@ -6,6 +6,13 @@ export function insertIntoComposer(text: string): void {
   window.dispatchEvent(new CustomEvent<string>(COMPOSER_INSERT_EVENT, { detail: text }));
 }
 
+/** Replaces the active thread's composer draft (omo's set_editor_text). */
+export const COMPOSER_SET_EVENT = "omo-ui:composer-set";
+
+export function setComposerText(text: string): void {
+  window.dispatchEvent(new CustomEvent<string>(COMPOSER_SET_EVENT, { detail: text }));
+}
+
 /** @returns `draft` with `text` appended on a new line */
 export function appendToDraft(draft: string, text: string): string {
   if (draft === "") return text;

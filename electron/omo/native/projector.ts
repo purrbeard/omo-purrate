@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { ContextCompactionReason, RpcNotification, ThreadItem, Turn, TurnStatus, UserInput } from "../../../shared/protocol";
-import { toolFileChanges } from "./file-changes";
+import { pathToFileURL } from "node:url";
+import type { ContextCompactionReason, DynamicToolCallContentItem, RpcNotification, ThreadItem, Turn, TurnStatus, UserInput } from "../../../shared/protocol";
+import { previewFileChanges, toolFileChanges } from "./file-changes";
 
 type JsonObject = Record<string, unknown>;
 type ItemType = "commandExecution" | "fileChange" | "mcpToolCall" | "dynamicToolCall";
@@ -38,6 +39,8 @@ interface ActiveTurn {
   outcome: { status: TurnStatus; error: string | null } | null;
   interrupted: boolean;
   userMessageShown: boolean;
+  /** Between auto_retry_start and auto_retry_end: omo will run the turn again, so no stop ends it. */
+  retryPending: boolean;
 }
 
 function isRecord(value: unknown): value is JsonObject {
@@ -77,7 +80,7 @@ function capUtf8(value: string, maxBytes: number): string {
 
 export function classifyTool(name: string): ItemType {
   if (name === "bash") return "commandExecution";
-  if (name === "edit" || name === "write" || name === "apply_patch") return "fileChange";
+  if (name === "edit" || name === "write" || name === "apply_patch" || name === "multiedit") return "fileChange";
   if (MCP_TOOL_NAME.test(name)) return "mcpToolCall";
   return "dynamicToolCall";
 }
@@ -87,6 +90,19 @@ function toolText(result: unknown): string {
   const content = result["content"];
   if (!Array.isArray(content)) return readString(result, "text") ?? "";
   return content.map((item) => (isRecord(item) && item["type"] === "text" ? readString(item, "text") ?? "" : "")).join("");
+}
+
+/** Image blocks of a tool result: inline data, or an `image_ref` placeholder whose file omo kept on disk (media_placeholders). */
+function toolImages(result: unknown): DynamicToolCallContentItem[] {
+  if (!isRecord(result) || !Array.isArray(result["content"])) return [];
+  return result["content"].flatMap((block): DynamicToolCallContentItem[] => {
+    if (!isRecord(block)) return [];
+    if (block["type"] === "image" && typeof block["data"] === "string" && typeof block["mimeType"] === "string") {
+      return [{ type: "inputImage", imageUrl: `data:${block["mimeType"]};base64,${block["data"]}` }];
+    }
+    const file = readString(block, "path");
+    return block["type"] === "image_ref" && file !== undefined && file !== "" ? [{ type: "inputImage", imageUrl: pathToFileURL(file).href }] : [];
+  });
 }
 
 function commandOf(args: unknown): string {
@@ -117,8 +133,27 @@ function userInputFrom(content: unknown): UserInput[] {
  * Projects one omo session's native RPC events onto the app-server turn and item notifications the renderer reads.
  * A port of the projection the removed `omo app-server` ran in-process (TurnEngine + EventProjector).
  */
+/** One input omo holds in its steering or follow-up queue; `queuedId` is null when omo reports the legacy text-only lists. */
+export interface QueuedInput {
+  queuedId: string | null;
+  mode: "steer" | "followUp";
+  text: string;
+}
+
+function inputText(input: UserInput[]): string {
+  return input.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
+}
+
 export class TurnProjector {
   private active: ActiveTurn | null = null;
+  /** Texts of steers this client already shows as a user bubble, so the queue list leaves them out. */
+  private shownSteers: string[] = [];
+  /**
+   * Follow-ups queued by this client whose user message has not been shown yet; shown when omo delivers them.
+   * `queuedId` is learned from omo's queue updates, which can arrive before or after the send response.
+   */
+  private owedFollowUps: Array<{ queuedId: string | null; text: string }> = [];
+  private queue: QueuedInput[] = [];
 
   constructor(
     readonly threadId: string,
@@ -131,6 +166,17 @@ export class TurnProjector {
     return this.active?.id ?? null;
   }
 
+  /** The paths the running tool call `toolCallId` is changing, read from its arguments; empty when unknown. */
+  filePathsOf(toolCallId: string | undefined): string[] {
+    const tool = toolCallId === undefined ? undefined : this.active?.tools.get(toolCallId);
+    return tool === undefined || tool.itemType !== "fileChange" ? [] : previewFileChanges(tool.name, tool.args).map((change) => change.path);
+  }
+
+  /** True while omo waits to retry the running turn after a transient error. */
+  get retryPending(): boolean {
+    return this.active?.retryPending === true;
+  }
+
   beginClientTurn(input: UserInput[], clientId: string | null): Turn {
     const turn = this.open();
     this.showUserMessage(turn, input, clientId);
@@ -138,7 +184,52 @@ export class TurnProjector {
   }
 
   showSteer(input: UserInput[]): void {
-    if (this.active !== null) this.showUserMessage(this.active, input, null);
+    if (this.active === null) return;
+    this.shownSteers.push(inputText(input));
+    this.showUserMessage(this.active, input, null);
+  }
+
+  /** A follow-up sits in omo's queue: its bubble appears when omo delivers it, not now. */
+  expectFollowUp(text: string): void {
+    const owed = { queuedId: null, text };
+    this.claimQueuedId(owed);
+    this.owedFollowUps.push(owed);
+  }
+
+  private claimQueuedId(owed: { queuedId: string | null; text: string }): void {
+    if (owed.queuedId !== null) return;
+    const row = this.queue.find((item) => item.mode === "followUp" && item.queuedId !== null && item.text === owed.text
+      && !this.owedFollowUps.some((other) => other.queuedId === item.queuedId));
+    if (row !== undefined) owed.queuedId = row.queuedId;
+  }
+
+  /** Records omo's queue and returns what the queue list shows: every queued input except steers already shown as a bubble. */
+  setQueue(items: QueuedInput[]): QueuedInput[] {
+    this.queue = items;
+    for (const owed of this.owedFollowUps) {
+      // An edited follow-up keeps its id and is shown with its new text once delivered.
+      const row = items.find((item) => owed.queuedId !== null && item.queuedId === owed.queuedId);
+      if (row !== undefined) owed.text = row.text;
+      else this.claimQueuedId(owed);
+    }
+    const pending = [...this.shownSteers];
+    const kept: string[] = [];
+    const visible = items.filter((item) => {
+      if (item.mode !== "steer") return true;
+      const at = pending.indexOf(item.text);
+      if (at < 0) return true;
+      pending.splice(at, 1);
+      kept.push(item.text);
+      return false;
+    });
+    this.shownSteers = kept;
+    return visible;
+  }
+
+  /** A follow-up left the queue without delivery (withdrawn): its bubble is no longer owed. */
+  dropFollowUp(queuedId: string): void {
+    const at = this.owedFollowUps.findIndex((owed) => owed.queuedId === queuedId);
+    if (at >= 0) this.owedFollowUps.splice(at, 1);
   }
 
   markInterrupted(): void {
@@ -179,8 +270,18 @@ export class TurnProjector {
       case "compaction_end":
         this.compactionEnd(event);
         return;
+      case "auto_retry_start":
+        this.retryStart(event);
+        return;
+      case "auto_retry_end":
+        this.retryEnd(event);
+        return;
       // The removed app-server ended a turn on agent_end; a retry or continuation after it opens its own turn.
+      // While omo retries (agent_end.willRetry or between the auto_retry events) the turn stays open until agent_settled.
       case "agent_end":
+        if (event["willRetry"] === true || this.active?.retryPending === true) return;
+        this.settle();
+        return;
       case "agent_settled":
         this.settle();
         return;
@@ -210,6 +311,7 @@ export class TurnProjector {
       outcome: null,
       interrupted: false,
       userMessageShown: false,
+      retryPending: false,
     };
     this.active = turn;
     this.emit({ method: "thread/status/changed", params: { threadId: this.threadId, status: { type: "active", activeFlags: [] } } });
@@ -229,7 +331,12 @@ export class TurnProjector {
     if (!isRecord(message)) return;
     if (message["role"] === "user") {
       const turn = this.active ?? this.open();
-      if (!turn.userMessageShown) this.showUserMessage(turn, userInputFrom(message["content"]), null);
+      const content = userInputFrom(message["content"]);
+      const owed = this.owedFollowUps.findIndex((entry) => entry.text === inputText(content));
+      if (owed >= 0) {
+        this.owedFollowUps.splice(owed, 1);
+        this.showUserMessage(turn, content, null);
+      } else if (!turn.userMessageShown) this.showUserMessage(turn, content, null);
       return;
     }
     if (message["role"] !== "assistant") return;
@@ -374,7 +481,7 @@ export class TurnProjector {
           aggregatedOutput: tool.output === "" ? null : tool.output, exitCode: status === "inProgress" ? null : exitCodeOf(result), durationMs: null,
         };
       case "fileChange":
-        return { type: "fileChange", id: tool.id, changes: status === "inProgress" ? [] : toolFileChanges(tool.name, tool.args, isRecord(result) ? result["details"] : undefined), status };
+        return { type: "fileChange", id: tool.id, changes: status === "inProgress" ? previewFileChanges(tool.name, tool.args) : toolFileChanges(tool.name, tool.args, isRecord(result) ? result["details"] : undefined), status };
       case "mcpToolCall": {
         const marker = tool.name.indexOf("__");
         return {
@@ -388,7 +495,7 @@ export class TurnProjector {
         const changes = status === "completed" ? toolFileChanges(tool.name, tool.args, isRecord(result) ? result["details"] : undefined) : [];
         return {
           type: "dynamicToolCall", id: tool.id, namespace: null, tool: tool.name, arguments: tool.args ?? null, status,
-          contentItems: status === "inProgress" ? null : [{ type: "inputText", text: toolText(result) }],
+          contentItems: status === "inProgress" ? null : [{ type: "inputText", text: toolText(result) }, ...toolImages(result)],
           success: status === "inProgress" ? null : !isError, durationMs: null, ...(changes.length === 0 ? {} : { changes }),
         };
       }
@@ -430,6 +537,28 @@ export class TurnProjector {
       const failed = event["result"] === null && event["aborted"] !== true && typeof event["errorMessage"] === "string";
       this.finish(failed ? "failed" : event["aborted"] === true ? "interrupted" : "completed", failed ? String(event["errorMessage"]) : null);
     }
+  }
+
+  private retryStart(event: JsonObject): void {
+    const turn = this.active ?? this.open();
+    turn.retryPending = true;
+    // The error stop that triggered the retry is not the turn's outcome.
+    turn.outcome = null;
+    const attempt = finiteOrNull(event["attempt"]);
+    const max = finiteOrNull(event["maxAttempts"]);
+    const reason = readString(event, "errorMessage");
+    const message = `Retrying (attempt ${attempt ?? "?"}/${max ?? "?"})${reason === undefined ? "" : `: ${reason}`}`;
+    this.emit({
+      method: "error",
+      params: { threadId: this.threadId, turnId: turn.id, error: { message, codexErrorInfo: "other", additionalDetails: null }, willRetry: true },
+    });
+  }
+
+  private retryEnd(event: JsonObject): void {
+    const turn = this.active;
+    if (turn === null) return;
+    turn.retryPending = false;
+    if (event["success"] === false) turn.outcome = { status: "failed", error: readString(event, "finalError") ?? "Turn failed" };
   }
 
   private settle(): void {

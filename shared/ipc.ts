@@ -17,7 +17,7 @@ import type {
 } from "./protocol";
 import type { AndroidStatus } from "./android";
 import type { OpencodexAccounts } from "./opencodex";
-import type { SessionWorktree, WorkspaceFile, WorkspaceDocument } from "./workspace";
+import type { SessionWorktree, WorkspaceFile, WorkspaceFileMatch, WorkspaceDocument } from "./workspace";
 import type { DeviceOverview } from "./device-overview";
 import type { AppUpdateStatus } from "./app-update";
 import type { ModelRoutingInput, ModelRoutingSettings } from "./model-routing";
@@ -100,6 +100,8 @@ export type ThreadNotificationPreference = "off" | "background" | "always";
 
 /** How every clock time renders; "system" follows the OS clock preference. */
 export type TimeFormatPreference = "system" | "12h" | "24h";
+/** Which key sends the composer draft: Enter (Shift+Enter breaks the line) or Ctrl/Cmd+Enter (Enter breaks the line). */
+export type SendKeyPreference = "enter" | "ctrlEnter";
 
 export type ThreadOrigin = "user" | "agent" | "dori" | "unknown";
 
@@ -171,6 +173,8 @@ export interface Preferences {
   inAppNotifications: boolean;
   /** How every clock time renders; "system" follows the OS clock preference. */
   timeFormat: TimeFormatPreference;
+  /** The composer's send key. */
+  sendKey: SendKeyPreference;
   /** Whether inactive sidebar threads settle automatically after `autoSettleDays`. */
   autoSettle: boolean;
   /** Whole days of inactivity before an idle thread auto-settles, clamped to 1..365. */
@@ -205,6 +209,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   threadNotifications: "background",
   inAppNotifications: true,
   timeFormat: "system",
+  sendKey: "enter",
   autoSettle: true,
   autoSettleDays: 3,
   settledThreads: [],
@@ -473,6 +478,8 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   onAppUpdateStatus(listener: (status: AppUpdateStatus) => void): () => void;
   getDeviceOverview(): Promise<DeviceOverview>;
   listWorkspaceFiles(cwd: string): Promise<WorkspaceFile[]>;
+  /** Files of the thread's workspace whose path contains `query` (the composer's @ mention); `cwd` must be the thread's own cwd. */
+  searchWorkspaceFiles(threadId: string, cwd: string, query: string): Promise<WorkspaceFileMatch[]>;
   readWorkspaceFile(cwd: string, relativePath: string): Promise<WorkspaceDocument>;
   getWorkspaceDiff(cwd: string, relativePath: string): Promise<string>;
   /** Commits since `sinceMs` and other worktrees' uncommitted changes across the repository of `cwd`. */
@@ -585,6 +592,7 @@ export const IPC = {
   appUpdateStatus: "app-update:status",
   getDeviceOverview: "devices:overview",
   listWorkspaceFiles: "workspace:list-files",
+  searchWorkspaceFiles: "workspace:search-files",
   readWorkspaceFile: "workspace:read-file",
   getWorkspaceDiff: "workspace:diff",
   listSessionWork: "workspace:session-work",

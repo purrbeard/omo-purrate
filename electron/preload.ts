@@ -36,7 +36,7 @@ import type { ClientMethod, ClientParams, ClientResult, RequestId, RpcNotificati
 import { stripRemoteMethodPrefix } from "./ipc-errors";
 import type { AndroidStatus } from "../shared/android";
 import type { OpencodexAccounts } from "../shared/opencodex";
-import type { SessionWorktree, WorkspaceFile, WorkspaceDocument } from "../shared/workspace";
+import type { SessionWorktree, WorkspaceFile, WorkspaceFileMatch, WorkspaceDocument } from "../shared/workspace";
 import type { DeviceOverview } from "../shared/device-overview";
 import type { AppUpdateStatus } from "../shared/app-update";
 import type { ModelRoutingInput, ModelRoutingSettings } from "../shared/model-routing";
@@ -57,6 +57,7 @@ const CHANNELS = {
   appUpdateStatus: "app-update:status",
   getDeviceOverview: "devices:overview",
   listWorkspaceFiles: "workspace:list-files",
+  searchWorkspaceFiles: "workspace:search-files",
   readWorkspaceFile: "workspace:read-file",
   getWorkspaceDiff: "workspace:diff",
   listSessionWork: "workspace:session-work",
@@ -221,6 +222,7 @@ const api = {
   onAppUpdateStatus: (listener: (status: AppUpdateStatus) => void) => subscribe(CHANNELS.appUpdateStatus, listener),
   getDeviceOverview: (): Promise<DeviceOverview> => invoke(CHANNELS.getDeviceOverview),
   listWorkspaceFiles: (cwd: string): Promise<WorkspaceFile[]> => invoke(CHANNELS.listWorkspaceFiles, cwd),
+  searchWorkspaceFiles: (threadId: string, cwd: string, query: string): Promise<WorkspaceFileMatch[]> => invoke(CHANNELS.searchWorkspaceFiles, threadId, cwd, query),
   readWorkspaceFile: (cwd: string, relativePath: string): Promise<WorkspaceDocument> => invoke(CHANNELS.readWorkspaceFile, cwd, relativePath),
   getWorkspaceDiff: (cwd: string, relativePath: string): Promise<string> => invoke(CHANNELS.getWorkspaceDiff, cwd, relativePath),
   listSessionWork: (cwd: string, sinceMs: number): Promise<SessionWorktree[]> => invoke(CHANNELS.listSessionWork, cwd, sinceMs),

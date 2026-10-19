@@ -416,6 +416,12 @@ export interface ClientRequestMap {
     result: { turn: Turn };
   };
   "turn/steer": { params: { threadId: string; expectedTurnId: string; input: UserInput[] }; result: unknown };
+  /** Queues a message omo delivers after the running turn finishes (omo `follow_up`). */
+  "turn/followUp": { params: { threadId: string; input: UserInput[] }; result: unknown };
+  /** Withdraws a queued message (omo `dequeue_message`); `status` is omo's `removed`, `already_delivered` or `not_found`. */
+  "queue/dequeue": { params: { threadId: string; queuedId: string }; result: { status: string } };
+  /** Replaces the text of a queued message in place (omo `edit_queued_message`). */
+  "queue/edit": { params: { threadId: string; queuedId: string; text: string }; result: { status: string } };
   "turn/interrupt": { params: { threadId: string; turnId: string }; result: Record<string, never> };
 }
 
@@ -455,6 +461,9 @@ export const CLIENT_METHODS = [
   "turn/start",
   "turn/steer",
   "turn/interrupt",
+  "turn/followUp",
+  "queue/dequeue",
+  "queue/edit",
 ] as const satisfies readonly ClientMethod[];
 
 export interface ServerNotificationMap {
@@ -485,6 +494,22 @@ export interface ServerNotificationMap {
   error: { error: TurnError; willRetry: boolean; threadId: string; turnId: string };
   "serverRequest/resolved": { threadId: string; requestId: RequestId };
   extension_event: { type: "extension_event"; threadId: string; name: string; data: unknown };
+  /** The session's model or thinking level changed inside omo (a slash command, a retry fallback, a restore). */
+  "thread/settings/changed": { threadId: string; model: string; effort: ReasoningEffort | null; source: string };
+  /** A displayable `custom_message` session entry appended live; the reducer places it among the turns. */
+  "thread/notice/added": { threadId: string; notice: LiveSessionNotice };
+  /** A thread-level alert the UI translates by `code`; `key` dedupes repeats and `pinned` keeps it until dismissed. */
+  "thread/alert": { threadId: string; key: string; level: "info" | "warning" | "error"; code: ThreadAlertCode; params: Record<string, string>; pinned: boolean };
+}
+
+export type ThreadAlertCode = "modelFallback" | "transcriptWriteFailed" | "extensionError" | "compactFailed";
+
+export interface LiveSessionNotice {
+  id: string;
+  customType: string;
+  display: boolean;
+  text: string;
+  timestamp: number | null;
 }
 
 export interface WireGoal {
@@ -641,6 +666,8 @@ export interface FileChangeApprovalParams {
   startedAtMs?: number;
   reason?: string | null;
   grantRoot?: string | null;
+  /** Files the tool call is about to change, when omo's prompt or the call arguments name them. */
+  paths?: string[];
 }
 
 export interface UserInputOption {

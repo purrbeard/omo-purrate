@@ -8,11 +8,13 @@ import { uiState } from "../ui/ui-state";
 import type { AppStore } from "./store";
 import type { AppState, NoticeCode, SessionModel, SideChat } from "./types";
 import { parseStoredSides, selectSidesOf, sideDraftKey, sideName } from "./btw";
+import { setComposerText } from "../ui/composer/draft-insert";
 import { isModel, isSkill, isSkillError, isThread, parseNotification } from "./wire";
 import { resolveComposerModel, selectIsTurnActive, selectSkillCatalog } from "./selectors";
 import { object, parseGoal } from "./live-wire";
 
 import { normalizeMcpPage, type McpServer } from "./mcp";
+import { nativeCatalogCache } from "./native-catalog";
 
 const THREAD_PAGE_SIZE = 50;
 const EFFORTS: ReadonlySet<string> = new Set<ReasoningEffort>(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
@@ -118,6 +120,8 @@ export interface AppActions {
   linkThread(childId: string, parentId: string | null): Promise<void>;
   /** Sends to the active thread: steers the running turn, otherwise resumes the thread if needed and starts a turn; resolves true when omo accepted the message. */
   sendMessage(text: string, images?: readonly ImageInput[]): Promise<boolean>;
+  /** Queues the message omo delivers after the running turn; starts a normal turn when none is running any more. */
+  sendFollowUp(text: string, images?: readonly ImageInput[]): Promise<boolean>;
   interrupt(): Promise<void>;
   /**
    * Edits or rerolls in the native session tree, preserving original answers and the message's images.
@@ -131,7 +135,7 @@ export interface AppActions {
   listArchivedThreads(): Promise<Thread[]>;
   forkThread(threadId: string): Promise<string>;
   pinThread(threadId: string, pinned: boolean): Promise<void>;
-  setGoalStatus(threadId: string, status: "active" | "paused" | "complete"): Promise<void>;
+  setGoalStatus(threadId: string, status: "active" | "paused"): Promise<void>;
   clearGoal(threadId: string): Promise<void>;
   answerApproval(id: RequestId, decision: ApprovalDecision, reason?: string): Promise<void>;
   answerUserInput(id: RequestId, answers: Record<string, string[]>, comment?: string): Promise<void>;
@@ -762,7 +766,12 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
               }
             }
           }
+          if (parsed?.method === "extension_event" && parsed.params.name === "omo-ui:editor-text" && parsed.params.threadId === store.getState().activeThreadId) {
+            const data = parsed.params.data;
+            if (typeof data === "object" && data !== null && "text" in data && typeof data.text === "string") setComposerText(data.text);
+          }
           if (parseNotification(notification)?.method === "skills/changed") {
+            nativeCatalogCache(store).invalidate();
             const state = store.getState();
             const cwd = state.activeThreadId === null ? undefined : state.threads[state.activeThreadId]?.cwd;
             if (cwd !== undefined) void ensureSkills(cwd);
@@ -945,6 +954,25 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         return false;
       }
       return deliver(threadId, text, true, images);
+    },
+
+    async sendFollowUp(text, images = []) {
+      const threadId = store.getState().activeThreadId;
+      if (threadId === null) {
+        notify("error", "Open or start a session before sending a message.", null, "noActiveThread");
+        return false;
+      }
+      if ((store.getState().conversations[threadId]?.activeTurnId ?? null) === null) return deliver(threadId, text, false, images);
+      try {
+        const imagePaths = await Promise.all(images.map((image) => (image.type === "localImage" ? image.path : bridge.saveImage(image.url))));
+        await bridge.request("turn/followUp", { threadId, input: messageInput(text, imagePaths) });
+        return true;
+      } catch (error) {
+        // omo refuses a follow-up into a run it already ended; the message then starts a turn of its own.
+        console.warn("turn/followUp rejected; starting a new turn", error);
+        store.dispatch({ type: "turn/settled", threadId, status: "completed", settledAtMs: now() });
+        return deliver(threadId, text, false, images);
+      }
     },
 
     async interrupt() {

@@ -17,15 +17,24 @@ export interface UiSession {
   handle: string;
   cwd: string;
   activeTurnId: string | null;
+  /** The files a running file tool call is about to change, by tool call id. */
+  filePaths?: (toolCallId: string | undefined) => string[];
 }
 
 interface Pending {
-  kind: "approval" | "confirm" | "question";
+  kind: "approval" | "confirm" | "question" | "dialog";
   uiId: string;
   session: UiSession;
   questions?: UserInputQuestion[];
   toolCallId?: string;
 }
+
+/** Extension event names the renderer reads for omo's fire-and-forget UI methods. */
+export const UI_NOTIFY_EVENT = "omo-ui:notify";
+export const UI_STATUS_EVENT = "omo-ui:status";
+export const UI_EDITOR_TEXT_EVENT = "omo-ui:editor-text";
+const DIALOG_QUESTION_ID = "value";
+const NOTIFY_TYPES = new Set(["info", "warning", "error"]);
 
 function isRecord(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -50,6 +59,7 @@ export class UiBridge {
   private readonly pending = new Map<RequestId, Pending>();
   private readonly feedback = new Map<string, string>();
   private readonly goalReplace = new Set<string>();
+  private readonly statuses = new Map<string, { threadId: string; entries: Map<string, string> }>();
 
   constructor(
     private readonly answer: (handle: string, frame: JsonObject) => void,
@@ -66,6 +76,26 @@ export class UiBridge {
   }
 
   handle(session: UiSession, record: JsonObject): void {
+    switch (record["method"]) {
+      case "notify": {
+        const message = readString(record, "message");
+        const type = readString(record, "notifyType");
+        if (message !== undefined && message.trim() !== "") {
+          this.event(session.threadId, UI_NOTIFY_EVENT, { id: readString(record, "id") ?? `n${this.nextId++}`, message, notifyType: type !== undefined && NOTIFY_TYPES.has(type) ? type : "info" });
+        }
+        return;
+      }
+      case "setStatus":
+        this.setStatus(session, record);
+        return;
+      case "set_editor_text": {
+        const text = readString(record, "text");
+        if (text !== undefined) this.event(session.threadId, UI_EDITOR_TEXT_EVENT, { text });
+        return;
+      }
+      default:
+        break;
+    }
     const uiId = readString(record, "id");
     if (uiId === undefined) return;
     switch (record["method"]) {
@@ -83,11 +113,12 @@ export class UiBridge {
         const reason = this.feedback.get(key) ?? this.feedback.get(`${session.handle}\u0000`);
         this.feedback.delete(key);
         this.feedback.delete(`${session.handle}\u0000`);
-        this.answer(session.handle, reason === undefined ? { id: uiId, cancelled: true } : { id: uiId, value: reason });
+        if (reason === undefined) this.dialog(session, uiId, record, "input");
+        else this.answer(session.handle, { id: uiId, value: reason });
         return;
       }
       case "editor":
-        this.answer(session.handle, { id: uiId, value: readString(record, "prefill") ?? "" });
+        this.dialog(session, uiId, record, "editor");
         return;
       case "question":
         this.question(session, uiId, record);
@@ -108,6 +139,11 @@ export class UiBridge {
 
   dropSession(handle: string): void {
     this.goalReplace.delete(handle);
+    const status = this.statuses.get(handle);
+    if (status !== undefined) {
+      this.statuses.delete(handle);
+      this.event(status.threadId, UI_STATUS_EVENT, { entries: {} });
+    }
     for (const [id, pending] of this.pending) {
       if (pending.session.handle !== handle) continue;
       this.pending.delete(id);
@@ -124,6 +160,8 @@ export class UiBridge {
     const { handle } = pending.session;
     if (pending.kind === "question") {
       this.answer(handle, this.questionAnswer(pending.uiId, pending.questions ?? [], value));
+    } else if (pending.kind === "dialog") {
+      this.answer(handle, this.dialogAnswer(pending.uiId, pending.questions ?? [], value));
     } else {
       const decision = APPROVAL_DECISIONS.find((entry) => entry === value["decision"]) ?? "cancel";
       const reason = typeof value["reason"] === "string" && value["reason"].trim() !== "" ? value["reason"] : undefined;
@@ -154,7 +192,7 @@ export class UiBridge {
     }
     const [firstLine = "", ...rest] = title.split("\n");
     if (!firstLine.startsWith(PERMISSION_PREFIX) || !options.includes(ALLOW_ONCE) || !options.includes(DENY)) {
-      this.answer(session.handle, { id: uiId, cancelled: true });
+      this.dialog(session, uiId, record, "select");
       return;
     }
     const toolName = firstLine.slice(PERMISSION_PREFIX.length).trim();
@@ -165,12 +203,55 @@ export class UiBridge {
     const itemId = toolCallId ?? `approval-${toolName}`;
     const pending: Pending = { kind: "approval", uiId, session, ...(toolCallId === undefined ? {} : { toolCallId }) };
     if (fileChange) {
-      this.serverRequest(session, pending, "item/fileChange/requestApproval", { itemId, reason: reason || null, grantRoot: null });
+      const paths = [...new Set([...(session.filePaths?.(toolCallId) ?? []), ...(subject === null ? [] : [subject])])];
+      this.serverRequest(session, pending, "item/fileChange/requestApproval", { itemId, reason: reason || null, grantRoot: null, ...(paths.length === 0 ? {} : { paths }) });
     } else {
       this.serverRequest(session, pending, "item/commandExecution/requestApproval", {
         itemId, command: subject, cwd: session.cwd, reason: reason || null, availableDecisions: APPROVAL_DECISIONS,
       });
     }
+  }
+
+  private event(threadId: string, name: string, data: JsonObject): void {
+    this.notify({ method: "extension_event", params: { type: "extension_event", threadId, name, data } });
+  }
+
+  private setStatus(session: UiSession, record: JsonObject): void {
+    const key = readString(record, "statusKey");
+    if (key === undefined) return;
+    const text = readString(record, "statusText");
+    const status = this.statuses.get(session.handle) ?? { threadId: session.threadId, entries: new Map<string, string>() };
+    if (text === undefined || text.trim() === "") status.entries.delete(key);
+    else status.entries.set(key, text);
+    this.statuses.set(session.handle, status);
+    this.event(session.threadId, UI_STATUS_EVENT, { entries: Object.fromEntries(status.entries) });
+  }
+
+  /** A select / input / editor dialog the app has no special case for, asked as one requestUserInput question. */
+  private dialog(session: UiSession, uiId: string, record: JsonObject, kind: "select" | "input" | "editor"): void {
+    const title = readString(record, "title") ?? "";
+    const options = kind === "select" && Array.isArray(record["options"])
+      ? record["options"].filter((option): option is string => typeof option === "string").map((label) => ({ label, description: "" }))
+      : [];
+    const prefill = kind === "editor" ? readString(record, "prefill") ?? "" : "";
+    const questions: UserInputQuestion[] = [{
+      id: DIALOG_QUESTION_ID, header: "", question: prefill === "" ? title : `${title}\n\n${prefill}`,
+      isOther: kind !== "select", isSecret: false, options: options.length > 0 ? options : null, multiSelect: false,
+    }];
+    const timeout = typeof record["timeout"] === "number" ? record["timeout"] : null;
+    this.serverRequest(session, { kind: "dialog", uiId, session, questions }, "item/tool/requestUserInput", {
+      itemId: readString(record, "toolCallId") ?? uiId, questions, waitForAnswer: true, timeoutMs: timeout, autoResolutionMs: null,
+    }, "user-input");
+  }
+
+  private dialogAnswer(uiId: string, questions: UserInputQuestion[], value: JsonObject): JsonObject {
+    const answered = this.questionAnswer(uiId, questions, value);
+    const answers = answered["answers"];
+    const entry = isRecord(answers) ? answers[DIALOG_QUESTION_ID] : undefined;
+    if (!isRecord(entry)) return { id: uiId, cancelled: true };
+    const selected = Array.isArray(entry["selected"]) ? entry["selected"].filter((text): text is string => typeof text === "string") : [];
+    const text = typeof entry["text"] === "string" ? entry["text"] : undefined;
+    return { id: uiId, value: selected[0] ?? text ?? "" };
   }
 
   private question(session: UiSession, uiId: string, record: JsonObject): void {

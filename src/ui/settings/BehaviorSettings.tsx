@@ -1,6 +1,6 @@
 import { useState } from "react";
 import clsx from "clsx";
-import type { Preferences, ThreadNotificationPreference, TimeFormatPreference } from "../../../shared/ipc";
+import type { Preferences, SendKeyPreference, ThreadNotificationPreference, TimeFormatPreference } from "../../../shared/ipc";
 import { useT } from "../../i18n";
 import { TESTID } from "../testids";
 import { uiState, updatePreferences, useUiState } from "../ui-state";
@@ -40,6 +40,7 @@ export function BehaviorSettings() {
   const threadNotifications = preferences?.threadNotifications ?? "background";
   const inAppNotifications = preferences?.inAppNotifications ?? true;
   const timeFormat = preferences?.timeFormat ?? "system";
+  const sendKey = preferences?.sendKey ?? "enter";
 
   return (
     <>
@@ -99,6 +100,19 @@ export function BehaviorSettings() {
                 { value: "24h", label: t("shell.settings.timeFormat.24h") },
               ]}
               onChange={(next) => save({ timeFormat: next })}
+            />
+          </div>
+        </SettingsRow>
+        <SettingsRow title={t("shell.settings.sendKey")} description={t("shell.settings.sendKey.hint")}>
+          <div data-testid={TESTID.settingsSendKey}>
+            <Segmented<SendKeyPreference>
+              label={t("shell.settings.sendKey")}
+              value={sendKey}
+              options={[
+                { value: "enter", label: t("shell.settings.sendKey.enter") },
+                { value: "ctrlEnter", label: t("shell.settings.sendKey.ctrlEnter") },
+              ]}
+              onChange={(next) => save({ sendKey: next })}
             />
           </div>
         </SettingsRow>

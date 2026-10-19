@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, setTheme, shot, tempDir, threadRow } from "./helpers.ts";
+import { byTestId, launchApp, newSession, setTheme, shot, tempDir, threadRow } from "./helpers.ts";
 
 /** A session in omo's own format: a memory write with its write notice, then one recalled-memory message. */
 function writeSession(fakeHome: string, cwd: string): void {
@@ -61,6 +61,26 @@ test("a memory write shows omo's Remembered card, and special messages show as e
     await threadRow(page, "notice-thread").getByRole("button").first().click();
     await expect(card).toBeVisible();
     await shot(page, "session-notices-dark");
+  } finally {
+    await launched.close();
+    for (const dir of [fakeHome, pickDir]) rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a displayable custom message and a fallback model switch show live, once", async () => {
+  const fakeHome = tempDir("live-notice-home");
+  const pickDir = tempDir("live-notice-workspace");
+  const launched = await launchApp({ omo: "fake", fakeHome, pickDir });
+  try {
+    const { page } = launched;
+    await newSession(page);
+    const input = byTestId(page, TESTID.composerInput);
+    await input.fill("SCENARIO:live-notice");
+    await input.press("Enter");
+    const notice = byTestId(page, TESTID.sessionNotice).and(page.locator('[data-type="omo-kibitzer:recall"]'));
+    await expect(notice).toContainText("Recalled memory", { timeout: 5000 });
+    await expect(notice).toHaveCount(1);
+    await expect(byTestId(page, TESTID.noticeToast)).toContainText("fake/beta");
   } finally {
     await launched.close();
     for (const dir of [fakeHome, pickDir]) rmSync(dir, { recursive: true, force: true });

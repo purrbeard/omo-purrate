@@ -50,3 +50,43 @@ export function toolFileChanges(name: string, args: unknown, details: unknown): 
     ? details["operation"] : patch.startsWith("--- /dev/null\n") ? "add" : "update";
   return [{ path: filePath, kind: changeKind(operation, null), diff: patch }];
 }
+
+function prefixed(text: string, mark: "+" | "-"): string {
+  return text.replace(/\n$/, "").split("\n").map((line) => `${mark}${line}`).join("\n");
+}
+
+function editPairs(args: JsonObject): Array<{ before: string; after: string }> {
+  const pair = (value: JsonObject): Array<{ before: string; after: string }> => {
+    const before = readString(value, "oldText") ?? readString(value, "old_string") ?? readString(value, "oldString");
+    const after = readString(value, "newText") ?? readString(value, "new_string") ?? readString(value, "newString");
+    return before === undefined || after === undefined ? [] : [{ before, after }];
+  };
+  const edits = Array.isArray(args["edits"]) ? args["edits"].filter(isRecord).flatMap(pair) : [];
+  return edits.length > 0 ? edits : pair(args);
+}
+
+/**
+ * The files a file tool is about to change, read from its call arguments while it is still running (the recorded
+ * result details only exist afterwards). apply_patch names its files in the patch headers; edit, write and multiedit
+ * name one path, with a minus/plus preview of the replaced and the new text when the arguments carry them.
+ */
+export function previewFileChanges(name: string, args: unknown): FileUpdateChange[] {
+  if (!isRecord(args)) return [];
+  if (name === "apply_patch") {
+    const text = readString(args, "input") ?? readString(args, "patch") ?? readString(args, "patchText") ?? "";
+    const headers = [...text.matchAll(/^\*\*\* (Add|Update|Delete) File: (.+)$/gm)];
+    return headers.map((header, index) => {
+      const end = headers[index + 1]?.index ?? text.length;
+      const operation = header[1] === "Add" ? "add" : header[1] === "Delete" ? "delete" : "update";
+      return { path: (header[2] ?? "").trim(), kind: changeKind(operation, null), diff: normalizedPatch(text.slice(header.index, end)) ?? "" };
+    }).filter((change) => change.path !== "");
+  }
+  const filePath = readString(args, "path") ?? readString(args, "file_path") ?? readString(args, "filePath");
+  if (filePath === undefined || filePath === "") return [];
+  const content = readString(args, "content");
+  const pairs = editPairs(args);
+  const diff = content !== undefined && name === "write"
+    ? prefixed(content, "+")
+    : pairs.map((entry) => `${prefixed(entry.before, "-")}\n${prefixed(entry.after, "+")}`).join("\n");
+  return [{ path: filePath, kind: changeKind("update", null), diff: diff === "" ? "" : `${diff}\n` }];
+}

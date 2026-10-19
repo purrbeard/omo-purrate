@@ -189,6 +189,7 @@ export const messages = {
     "conversation.question.secretPlaceholder": "Enter the value…",
     "conversation.question.submit": "Submit",
     "conversation.question.submitting": "Submitting…",
+    "conversation.extensionStatus": "Extension status",
     "conversation.question.incomplete": "Answer every question to submit.",
     // Track B (design/thread): conversation and composer
     "conversation.error.requestFailed": "The request could not be completed. Try again.",
@@ -392,6 +393,7 @@ export const messages = {
     "conversation.question.secretPlaceholder": "값 입력…",
     "conversation.question.submit": "제출",
     "conversation.question.submitting": "제출 중…",
+    "conversation.extensionStatus": "확장 상태",
     "conversation.question.incomplete": "모든 질문에 답해야 제출할 수 있습니다.",
     // Track B (design/thread): conversation and composer
     "conversation.error.requestFailed": "요청을 처리하지 못했습니다. 다시 시도하세요.",
