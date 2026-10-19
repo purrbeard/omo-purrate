@@ -127,7 +127,7 @@ function run(): void {
   // Unpackaged runs (dev, e2e) get their own id: Windows notifications make Electron create a Start-menu shortcut to
   // node_modules' electron.exe under this id, and a shortcut sharing the installed app's id puts Electron's icon on its
   // taskbar button.
-  if (process.platform === "win32") app.setAppUserModelId(app.isPackaged ? "io.github.purrbeard.omoui.windows" : "io.github.purrbeard.omoui.windows.dev");
+  if (process.platform === "win32") app.setAppUserModelId(app.isPackaged ? "io.github.purrbeard.omopurrate" : "io.github.purrbeard.omopurrate.dev");
   const homeDir = os.homedir();
   const prefs = new PreferencesStore(app.getPath("userData"));
   const supervisor = new OmoSupervisor({

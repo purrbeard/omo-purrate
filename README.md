@@ -179,7 +179,7 @@ The installer and install folder keep the name `OmO UI Windows` so existing inst
 
 | Variable | Effect |
 | --- | --- |
-| `$env:OMO_UI_VERSION = '0.1.4-win.24'` | Install that release instead of the newest one. |
+| `$env:OMO_UI_VERSION = '0.1.4-win.25'` | Install that release instead of the newest one. |
 | `$env:OMO_UI_SKIP_OMO = '1'` | Never install omo; the app's first screen can still install it. |
 | `$env:OMO_UI_NO_LAUNCH = '1'` | Do not open the app after installing. |
 
@@ -188,6 +188,8 @@ The installer and install folder keep the name `OmO UI Windows` so existing inst
 Download `OmO.UI.Windows.Setup.<version>.exe` from [Releases](https://github.com/purrbeard/omo-purrate/releases) and run it. The installer has no publisher certificate, so SmartScreen may show "Windows protected your PC"; choose **More info** > **Run anyway**.
 
 ### Updates and uninstall
+
+Builds up to 0.1.4-win.24 looked for updates at an address that no longer exists; if yours says it is up to date on 0.1.4-win.24 or earlier, run the one-line install once to move to the current release. After that, updates come from here.
 
 Settings > About > Windows app update checks this repository's releases (prereleases included) and installs a newer one after verifying its SHA-256; checking never installs on its own. omo itself is updated separately at app launch with the official installer, limited to 20 seconds for the check and 120 seconds for the install; failures leave the app usable with a notice in Settings > omo.
 

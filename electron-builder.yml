@@ -1,4 +1,4 @@
-appId: io.github.purrbeard.omoui.windows
+appId: io.github.purrbeard.omopurrate
 productName: OmO UI Windows
 copyright: Copyright © 2026 sigridjineth; Windows modifications by purrbeard
 directories:
@@ -51,6 +51,8 @@ win:
         - x64
   icon: build/icon.png
 nsis:
+  # Pinned to the GUID earlier builds derived from their appId, so installed copies keep upgrading in place.
+  guid: aa772115-6622-56c3-aa36-a066b758141e
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
