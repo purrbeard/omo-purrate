@@ -396,6 +396,12 @@ export interface ClientRequestMap {
     result: { turn: Turn };
   };
   "turn/steer": { params: { threadId: string; expectedTurnId: string; input: UserInput[] }; result: unknown };
+  /** Queues a message omo delivers after the running turn finishes (omo `follow_up`). */
+  "turn/followUp": { params: { threadId: string; input: UserInput[] }; result: unknown };
+  /** Withdraws a queued message (omo `dequeue_message`); `status` is omo's `removed`, `already_delivered` or `not_found`. */
+  "queue/dequeue": { params: { threadId: string; queuedId: string }; result: { status: string } };
+  /** Replaces the text of a queued message in place (omo `edit_queued_message`). */
+  "queue/edit": { params: { threadId: string; queuedId: string; text: string }; result: { status: string } };
   "turn/interrupt": { params: { threadId: string; turnId: string }; result: Record<string, never> };
 }
 
@@ -431,6 +437,9 @@ export const CLIENT_METHODS = [
   "turn/start",
   "turn/steer",
   "turn/interrupt",
+  "turn/followUp",
+  "queue/dequeue",
+  "queue/edit",
 ] as const satisfies readonly ClientMethod[];
 
 export interface ServerNotificationMap {

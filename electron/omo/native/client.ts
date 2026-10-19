@@ -31,6 +31,7 @@ import { AppServerStartError, BRIDGE_ERROR_CODES, RpcRequestError } from "../rpc
 import { NativeCommandError, NativeConnection } from "./connection";
 import type { NativeRecord } from "./connection";
 import { TurnProjector } from "./projector";
+import type { QueuedInput } from "./projector";
 import { SessionIndex } from "./threads";
 import type { SessionRecord } from "./threads";
 import { UiBridge } from "./ui-bridge";
@@ -60,6 +61,32 @@ const IMAGE_TYPES: Record<string, string> = { ".png": "image/png", ".jpg": "imag
 
 function isRecord(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** The extension_event name carrying omo's pending steering/follow-up queue to the renderer. */
+const QUEUE_EVENT = "omo.queue.updated";
+
+/**
+ * omo's `queue_update`: `ordered` rows carry the `queuedId` the withdraw and edit commands need (the row shape is not
+ * pinned in the 5.1.35 reference, so mode is read from the row and falls back to the legacy text lists).
+ */
+function queuedInputs(record: JsonObject): QueuedInput[] {
+  const ordered = record["ordered"];
+  const legacy = (key: string): string[] => (Array.isArray(record[key]) ? record[key].filter((entry): entry is string => typeof entry === "string") : []);
+  if (Array.isArray(ordered)) {
+    const rows = ordered.flatMap((row): QueuedInput[] => {
+      if (!isRecord(row) || typeof row["queuedId"] !== "string") return [];
+      const text = [row["text"], row["message"]].find((value): value is string => typeof value === "string") ?? "";
+      const kind = String(row["mode"] ?? row["deliverAs"] ?? row["kind"] ?? row["queue"] ?? "");
+      const followUp = /follow/i.test(kind) || (kind === "" && legacy("followUp").includes(text) && !legacy("steering").includes(text));
+      return [{ queuedId: row["queuedId"], mode: followUp ? "followUp" : "steer", text }];
+    });
+    if (rows.length > 0) return rows;
+  }
+  return [
+    ...legacy("steering").map((text): QueuedInput => ({ queuedId: null, mode: "steer", text })),
+    ...legacy("followUp").map((text): QueuedInput => ({ queuedId: null, mode: "followUp", text })),
+  ];
 }
 
 function params(value: unknown): JsonObject {
@@ -288,6 +315,12 @@ export class NativeAppServerClient {
         return this.steer(requiredString(input, "threadId"), input);
       case "turn/interrupt":
         return this.interrupt(requiredString(input, "threadId"), requiredString(input, "turnId"));
+      case "turn/followUp":
+        return this.followUp(requiredString(input, "threadId"), input);
+      case "queue/dequeue":
+        return this.dequeue(requiredString(input, "threadId"), requiredString(input, "queuedId"));
+      case "queue/edit":
+        return this.editQueued(requiredString(input, "threadId"), requiredString(input, "queuedId"), requiredString(input, "text"));
       case "model/list":
         return this.listModels();
       case "skills/list":
@@ -414,6 +447,11 @@ export class NativeAppServerClient {
         this.forget(loaded);
         this.emit({ method: "thread/status/changed", params: { threadId: loaded.threadId, status: { type: "notLoaded" } } });
         return;
+      case "queue_update": {
+        const visible = loaded.projector.setQueue(queuedInputs(record));
+        this.emit({ method: "extension_event", params: { type: "extension_event", threadId: loaded.threadId, name: QUEUE_EVENT, data: { items: visible } } });
+        return;
+      }
       default:
         loaded.projector.handle(record);
     }
@@ -801,6 +839,38 @@ export class NativeAppServerClient {
     }
     loaded.projector.showSteer(shown);
     return { turnId: active };
+  }
+
+  private async followUp(threadId: string, input: JsonObject): Promise<{ turnId: string }> {
+    const loaded = await this.load(threadId);
+    const active = loaded.projector.activeTurnId;
+    if (active === null) throw new RpcRequestError(-32600, `No active turn for thread ${threadId}`);
+    const { message, images } = await this.promptContent(input["input"]);
+    let data: JsonObject;
+    try {
+      data = params(await this.command(loaded.handle, "follow_up", { message, ...(images.length > 0 ? { images } : {}) }, PROMPT_TIMEOUT_MS));
+    } catch (error) {
+      if (error instanceof NativeCommandError) await this.closeStaleTurn(loaded);
+      throw error;
+    }
+    // An input handler that consumed the message leaves nothing in the queue to deliver.
+    if (data["disposition"] !== "handled") loaded.projector.expectFollowUp(message);
+    return { turnId: active };
+  }
+
+  private async dequeue(threadId: string, queuedId: string): Promise<{ status: string }> {
+    const loaded = await this.load(threadId);
+    const data = params(await this.command(loaded.handle, "dequeue_message", { queuedId }));
+    const status = typeof data["status"] === "string" ? data["status"] : "removed";
+    if (status === "removed") loaded.projector.dropFollowUp(queuedId);
+    return { status };
+  }
+
+  private async editQueued(threadId: string, queuedId: string, text: string): Promise<{ status: string }> {
+    const loaded = await this.load(threadId);
+    const data = params(await this.command(loaded.handle, "edit_queued_message", { queuedId, text }));
+    const status = typeof data["status"] === "string" ? data["status"] : "edited";
+    return { status };
   }
 
   /**

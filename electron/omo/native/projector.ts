@@ -133,8 +133,27 @@ function userInputFrom(content: unknown): UserInput[] {
  * Projects one omo session's native RPC events onto the app-server turn and item notifications the renderer reads.
  * A port of the projection the removed `omo app-server` ran in-process (TurnEngine + EventProjector).
  */
+/** One input omo holds in its steering or follow-up queue; `queuedId` is null when omo reports the legacy text-only lists. */
+export interface QueuedInput {
+  queuedId: string | null;
+  mode: "steer" | "followUp";
+  text: string;
+}
+
+function inputText(input: UserInput[]): string {
+  return input.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
+}
+
 export class TurnProjector {
   private active: ActiveTurn | null = null;
+  /** Texts of steers this client already shows as a user bubble, so the queue list leaves them out. */
+  private shownSteers: string[] = [];
+  /**
+   * Follow-ups queued by this client whose user message has not been shown yet; shown when omo delivers them.
+   * `queuedId` is learned from omo's queue updates, which can arrive before or after the send response.
+   */
+  private owedFollowUps: Array<{ queuedId: string | null; text: string }> = [];
+  private queue: QueuedInput[] = [];
 
   constructor(
     readonly threadId: string,
@@ -165,7 +184,52 @@ export class TurnProjector {
   }
 
   showSteer(input: UserInput[]): void {
-    if (this.active !== null) this.showUserMessage(this.active, input, null);
+    if (this.active === null) return;
+    this.shownSteers.push(inputText(input));
+    this.showUserMessage(this.active, input, null);
+  }
+
+  /** A follow-up sits in omo's queue: its bubble appears when omo delivers it, not now. */
+  expectFollowUp(text: string): void {
+    const owed = { queuedId: null, text };
+    this.claimQueuedId(owed);
+    this.owedFollowUps.push(owed);
+  }
+
+  private claimQueuedId(owed: { queuedId: string | null; text: string }): void {
+    if (owed.queuedId !== null) return;
+    const row = this.queue.find((item) => item.mode === "followUp" && item.queuedId !== null && item.text === owed.text
+      && !this.owedFollowUps.some((other) => other.queuedId === item.queuedId));
+    if (row !== undefined) owed.queuedId = row.queuedId;
+  }
+
+  /** Records omo's queue and returns what the queue list shows: every queued input except steers already shown as a bubble. */
+  setQueue(items: QueuedInput[]): QueuedInput[] {
+    this.queue = items;
+    for (const owed of this.owedFollowUps) {
+      // An edited follow-up keeps its id and is shown with its new text once delivered.
+      const row = items.find((item) => owed.queuedId !== null && item.queuedId === owed.queuedId);
+      if (row !== undefined) owed.text = row.text;
+      else this.claimQueuedId(owed);
+    }
+    const pending = [...this.shownSteers];
+    const kept: string[] = [];
+    const visible = items.filter((item) => {
+      if (item.mode !== "steer") return true;
+      const at = pending.indexOf(item.text);
+      if (at < 0) return true;
+      pending.splice(at, 1);
+      kept.push(item.text);
+      return false;
+    });
+    this.shownSteers = kept;
+    return visible;
+  }
+
+  /** A follow-up left the queue without delivery (withdrawn): its bubble is no longer owed. */
+  dropFollowUp(queuedId: string): void {
+    const at = this.owedFollowUps.findIndex((owed) => owed.queuedId === queuedId);
+    if (at >= 0) this.owedFollowUps.splice(at, 1);
   }
 
   markInterrupted(): void {
@@ -267,7 +331,12 @@ export class TurnProjector {
     if (!isRecord(message)) return;
     if (message["role"] === "user") {
       const turn = this.active ?? this.open();
-      if (!turn.userMessageShown) this.showUserMessage(turn, userInputFrom(message["content"]), null);
+      const content = userInputFrom(message["content"]);
+      const owed = this.owedFollowUps.findIndex((entry) => entry.text === inputText(content));
+      if (owed >= 0) {
+        this.owedFollowUps.splice(owed, 1);
+        this.showUserMessage(turn, content, null);
+      } else if (!turn.userMessageShown) this.showUserMessage(turn, content, null);
       return;
     }
     if (message["role"] !== "assistant") return;

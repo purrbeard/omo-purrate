@@ -189,6 +189,14 @@ describe("PreferencesStore", () => {
     });
   });
 
+  it("defaults the send key and keeps only known choices", () => {
+    const store = new PreferencesStore(dir);
+    expect(store.get().sendKey).toBe("enter");
+    expect(store.set({ sendKey: "ctrlEnter" }).sendKey).toBe("ctrlEnter");
+    expect(store.set({ sendKey: "shiftEnter" }).sendKey).toBe("ctrlEnter");
+    expect(new PreferencesStore(dir).get().sendKey).toBe("ctrlEnter");
+  });
+
   it("validates thread notification and time format choices", () => {
     const store = new PreferencesStore(dir);
     expect(store.set({ threadNotifications: "always" }).threadNotifications).toBe("always");

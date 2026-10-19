@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rename, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rename, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { getWorkspaceDiff, listSessionWork, listWorkspaceFiles, readWorkspaceFile } from "../../electron/workspace-files";
+import { getWorkspaceDiff, listSessionWork, listWorkspaceFiles, readWorkspaceFile, searchWorkspaceFiles } from "../../electron/workspace-files";
 
 const exec = promisify(execFile);
 
@@ -48,6 +48,34 @@ describe("workspace files", () => {
     const plain = await mkdtemp(path.join(os.tmpdir(), "omo-session-plain-"));
     expect(await listSessionWork(plain, 0)).toEqual([]);
   });
+  it("searches workspace files for the @ mention: name hits first, capped, no dependencies or ignored files", async () => {
+    const { cwd, git } = await repository();
+    await mkdir(path.join(cwd, "src"));
+    await mkdir(path.join(cwd, "node_modules"));
+    await writeFile(path.join(cwd, ".gitignore"), "ignored.log\n");
+    await writeFile(path.join(cwd, "src", "composer.ts"), "x");
+    await writeFile(path.join(cwd, "docs-composer-notes.md"), "x");
+    await writeFile(path.join(cwd, "ignored.log"), "x");
+    await writeFile(path.join(cwd, "node_modules", "composer.js"), "x");
+    for (let index = 0; index < 30; index++) await writeFile(path.join(cwd, `bulk-${index}.txt`), "x");
+    await git("add", ".");
+    const found = await searchWorkspaceFiles(cwd, "COMPOSER");
+    expect(found.map((file) => file.path)).toEqual(["src/composer.ts", "docs-composer-notes.md"]);
+    expect(found[0]?.absolute).toBe(path.join(await realpath(cwd), "src", "composer.ts"));
+    expect(await searchWorkspaceFiles(cwd, "")).toHaveLength(20);
+    expect((await searchWorkspaceFiles(cwd, "ignored")).length).toBe(0);
+  });
+
+  it("searches a plain workspace without Git", async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), "omo-workspace-search-"));
+    await mkdir(path.join(cwd, "folder"));
+    await mkdir(path.join(cwd, ".git"));
+    await writeFile(path.join(cwd, "folder", "note.txt"), "x");
+    await writeFile(path.join(cwd, ".git", "note.txt"), "x");
+    expect((await searchWorkspaceFiles(cwd, "note")).map((file) => file.path)).toEqual(["folder/note.txt"]);
+    await expect(searchWorkspaceFiles("relative/dir", "x")).rejects.toThrow("absolute");
+  });
+
   it("lists and reads a plain workspace without requiring Git", async () => {
     const cwd = await mkdtemp(path.join(os.tmpdir(), "omo-workspace-plain-"));
     await mkdir(path.join(cwd, "folder"));

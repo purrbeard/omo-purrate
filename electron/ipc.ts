@@ -43,7 +43,7 @@ import type { IphoneBridge } from "./iphone/bridge";
 import type { AndroidBridge } from "./android/bridge";
 import { discoverMcpConfigs, importMcpConfig, readConfiguredMcpServers } from "./omo/mcp-config";
 import { readOpencodexAccounts } from "./accounts/opencodex";
-import { listWorkspaceFiles, readWorkspaceFile, getWorkspaceDiff, listSessionWork } from "./workspace-files";
+import { listWorkspaceFiles, readWorkspaceFile, getWorkspaceDiff, listSessionWork, searchWorkspaceFiles } from "./workspace-files";
 import { getDeviceOverview } from "./device-overview";
 import { AppUpdater } from "./app-update";
 import { readModelRouting, saveModelRouting } from "./omo/model-routing";
@@ -236,6 +236,13 @@ export function registerIpc(deps: IpcDeps): () => void {
     [IPC.installAppUpdate]: () => updater.install(),
     [IPC.getDeviceOverview]: () => getDeviceOverview(homeDir, app.getVersion(), supervisor.getStatus().omo?.version ?? null),
     [IPC.listWorkspaceFiles]: (_event, cwd) => listWorkspaceFiles(requireString(cwd, "cwd")),
+    [IPC.searchWorkspaceFiles]: async (_event, threadId, cwd, query) => {
+      if (typeof query !== "string" || query.length > 200) throw new TypeError("query must be a short string");
+      // The renderer names the cwd it believes the thread has; only the thread's own workspace is ever searched.
+      const { thread } = await supervisor.request("thread/read", { threadId: requireString(threadId, "threadId"), includeTurns: false });
+      if (thread.cwd !== requireString(cwd, "cwd")) throw new Error("cwd is not the thread's workspace");
+      return searchWorkspaceFiles(thread.cwd, query);
+    },
     [IPC.readWorkspaceFile]: (_event, cwd, file) => readWorkspaceFile(requireString(cwd, "cwd"), requireString(file, "relativePath")),
     [IPC.getWorkspaceDiff]: (_event, cwd, file) => getWorkspaceDiff(requireString(cwd, "cwd"), requireString(file, "relativePath")),
     [IPC.listSessionWork]: (_event, cwd, sinceMs) => {

@@ -33,6 +33,12 @@ import { addContext, contextMessage, CONTEXT_LIMIT, type DraftContext } from "./
 import { appendToDraft, COMPOSER_INSERT_EVENT, COMPOSER_SET_EVENT } from "./draft-insert";
 import { userMessageParts } from "../conversation/UserBubble";
 import { userErrorText } from "../conversation/user-error";
+import type { WorkspaceFileMatch } from "../../../shared/workspace";
+import { FileMentionMenu } from "./FileMentionMenu";
+import { detectMention, removeMention } from "./mention";
+import { QueueList } from "./QueueList";
+import { useQueuedMessages } from "./queue";
+import type { QueuedMessage } from "./queue";
 
 /** Ghost 28px chip in the composer row (attach, workspace). */
 const chipClass = clsx(
@@ -94,6 +100,8 @@ export function Composer() {
   const turnActive = useAppSelector(selectIsTurnActive);
   const connected = useAppSelector((state) => state.bridge?.state === "connected");
   const lastWorkspace = useUiState().preferences?.lastWorkspace ?? null;
+  const sendKey = useUiState().preferences?.sendKey ?? "enter";
+  const queued = useQueuedMessages(activeThreadId);
   const [pickedWorkspace, setPickedWorkspace] = useState<string | null>(null);
   const workspace = pickedWorkspace ?? lastWorkspace;
 
@@ -161,6 +169,9 @@ export function Composer() {
   const [composing, setComposing] = useState(false);
   const [dismissedStart, setDismissedStart] = useState<number | null>(null);
   const [highlight, setHighlight] = useState({ key: "", index: 0 });
+  const [mentionDismissed, setMentionDismissed] = useState<number | null>(null);
+  const [mentionHighlight, setMentionHighlight] = useState({ key: "", index: 0 });
+  const [mentionFound, setMentionFound] = useState<{ key: string; files: readonly WorkspaceFileMatch[] }>({ key: "", files: [] });
   const [limitReached, setLimitReached] = useState(false);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -173,6 +184,8 @@ export function Composer() {
   draftRef.current = draft;
   const baseId = useId();
   const listboxId = `${baseId}-skills`;
+  const mentionListId = `${baseId}-mention`;
+  const mentionOptionId = useCallback((index: number): string => `${baseId}-mention-${index}`, [baseId]);
   const optionId = useCallback((index: number): string => `${baseId}-skill-${index}`, [baseId]);
 
   useLayoutEffect(() => {
@@ -249,6 +262,27 @@ export function Composer() {
   const triggerStart = useRef<number | null>(null);
   triggerStart.current = trigger?.start ?? null;
 
+  // "@" opens the workspace file menu unless the "/" menu already owns the caret.
+  const mention = connected && !composing && activeThreadId !== null && !menuOpen ? detectMention(text, caret) : null;
+  const mentionOpen = mention !== null && mention.start !== mentionDismissed;
+  const mentionQuery = mention?.query ?? "";
+  const mentionKey = mention === null ? "" : `${mention.start}:${mention.query}`;
+  useEffect(() => {
+    if (!mentionOpen || activeCwd === null || activeThreadId === null) return;
+    let stale = false;
+    window.omo.searchWorkspaceFiles(activeThreadId, activeCwd, mentionQuery).then(
+      (files) => { if (!stale) setMentionFound({ key: mentionKey, files }); },
+      () => { if (!stale) setMentionFound({ key: mentionKey, files: [] }); },
+    );
+    return () => { stale = true; };
+  }, [mentionOpen, mentionKey, mentionQuery, activeCwd, activeThreadId]);
+  const mentionLoading = mentionFound.key !== mentionKey;
+  const mentionFiles = mentionLoading ? [] : mentionFound.files;
+  const mentionIndex = mentionFiles.length === 0 ? -1 : mentionHighlight.key === mentionKey ? Math.min(mentionHighlight.index, mentionFiles.length - 1) : 0;
+  const dismissMention = useCallback((): void => setMentionDismissed(mentionStart.current), []);
+  const mentionStart = useRef<number | null>(null);
+  mentionStart.current = mention?.start ?? null;
+
   const catalogStatus = catalog?.status;
   useEffect(() => {
     if (menuOpen && activeCwd !== null) void actions.ensureSkills(activeCwd);
@@ -262,6 +296,7 @@ export function Composer() {
 
   const edit = (nextText: string, selection: number): void => {
     pendingCaret.current = null;
+    setMentionDismissed((dismissed) => (dismissed !== null && detectMention(nextText, selection)?.start === dismissed ? dismissed : null));
     if (detectSkillTrigger(nextText, selection) === null) setHighlight({ key: "", index: 0 });
     setDraft((current) => ({ text: nextText, selected: pruneSelected(nextText, current.selected) }));
     setCaret(selection);
@@ -273,6 +308,7 @@ export function Composer() {
     const selection = event.currentTarget.selectionStart;
     setCaret(selection);
     keepDismissal(event.currentTarget.value, selection);
+    setMentionDismissed((dismissed) => (dismissed !== null && detectMention(event.currentTarget.value, selection)?.start === dismissed ? dismissed : null));
   };
 
   const dismissMenu = useCallback((): void => {
@@ -331,6 +367,26 @@ export function Composer() {
     setLimitReached(false);
   };
 
+  const pickMention = (index: number): void => {
+    const file = mentionFiles[index];
+    if (file === undefined || mention === null) return;
+    const next = removeMention(draft.text, mention);
+    pendingCaret.current = next.caret;
+    setDraft({ text: next.text, selected: pruneSelected(next.text, draft.selected) });
+    setCaret(next.caret);
+    setMentionDismissed(null);
+    addReferences([{ kind: "file", value: file.absolute }]);
+  };
+
+  const withdrawQueued = (item: QueuedMessage): void => {
+    if (activeThreadId === null || item.queuedId === null) return;
+    window.omo.request("queue/dequeue", { threadId: activeThreadId, queuedId: item.queuedId }).catch((error: unknown) => setImageNotice(userErrorText(error, t("conversation.error.requestFailed")).text));
+  };
+  const editQueued = (item: QueuedMessage, nextText: string): void => {
+    if (activeThreadId === null || item.queuedId === null) return;
+    window.omo.request("queue/edit", { threadId: activeThreadId, queuedId: item.queuedId, text: nextText }).catch((error: unknown) => setImageNotice(userErrorText(error, t("conversation.error.requestFailed")).text));
+  };
+
   const fit = useCallback((): void => {
     const el = inputRef.current;
     if (el === null) return;
@@ -374,7 +430,7 @@ export function Composer() {
     if (question !== "") void askSide(question);
   };
 
-  const submit = async (): Promise<void> => {
+  const submit = async (mode: "send" | "followUp" = "send"): Promise<void> => {
     let message = text.trim();
     if (!canSend) return;
     const local = /^\/(compact|goal|model|plan)(?:\s+(.*))?$/s.exec(message);
@@ -417,7 +473,7 @@ export function Composer() {
       contextDrafts.current.delete(NO_THREAD_DRAFT);
       imageDrafts.current.delete(NO_THREAD_DRAFT);
       setDismissedStart(null);
-      const sent = await actions.sendMessage(transport, images);
+      const sent = await (mode === "followUp" && turnActive ? actions.sendFollowUp(transport, images) : actions.sendMessage(transport, images));
       accepted = sent;
       if (!sent) {
         setPlanMode(planMode);
@@ -468,9 +524,31 @@ export function Composer() {
         return;
       }
     }
+    if (mentionOpen) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        if (mentionFiles.length === 0) return;
+        const offset = event.key === "ArrowDown" ? 1 : -1;
+        setMentionHighlight({ key: mentionKey, index: (mentionIndex + offset + mentionFiles.length) % mentionFiles.length });
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        dismissMention();
+        return;
+      }
+      if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey && mentionIndex >= 0) {
+        event.preventDefault();
+        pickMention(mentionIndex);
+        return;
+      }
+    }
     if (event.key !== "Enter" || event.shiftKey) return;
+    // With "Ctrl+Enter sends" a bare Enter keeps its default: a new line.
+    if (sendKey === "ctrlEnter" && !event.ctrlKey && !event.metaKey && !event.altKey) return;
     event.preventDefault();
-    void submit();
+    // Alt+Enter queues a follow-up for after the running turn.
+    void submit(event.altKey && turnActive ? "followUp" : "send");
   };
 
   const keepFocus = (event: MouseEvent<HTMLButtonElement>): void => {
@@ -524,6 +602,19 @@ export function Composer() {
             onDismiss={dismissMenu}
           />
         )}
+        {mentionOpen && (
+          <FileMentionMenu
+            listboxId={mentionListId}
+            optionId={mentionOptionId}
+            files={mentionFiles}
+            loading={mentionLoading}
+            activeIndex={mentionIndex}
+            onPick={pickMention}
+            onHover={(index) => setMentionHighlight({ key: mentionKey, index })}
+            onDismiss={dismissMention}
+          />
+        )}
+        <QueueList items={queued} onWithdraw={withdrawQueued} onEdit={editQueued} />
         {dropping && <div className="px-4 text-[13px] text-muted-foreground" role="status">{t("composer.images.drop")}</div>}
         {images.length > 0 && <div className="flex flex-wrap gap-2.5 px-4 py-1">
           {userMessageParts(images).images.map((image, index) => <div key={image.key} className="relative size-[72px]" data-testid={TESTID.attachmentThumbnail}>
@@ -572,9 +663,9 @@ export function Composer() {
             aria-multiline
             aria-autocomplete="list"
             aria-haspopup="listbox"
-            aria-expanded={menuOpen}
-            aria-controls={menuOpen ? listboxId : undefined}
-            aria-activedescendant={menuOpen && activeIndex >= 0 ? optionId(activeIndex) : undefined}
+            aria-expanded={menuOpen || mentionOpen}
+            aria-controls={menuOpen ? listboxId : mentionOpen ? mentionListId : undefined}
+            aria-activedescendant={menuOpen && activeIndex >= 0 ? optionId(activeIndex) : mentionOpen && mentionIndex >= 0 ? mentionOptionId(mentionIndex) : undefined}
             placeholder={placeholder}
             rows={1}
             value={text}

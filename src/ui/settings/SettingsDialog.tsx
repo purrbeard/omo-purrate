@@ -83,7 +83,7 @@ const GROUPS: readonly SectionGroup[] = [
         id: "general",
         label: "shell.settings.nav.general",
         icon: Settings2,
-        keys: ["shell.settings.theme", "shell.settings.language", "shell.settings.threadNotifications", "shell.settings.timeFormat", "shell.settings.autoSettle"],
+        keys: ["shell.settings.theme", "shell.settings.language", "shell.settings.threadNotifications", "shell.settings.timeFormat", "shell.settings.sendKey", "shell.settings.autoSettle"],
         terms: [],
         render: () => <GeneralSection />,
       },
