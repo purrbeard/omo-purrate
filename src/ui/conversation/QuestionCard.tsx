@@ -1,12 +1,25 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import clsx from "clsx";
-import { Button, IconCheckOutlineRegular, IconEditOutlineRegular } from "@deepseek-ai/dsh-client-ui-primitives";
+import { IconCheckOutlineRegular, IconEditOutlineRegular } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { UserInputQuestion } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { PendingRequest } from "../../state";
 import { useActions } from "../app-context";
+import { Button, focusRing } from "../kit";
 import { TESTID } from "../testids";
-import css from "./QuestionCard.module.css";
+
+/** Mirror and textarea share one grid cell with identical type, padding and wrapping. */
+const fieldCell = "[grid-area:1/1] min-w-0 box-border text-sm leading-6 [font-family:inherit] break-words [overflow-wrap:anywhere] whitespace-pre-wrap";
+const fieldInput = clsx(fieldCell, "m-0 resize-none overflow-y-auto border-0 bg-transparent text-foreground caret-foreground outline-none placeholder:text-muted-foreground");
+const indicator = "mt-0.5 grid size-5 flex-[0_0_20px] place-items-center";
+const numberBadge = clsx(indicator, "rounded-xs bg-muted text-xs font-medium leading-[18px] text-muted-foreground");
+function checkboxClass(checked: boolean): string {
+  return clsx(
+    indicator,
+    "before:[grid-area:1/1] before:size-3.5 before:rounded-xs before:border before:border-solid before:content-[''] before:transition-colors motion-reduce:before:transition-none [&>svg]:[grid-area:1/1]",
+    checked ? "text-background before:border-foreground before:bg-foreground" : "before:border-input",
+  );
+}
 
 export type QuestionRequest = Extract<PendingRequest, { kind: "userInput" }>;
 
@@ -26,6 +39,8 @@ function wireAnswer(draft: Draft): string[] {
   return other === "" ? [...draft.selected] : [...draft.selected, other];
 }
 
+const FIELD_BLOCK = "mx-3 min-h-10 rounded-lg border border-solid border-input bg-background focus-within:border-ring [&>*]:px-3 [&>*]:py-2";
+
 function AnswerField({
   variant,
   value,
@@ -44,10 +59,10 @@ function AnswerField({
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
 }) {
   return (
-    <div className={clsx(css.field, variant === "inline" ? css.fieldInline : css.fieldBlock)}>
-      <div aria-hidden className={css.fieldMirror}>{`${value}\n`}</div>
+    <div className={clsx("grid min-w-0", variant === "inline" ? "flex-1 [&>*]:p-0" : FIELD_BLOCK)}>
+      <div aria-hidden className={clsx(fieldCell, "invisible max-h-36 overflow-hidden")}>{`${value}\n`}</div>
       <textarea
-        className={css.fieldInput}
+        className={fieldInput}
         data-testid={TESTID.questionOtherInput}
         value={value}
         rows={1}
@@ -77,9 +92,9 @@ function SecretField({
   onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <div className={clsx(css.field, css.fieldBlock)}>
+    <div className={clsx("grid min-w-0", FIELD_BLOCK)}>
       <input
-        className={css.fieldInput}
+        className={fieldInput}
         data-testid={TESTID.questionOtherInput}
         type="password"
         autoComplete="off"
@@ -146,21 +161,25 @@ function QuestionBlock({
       />
     );
   return (
-    <div className={css.question}>
-      <div className={css.header}>
-        {header !== "" && <div className={css.eyebrow}>{header}</div>}
-        <h2 className={css.title} id={titleId}>
+    <div className="[&+&]:mt-2 [&+&]:border-0 [&+&]:border-t [&+&]:border-solid [&+&]:border-border">
+      <div className="px-6 pt-5">
+        {header !== "" && <div className="mb-1 text-[11px] leading-4 text-muted-foreground">{header}</div>}
+        <h2 className="m-0 text-base font-medium leading-[22px] [overflow-wrap:anywhere]" id={titleId}>
           {question.question}
         </h2>
       </div>
-      <div className={css.options} role={multi ? "group" : "radiogroup"} aria-labelledby={titleId}>
+      <div className="mt-2 flex flex-col gap-px px-3 py-1" role={multi ? "group" : "radiogroup"} aria-labelledby={titleId}>
         {options.map((option, index) => {
           const selected = draft.selected.includes(option.label);
           return (
             <button
               type="button"
               key={`${option.label}-${index}`}
-              className={clsx(css.option, selected && css.optionSelected)}
+              className={clsx(
+                "flex w-full min-h-10 shrink-0 items-start gap-2 rounded-md border border-solid py-2 pr-3 pl-2 transition-colors duration-150 motion-reduce:transition-none m-0 cursor-pointer bg-transparent text-left text-inherit [font-family:inherit] hover:not-disabled:bg-accent disabled:cursor-default",
+                selected ? "border-border bg-accent" : "border-transparent",
+                focusRing,
+              )}
               role={multi ? "checkbox" : "radio"}
               aria-checked={selected}
               disabled={disabled}
@@ -169,18 +188,18 @@ function QuestionBlock({
               onClick={() => onChoose(option.label)}
             >
               {multi ? (
-                <span className={clsx(css.checkbox, selected && css.checkboxChecked)} aria-hidden="true">
+                <span className={checkboxClass(selected)} aria-hidden="true">
                   {selected && <IconCheckOutlineRegular size={12} />}
                 </span>
               ) : (
-                <span className={css.number} aria-hidden="true">
+                <span className={numberBadge} aria-hidden="true">
                   {index + 1}
                 </span>
               )}
-              <span className={css.optionLine}>
-                <span className={css.optionLabel}>{option.label}</span>
+              <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                <span className="text-sm font-medium leading-6">{option.label}</span>
                 {typeof option.description === "string" && option.description.trim() !== "" && (
-                  <span className={css.description}>{option.description}</span>
+                  <span className="text-sm leading-6 text-muted-foreground">{option.description}</span>
                 )}
               </span>
             </button>
@@ -188,13 +207,13 @@ function QuestionBlock({
         })}
         {freeText &&
           (options.length > 0 ? (
-            <div className={clsx(css.customRow, draft.other !== "" && css.customRowActive)}>
+            <div className={clsx("flex w-full min-h-10 shrink-0 items-start gap-2 rounded-md border border-solid py-2 pr-3 pl-2 transition-colors duration-150 motion-reduce:transition-none hover:bg-accent focus-within:border-border focus-within:bg-accent", draft.other !== "" ? "border-border bg-accent" : "border-transparent")}>
               {multi ? (
-                <span className={clsx(css.checkbox, draft.other !== "" && css.checkboxChecked)} aria-hidden="true">
+                <span className={checkboxClass(draft.other !== "")} aria-hidden="true">
                   {draft.other !== "" && <IconCheckOutlineRegular size={12} />}
                 </span>
               ) : (
-                <span className={css.number} aria-hidden="true">
+                <span className={numberBadge} aria-hidden="true">
                   <IconEditOutlineRegular size={12} />
                 </span>
               )}
@@ -252,14 +271,14 @@ export function QuestionCard({ request }: { request: QuestionRequest }) {
 
   return (
     <div
-      className={css.card}
+      className="box-border flex w-full flex-col rounded-2xl border border-solid border-border bg-composer pb-3 text-foreground shadow-md"
       data-testid={TESTID.questionCard}
       data-request-id={String(request.id)}
       role="group"
       aria-label={t("conversation.question.waiting")}
       aria-busy={busy}
     >
-      {request.resolved && <p className={css.followUp} role="status">{t("conversation.question.followUp")}</p>}
+      {request.resolved && <p className="m-0 px-6 pt-4 text-[13px] leading-5 text-muted-foreground" role="status">{t("conversation.question.followUp")}</p>}
       {questions.map((question) => (
         <QuestionBlock
           key={question.id}
@@ -271,8 +290,8 @@ export function QuestionCard({ request }: { request: QuestionRequest }) {
           onSubmitKey={submit}
         />
       ))}
-      <footer className={css.footer}>
-        <div className={css.feedback} role="status">
+      <footer className="mt-3 flex items-center justify-end gap-3 pr-4 pl-6">
+        <div className="min-h-4 flex-1 text-right text-xs leading-4 text-muted-foreground" role="status">
           {!complete && questions.length > 1 ? t("conversation.question.incomplete") : null}
         </div>
         <Button variant="primary" disabled={busy || !complete} data-testid={TESTID.questionSubmit} onClick={submit}>

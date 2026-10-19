@@ -5,7 +5,6 @@ import { selectSidesOf } from "../../state";
 import { useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
 import { shownTab, uiState, useUiState } from "../ui-state";
-import css from "./SidePanel.module.css";
 
 /** Ctrl+E (⌘E on macOS) toggles the side chat panel from anywhere in the window (the Aside browser's Ask Aside shortcut). */
 export function useSidePanelShortcut(): void {
