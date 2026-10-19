@@ -2,9 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
-import { IconCheckOutlineRegular, IconChevronDownOutlineRegular, MenuSurface } from "@deepseek-ai/dsh-client-ui-primitives";
+import { Check, ChevronDown } from "lucide-react";
 import type { Model, ReasoningEffort } from "../../../shared/protocol";
 import { useT } from "../../i18n";
+import { MenuSurface } from "../kit";
 import { useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
 import { resolveComposerModel, selectActiveSessionModel } from "../../state";
@@ -115,7 +116,7 @@ export function ReasoningPicker({ disabled }: { disabled: boolean }) {
         }}
       >
         <span className="min-w-0 truncate">{currentEffort === null ? t("composer.reasoning.label") : t(EFFORT_KEY[currentEffort])}</span>
-        <IconChevronDownOutlineRegular className={pickerChevron(open)} size={12} />
+        <ChevronDown className={clsx("size-3", pickerChevron(open))} aria-hidden />
       </button>
 
       {open &&
@@ -142,7 +143,7 @@ export function ReasoningPicker({ disabled }: { disabled: boolean }) {
                   onClick={() => choose(entry.reasoningEffort)}
                 >
                   <span className="min-w-0 truncate">{t(EFFORT_KEY[entry.reasoningEffort])}</span>
-                  <span className="inline-flex flex-none items-center text-foreground">{selected && <IconCheckOutlineRegular size={14} />}</span>
+                  <span className="inline-flex flex-none items-center text-foreground">{selected && <Check className="size-3.5" aria-hidden />}</span>
                 </button>
               );
             })}

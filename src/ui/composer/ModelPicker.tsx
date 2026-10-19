@@ -2,16 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "re
 import type { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
-import {
-  IconCheckOutlineRegular,
-  IconChevronDownOutlineRegular,
-  IconCloseFillRegular,
-  IconDataOutlineRegular,
-  IconSparkleRegular,
-  Input,
-  MenuGroup,
-  MenuSurface,
-} from "@deepseek-ai/dsh-client-ui-primitives";
+import { Check, ChevronDown, CircleX, Database, Sparkles } from "lucide-react";
 import { observeStickyMenuGroups } from "../lib/sticky-menu-groups";
 import type { Model } from "../../../shared/protocol";
 import type { ModelProfile } from "../../../shared/ipc";
@@ -23,7 +14,7 @@ import { resolveComposerModel, selectActiveSessionModel } from "../../state";
 import { filterGroups, groupModels, modelDisplayName, resolveEffort } from "./model-groups";
 import { EFFORT_KEY } from "./effort-labels";
 import { APP_SHORTCUTS, shortcutKeys } from "../shortcuts";
-import { focusRing } from "../kit";
+import { focusRing, Input, MenuGroup, MenuSurface } from "../kit";
 import { pickerChevron, pickerMenu, pickerTrigger } from "./picker-classes";
 
 const tabButton = clsx(
@@ -272,10 +263,10 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
         disabled={disabled}
         onClick={() => (open ? close(true) : show())}
       >
-        {profile ? <IconSparkleRegular className="flex-none opacity-70" size={14} /> : <IconDataOutlineRegular className="flex-none opacity-70" size={14} />}
+        {profile ? <Sparkles className="size-3.5 flex-none opacity-70" aria-hidden /> : <Database className="size-3.5 flex-none opacity-70" aria-hidden />}
         {profile && <span className="size-1.5 flex-none rounded-full bg-warning data-[geeky=true]:bg-muted-foreground" data-geeky={profile.startsWith("geeky")} aria-hidden="true" />}
         <span className="min-w-0 truncate">{modelLabel}</span>
-        <IconChevronDownOutlineRegular className={pickerChevron(open)} size={12} />
+        <ChevronDown className={clsx("size-3", pickerChevron(open))} aria-hidden />
       </button>
 
       {open &&
@@ -285,7 +276,6 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
             id={`${id}-menu`}
             className={clsx(
               pickerMenu,
-              "rounded-xl! border border-solid border-border text-popover-foreground shadow-lg",
               tab === "profile"
                 ? "max-h-[calc(100vh-32px)] w-[640px] max-w-[calc(100vw-24px)] overflow-y-auto p-2.5"
                 : "max-h-[min(420px,calc(100vh-96px))] w-max max-w-[min(420px,calc(100vw-32px))] min-w-[min(280px,calc(100vw-32px))] overflow-hidden p-1.5",
@@ -316,7 +306,7 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
               </div>
               <button type="button" className={optionBase} data-profile-automatic={editingProfile} disabled={saving} aria-pressed={preferences?.profileModels?.[editingProfile] === undefined} onClick={() => void saveProfileModel(null)}>
                 <span className="flex min-w-0 flex-1 flex-col">{t("composer.profile.automatic")}</span>
-                <span className={checkClass}>{preferences?.profileModels?.[editingProfile] === undefined && <IconCheckOutlineRegular />}</span>
+                <span className={checkClass}>{preferences?.profileModels?.[editingProfile] === undefined && <Check aria-hidden />}</span>
               </button>
               {configuredModelUnavailable && <div className={emptyClass} role="status" data-profile-unavailable={editingProfile}>
                 {configuredModelId} · {t("composer.model.searchEmpty")}
@@ -326,7 +316,7 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
               <div className="relative mt-0.5 mb-[3px] shrink-0">
                 <Input
                   ref={searchRef}
-                  className={clsx("flex! h-auto! rounded-md! border-0! bg-transparent! py-[5px]! pl-[7px]! [&_input]:p-0! [&_input]:text-xs! [&_input]:placeholder:text-muted-foreground", query !== "" ? "pr-[34px]!" : "pr-[7px]!")}
+                  className={clsx("h-auto! rounded-md! border-0! bg-transparent! py-[5px]! pl-[7px]! text-xs! leading-[22px]! focus-visible:ring-0! focus-visible:ring-offset-0!", query !== "" ? "pr-[34px]!" : "pr-[7px]!")}
                   type="text"
                   role="searchbox"
                   aria-label={t("composer.model.search")}
@@ -350,7 +340,7 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
                       searchRef.current?.focus();
                     }}
                   >
-                    <IconCloseFillRegular />
+                    <CircleX className="size-4" aria-hidden />
                   </button>
                 )}
               </div>
@@ -392,7 +382,7 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
                           <span className="truncate text-[13px] font-normal leading-[18px]">{modelDisplayName(model)}</span>
                           {model.description !== "" && <span className="truncate text-[11px] leading-4 text-muted-foreground">{model.description}</span>}
                         </span>
-                        <span className={checkClass}>{selected && <IconCheckOutlineRegular />}</span>
+                        <span className={checkClass}>{selected && <Check aria-hidden />}</span>
                       </button>
                     );
                   })}

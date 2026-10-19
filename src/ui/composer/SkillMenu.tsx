@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { MouseEvent } from "react";
 import clsx from "clsx";
-import { MenuSurface } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useAnchoredMaxHeight } from "../lib/anchored";
 import type { SkillErrorInfo, SkillScope } from "../../../shared/protocol";
 import { useT } from "../../i18n";
@@ -10,7 +9,7 @@ import { TESTID } from "../testids";
 import type { MenuOption } from "./commands";
 import { MAX_SKILLS_PER_MESSAGE, skillSummary } from "./skill-draft";
 import { CircleAlert } from "lucide-react";
-import { focusRing } from "../kit";
+import { focusRing, MenuSurface } from "../kit";
 import { userErrorText } from "../conversation/user-error";
 
 const STATUS = "box-border flex min-h-[34px] flex-none items-center gap-2 px-2 py-1.5 text-xs leading-[18px] text-muted-foreground";
@@ -104,7 +103,7 @@ export function SkillMenu({
         : null;
 
   return (
-    <MenuSurface ref={menuRef} className="absolute! right-0! bottom-[calc(100%+4px)]! left-0! z-[100]! box-border! flex! max-h-[400px] flex-col! overflow-hidden! rounded-2xl! border! border-solid! border-border! bg-popover! p-1.5! shadow-lg!" style={{ maxHeight }} data-testid={TESTID.skillMenu}>
+    <MenuSurface ref={menuRef} className="absolute! right-0 bottom-[calc(100%+4px)] left-0 z-[100] flex max-h-[400px] flex-col overflow-hidden rounded-2xl! p-1.5" style={{ maxHeight }} data-testid={TESTID.skillMenu}>
       {limitReached && (
         <div className={clsx(STATUS, "font-medium text-foreground")} role="alert" data-testid={TESTID.skillLimit}>
           {t("composer.skills.limit", { max: MAX_SKILLS_PER_MESSAGE })}

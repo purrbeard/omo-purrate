@@ -2,11 +2,11 @@ import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react"
 import type { CSSProperties, KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
-import { IconChevronDownOutlineRegular, MenuSurface } from "@deepseek-ai/dsh-client-ui-primitives";
-import { ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
+import { ChevronDown, ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
 import { PERMISSION_PRESETS } from "../../../shared/ipc";
 import type { PermissionPreset } from "../../../shared/ipc";
 import { useT } from "../../i18n";
+import { MenuSurface } from "../kit";
 import type { MessageKey } from "../../i18n";
 import { StoreContext, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
@@ -149,7 +149,7 @@ export function PermissionPicker({ disabled }: { disabled: boolean }) {
       >
         <PresetIcon className="size-3.5 flex-none" aria-hidden />
         <span className="min-w-0 truncate">{t(LABEL_KEY[preset])}</span>
-        <IconChevronDownOutlineRegular className={pickerChevron(open)} size={12} />
+        <ChevronDown className={clsx("size-3", pickerChevron(open))} aria-hidden />
       </button>
 
       {open &&

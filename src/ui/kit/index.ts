@@ -20,3 +20,9 @@ export * as Toast from './Toast'
 export type { ToastOptions, ToastType } from './Toast'
 export { focusRing, mergeClassName } from './shared'
 export type { RequiredIcon, StateClassName, VisibleLabel } from './shared'
+
+// controls track
+export { MenuGroup, MenuSurface } from './MenuSurface'
+export type { MenuGroupProps, MenuSurfaceProps } from './MenuSurface'
+export { ShortcutKeys } from './ShortcutKeys'
+export type { ShortcutKeysProps } from './ShortcutKeys'

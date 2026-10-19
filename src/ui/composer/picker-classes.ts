@@ -18,9 +18,8 @@ export function pickerChevron(open: boolean): string {
   return clsx("flex-none opacity-60 transition-transform duration-150 motion-reduce:transition-none", open && "rotate-180");
 }
 
-/** Fixed-position menu surface placed by the picker's own measuring code. */
-// MenuSurface's unlayered `:where(.surface) { position: relative }` outranks layered utilities, hence fixed!.
-export const pickerMenu = "fixed! z-[1100] box-border flex flex-col p-1";
+/** Fixed-position menu surface placed by the picker's own measuring code; fixed! replaces MenuSurface's relative. */
+export const pickerMenu = "fixed! z-[1100] flex flex-col p-1";
 
 /** A menu row; the selected row keeps the accent surface and a heavier label. */
 export function pickerOption(selected: boolean): string {
