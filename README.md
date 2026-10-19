@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="build/icon.png" width="112" alt="OmO UI app icon">
+  <img src="build/icon.png" width="112" alt="omo Purrate app icon">
 </p>
 
 <h1 align="center">OmO UI Windows</h1>
@@ -305,7 +305,6 @@ npm run test:e2e       # Playwright-Electron against a fake omo
 $env:OMO_UI_E2E_REAL = '1'; npm run test:e2e:real   # Playwright-Electron against the real omo
 npm run package:win    # build the NSIS installer in release/
 npm run package:win:dir   # build only release/win-unpacked (no installer)
-npm run icon           # re-render build/icon.icns and build/icon.png from build/icon.svg
 npm run screenshots    # re-capture docs/media from the built app (ffmpeg encodes the GIF)
 ```
 

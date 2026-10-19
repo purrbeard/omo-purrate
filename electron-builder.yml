@@ -43,7 +43,7 @@ mac:
   extendInfo:
     LSMinimumSystemVersion: "12.0"
 dmg:
-  title: OmO UI
+  title: omo Purrate
 win:
   target:
     - target: nsis
@@ -54,3 +54,6 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  # Shown name only; productName stays the install identity (folder, exe, userData, release asset names).
+  shortcutName: omo Purrate
+  uninstallDisplayName: omo Purrate

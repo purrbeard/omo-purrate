@@ -28,4 +28,5 @@ SOFTWARE.
 
 The bundled Geist and Geist Mono fonts (Copyright (c) 2023 Vercel, in collaboration with basement.studio; from the geist npm package) are licensed under the SIL Open Font License 1.1; the license text is src/ui/theme/fonts/Geist-OFL.txt in the source and Contents/Resources/Geist-OFL.txt, next to this NOTICE, in the app.
 
-The OmO UI app icon (build/icon.svg and the files rendered from it) is an original work by sigridjineth and contains no DeepSeek artwork or logos.
+The omo Purrate app icon (build/icon-source.png and the files rendered from it: build/icon.png, build/icon.icns,
+src/ui/assets/brand-mark.png) was generated for this Windows fork in 2026 and contains no DeepSeek artwork or logos.

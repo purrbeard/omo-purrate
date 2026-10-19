@@ -17,9 +17,10 @@ import { PreferencesStore } from "./prefs";
 
 const QUIT_STOP_TIMEOUT_MS = 5_000;
 
-app.setName("OmO UI Windows");
-const userDataOverride = process.env[ENV.userData];
-if (userDataOverride) app.setPath("userData", userDataOverride);
+/** The install identity (folder, exe, userData) keeps the original product name; only the shown name changed. */
+const INSTALL_NAME = "OmO UI Windows";
+app.setName("omo Purrate");
+app.setPath("userData", process.env[ENV.userData] || path.join(app.getPath("appData"), INSTALL_NAME));
 
 const devUrl = process.env[ENV.devUrl] || null;
 const indexPath = path.join(__dirname, "../dist/index.html");
@@ -48,7 +49,7 @@ function createWindow(): BrowserWindow {
     height: 820,
     minWidth: 520,
     minHeight: 600,
-    title: "OmO UI Windows",
+    title: "omo Purrate",
     show: false,
     ...(process.platform === "darwin" ? {
       titleBarStyle: "hiddenInset" as const,

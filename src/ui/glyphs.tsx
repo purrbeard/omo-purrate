@@ -1,3 +1,5 @@
+import brandMark from "./assets/brand-mark.png";
+
 /** Shared props for the app glyphs; color rides currentColor. */
 export interface GlyphProps {
   /** Square edge in px; each glyph has its own default. */
@@ -5,26 +7,9 @@ export interface GlyphProps {
   className?: string | undefined;
 }
 
-/** The OmO app icon (build/icon.svg) at UI size: dark rounded tile, two eye rings, orange smile. */
+/** The app icon (build/icon.png, the omo Purrate cat pirate) at UI size. */
 export function BrandMark({ size = 20, className }: GlyphProps) {
-  return (
-    <svg viewBox="0 0 1024 1024" width={size} height={size} className={className} aria-hidden>
-      <rect x="100" y="100" width="824" height="824" rx="185" fill="#26272d" />
-      <rect x="112" y="112" width="800" height="800" rx="175" fill="none" stroke="#ffffff" strokeOpacity="0.22" strokeWidth="24" />
-      <g fill="none" stroke="#f3efe6" strokeWidth="60">
-        <circle cx="352" cy="420" r="98" />
-        <circle cx="672" cy="420" r="98" />
-      </g>
-      <path
-        d="M392 744 V682 a60 60 0 0 1 120 0 V744 M512 682 a60 60 0 0 1 120 0 V744"
-        fill="none"
-        stroke="#ff9a52"
-        strokeWidth="54"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <img src={brandMark} width={size} height={size} className={className} alt="" aria-hidden draggable={false} />;
 }
 
 /** 2x3 dot grip. */
