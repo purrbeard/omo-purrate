@@ -348,7 +348,7 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
       <nav
         ref={nav}
         className={clsx(
-          "box-border flex w-65 flex-none flex-col border-0 border-r border-solid border-sidebar-border bg-sidebar px-2.5 pb-3 text-sidebar-foreground",
+          "box-border flex w-65 flex-none flex-col [&[hidden]]:hidden border-0 border-r border-solid border-sidebar-border bg-sidebar px-2.5 pb-3 text-sidebar-foreground",
           narrow ? "absolute inset-y-0 left-0 z-20 shadow-xl" : "relative",
         )}
         aria-label={t("shell.settings.sections")}
@@ -363,7 +363,7 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
         >
           <ArrowLeft aria-hidden="true" />
           <span className="min-w-0 truncate">{t("shell.settings.backToApp")}</span>
-          <kbd className={kbdClass}>Esc</kbd>
+          <kbd className={kbdClass} aria-hidden="true">Esc</kbd>
         </button>
         <div
           className="relative mx-0.5 mt-3 mb-2 box-border flex h-9 flex-none items-center gap-2 rounded-md border border-solid border-input bg-background px-2.5 text-muted-foreground focus-within:border-ring"

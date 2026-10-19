@@ -51,7 +51,7 @@ test("palettes apply globally, retain the color scheme, persist and reset", asyn
     await page.getByTestId("settings-palette-sbd").click();
     await expect(page.locator("body")).toHaveAttribute("data-palette", "sbd");
     await shot(page, "palette-sbd-dark");
-    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await page.getByRole("button", { name: "Back to app", exact: true }).click();
     await newSession(page);
     await shot(page, "palette-sbd-conversation-dark");
     expect(await page.evaluate(() => window.omo.getPreferences())).toMatchObject({ palette: "sbd", theme: "dark" });
