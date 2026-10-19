@@ -220,6 +220,27 @@ describe("PreferencesStore", () => {
     expect(new PreferencesStore(dir).get().autoSettleDays).toBe(4);
   });
 
+  it("backfills the composer and appearance fields, clamps sizes and keeps only known choices", async () => {
+    await writeFile(path.join(dir, "preferences.json"), JSON.stringify({ theme: "dark" }));
+    const store = new PreferencesStore(dir);
+    expect(store.get()).toMatchObject({
+      followUpBehavior: "steer", openWorkflowOnRun: false, showContextUsage: true, keywordEffects: true, uiScale: 100, contrast: 100,
+      promptFontSize: null, codeFontSize: null, terminalFontSize: null, terminalCursorBlink: true, diffColors: "red-green",
+      compactSidebar: false, reduceMotion: false,
+    });
+    const next = store.set({
+      followUpBehavior: "queue", openWorkflowOnRun: true, keywordEffects: false, uiScale: 300, contrast: 79.6,
+      promptFontSize: 16.4, codeFontSize: 4, terminalFontSize: 99, diffColors: "blue-orange", reduceMotion: true,
+    });
+    expect(next).toMatchObject({
+      followUpBehavior: "queue", openWorkflowOnRun: true, keywordEffects: false, uiScale: 150, contrast: 80,
+      promptFontSize: 16, codeFontSize: 11, terminalFontSize: 24, diffColors: "blue-orange", reduceMotion: true,
+    });
+    const kept = store.set({ followUpBehavior: "later", uiScale: "120", diffColors: "purple", keywordEffects: 1, promptFontSize: null });
+    expect(kept).toMatchObject({ followUpBehavior: "queue", uiScale: 150, diffColors: "blue-orange", keywordEffects: false, promptFontSize: null });
+    expect(new PreferencesStore(dir).get()).toMatchObject({ uiScale: 150, contrast: 80, codeFontSize: 11, promptFontSize: null });
+  });
+
   it("bounds and deduplicates settled and unsettled thread ids", () => {
     const store = new PreferencesStore(dir);
     const many = Array.from({ length: 205 }, (_, index) => `t${index}`);

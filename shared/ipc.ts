@@ -189,7 +189,35 @@ export interface Preferences {
   sharedHost?: boolean;
   /** ssh config aliases the Servers panel folds into its Hidden group. */
   hiddenSshHosts?: string[];
+  /** What Enter does while a turn is running: steer the running turn, or queue the message for after it (Alt+Enter does the other). */
+  followUpBehavior: FollowUpPreference;
+  /** Open the workflow graph in the right dock when a new workflow run starts. */
+  openWorkflowOnRun: boolean;
+  /** Show the context usage gauge in the composer bar. */
+  showContextUsage: boolean;
+  /** Gradient keyword text and the spectrum frame for magic keywords; hints show either way. */
+  keywordEffects: boolean;
+  /** Interface zoom in percent, 80..150. */
+  uiScale: number;
+  /** Border and secondary-text contrast in percent, 80..150; 100 is the palette as designed. */
+  contrast: number;
+  /** Composer text size in px (12..20), or null for the theme size. */
+  promptFontSize: number | null;
+  /** Code block and diff text size in px (11..18), or null for the theme size. */
+  codeFontSize: number | null;
+  /** Terminal text size in px (10..24), or null for the theme size. */
+  terminalFontSize: number | null;
+  terminalCursorBlink: boolean;
+  /** Colors for added/removed lines and counts. */
+  diffColors: DiffColorPreference;
+  /** Denser sidebar thread rows. */
+  compactSidebar: boolean;
+  /** Turn off interface animations and transitions, in addition to the OS reduced-motion setting. */
+  reduceMotion: boolean;
 }
+
+export type FollowUpPreference = "steer" | "queue";
+export type DiffColorPreference = "red-green" | "blue-orange";
 
 /** Preferences every field resets to on "Restore device defaults" (Settings → General, top right). */
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -214,6 +242,19 @@ export const DEFAULT_PREFERENCES: Preferences = {
   autoSettleDays: 3,
   settledThreads: [],
   unsettledThreads: [],
+  followUpBehavior: "steer",
+  openWorkflowOnRun: false,
+  showContextUsage: true,
+  keywordEffects: true,
+  uiScale: 100,
+  contrast: 100,
+  promptFontSize: null,
+  codeFontSize: null,
+  terminalFontSize: null,
+  terminalCursorBlink: true,
+  diffColors: "red-green",
+  compactSidebar: false,
+  reduceMotion: false,
 };
 
 /** One turn reconstructed from a session JSONL file. */

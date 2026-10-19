@@ -3,7 +3,7 @@ import path from "node:path";
 import { DEFAULT_PREFERENCES } from "../shared/ipc";
 import { THREAD_STATE_KEYS, ThreadDb } from "./store/thread-db";
 import type { ImportRecord, ThreadState } from "./store/thread-db";
-import type { LocalePreference, ModelProfile, PalettePreference, Preferences, SendKeyPreference, ThemePreference, ThreadCreatorEvidence, ThreadNotificationPreference, ThreadOrigin, TimeFormatPreference } from "../shared/ipc";
+import type { DiffColorPreference, FollowUpPreference, LocalePreference, ModelProfile, PalettePreference, Preferences, SendKeyPreference, ThemePreference, ThreadCreatorEvidence, ThreadNotificationPreference, ThreadOrigin, TimeFormatPreference } from "../shared/ipc";
 
 export { DEFAULT_PREFERENCES };
 
@@ -19,6 +19,21 @@ const SEND_KEYS: readonly SendKeyPreference[] = ["enter", "ctrlEnter"];
 const MIN_SETTLE_DAYS = 1;
 const MAX_SETTLE_DAYS = 365;
 const MAX_SETTLED = 200;
+const FOLLOW_UPS: readonly FollowUpPreference[] = ["steer", "queue"];
+const DIFF_COLORS: readonly DiffColorPreference[] = ["red-green", "blue-orange"];
+
+/** Whole number clamped into min..max; anything that is not a finite number keeps the current value. */
+function bounded(value: unknown, min: number, max: number, current: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return current;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+/** Like bounded, but null clears the override back to the theme size. */
+function boundedOrNull(value: unknown, min: number, max: number, current: number | null): number | null {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) return current;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -133,6 +148,31 @@ function merge(current: Preferences, patch: unknown): Preferences {
       : current.modelProfile === undefined ? {} : { modelProfile: current.modelProfile }),
     ...(has("profileModels") ? { profileModels: profileModels(patch["profileModels"], current.profileModels) }
       : current.profileModels === undefined ? {} : { profileModels: current.profileModels }),
+    ...appearance(patch, current),
+  };
+}
+
+/** The composer, workflow and appearance fields; older preference files without them keep the defaults. */
+function appearance(patch: Record<string, unknown>, current: Preferences): Pick<Preferences,
+  "followUpBehavior" | "openWorkflowOnRun" | "showContextUsage" | "keywordEffects" | "uiScale" | "contrast" | "promptFontSize" |
+  "codeFontSize" | "terminalFontSize" | "terminalCursorBlink" | "diffColors" | "compactSidebar" | "reduceMotion"> {
+  const d = DEFAULT_PREFERENCES;
+  const flag = (key: "openWorkflowOnRun" | "showContextUsage" | "keywordEffects" | "terminalCursorBlink" | "compactSidebar" | "reduceMotion"): boolean =>
+    typeof patch[key] === "boolean" ? patch[key] as boolean : current[key] ?? d[key];
+  return {
+    followUpBehavior: pick(FOLLOW_UPS, patch["followUpBehavior"], current.followUpBehavior ?? d.followUpBehavior),
+    openWorkflowOnRun: flag("openWorkflowOnRun"),
+    showContextUsage: flag("showContextUsage"),
+    keywordEffects: flag("keywordEffects"),
+    uiScale: bounded(patch["uiScale"], 80, 150, current.uiScale ?? d.uiScale),
+    contrast: bounded(patch["contrast"], 80, 150, current.contrast ?? d.contrast),
+    promptFontSize: boundedOrNull(patch["promptFontSize"], 12, 20, current.promptFontSize ?? d.promptFontSize),
+    codeFontSize: boundedOrNull(patch["codeFontSize"], 11, 18, current.codeFontSize ?? d.codeFontSize),
+    terminalFontSize: boundedOrNull(patch["terminalFontSize"], 10, 24, current.terminalFontSize ?? d.terminalFontSize),
+    terminalCursorBlink: flag("terminalCursorBlink"),
+    diffColors: pick(DIFF_COLORS, patch["diffColors"], current.diffColors ?? d.diffColors),
+    compactSidebar: flag("compactSidebar"),
+    reduceMotion: flag("reduceMotion"),
   };
 }
 
