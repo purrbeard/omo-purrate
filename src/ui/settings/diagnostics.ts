@@ -7,8 +7,10 @@ export type DiagnosticsState =
   | { kind: "ready"; value: Diagnostics }
   | { kind: "failed"; message: string };
 
+/** The readable part of an error; a leading JSON-RPC code (`-32600: …`) is dropped so it never reaches the user. */
 export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/^-?\d{3,6}:\s*/, "");
 }
 
 /** Reads `window.omo.getDiagnostics()` on mount and again on every bridge state change, keeping the last value while a refresh runs. */

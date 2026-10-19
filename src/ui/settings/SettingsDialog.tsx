@@ -1,26 +1,30 @@
-// Full-window settings: a nav rail (search, grouped sections, Back) beside a breadcrumb header and the section page.
-// Section cards and rows are ported from DSH ui-settings-general SettingsRoot.tsx (MIT, Copyright (c) 2026 DeepSeek).
+// Full-window settings: a nav rail (Back to app, search, grouped sections) beside a breadcrumb header and the section page.
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
 import {
-  IconApiOutlineMedium,
-  IconChevronLeftOutlineRegular,
-  IconCloseCircleFillRegular,
-  IconCordisPluginOutlineMedium,
-  IconInfoOutlineMedium,
-  IconPanelLeftOutlineRegular,
-  IconPersonalizationOutlineMedium,
-  IconSearchOutlineRegular,
-  IconSettingsOutlineMedium,
-  IconSparkleMedium,
-  IconUserOutlineMedium,
-  Tooltip,
-  Button,
-  useModalLayer,
-} from "@deepseek-ai/dsh-client-ui-primitives";
-import type { IconProps } from "@deepseek-ai/dsh-client-ui-primitives";
+  Archive,
+  ArrowLeft,
+  Import,
+  Info,
+  Keyboard,
+  KeyRound,
+  MonitorSmartphone,
+  PanelLeft,
+  Palette,
+  Plug,
+  RotateCcw,
+  Search,
+  Server,
+  Settings2,
+  Smartphone,
+  Sparkles,
+  Wand2,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { useModalLayer } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useT } from "../../i18n";
 import type { MessageKey, Translate } from "../../i18n";
 import { TESTID } from "../testids";
@@ -28,6 +32,7 @@ import { uiState, updatePreferences, useUiState } from "../ui-state";
 import type { SettingsSection } from "../ui-state";
 import { DEFAULT_PREFERENCES } from "../../../shared/ipc";
 import { useAppStore } from "../../state";
+import { Button, IconButton, focusRing } from "../kit";
 import { AboutSection } from "./AboutSection";
 import { ArchivedSection } from "./ArchivedSection";
 import { AccountsSection } from "./AccountsSection";
@@ -35,20 +40,22 @@ import { AndroidSection } from "./AndroidSection";
 import { GeneralSection } from "./GeneralSection";
 import { AppearanceSection } from "./AppearanceSection";
 import { DevicesSection } from "./DevicesSection";
+import { ImportSection } from "./ImportSection";
 import { IphoneSection } from "./IphoneSection";
 import { KeybindingsSection } from "./KeybindingsSection";
 import { McpSection } from "./McpSection";
 import { ModelSection } from "./ModelSection";
 import { OmoSection } from "./OmoSection";
 import { SkillsSection } from "./SkillsSection";
-import css from "./SettingsDialog.module.css";
+import { errorMessage } from "./diagnostics";
+import { ErrorText, ui } from "./SettingsCard";
 
 type SectionId = SettingsSection;
 
 interface SectionEntry {
   id: SectionId;
   label: MessageKey;
-  icon: (props: IconProps) => ReactNode;
+  icon: LucideIcon;
   /** Names of the settings on the page; the nav search matches them besides the label. */
   keys: readonly MessageKey[];
   /** Untranslated product names the nav search matches. */
@@ -58,66 +65,32 @@ interface SectionEntry {
 
 interface SectionGroup {
   id: string;
-  label: MessageKey | null;
+  label: MessageKey;
   sections: readonly SectionEntry[];
-}
-
-/** Keyboard outline in the stroke style of ui/glyphs.tsx; the DSH icon set has none. */
-function KeyboardGlyph({ size = 16, className }: IconProps) {
-  return (
-    <svg viewBox="0 0 16 16" width={size} height={size} className={className} aria-hidden>
-      <rect x="1.5" y="3.5" width="13" height="9" rx="2.2" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      <path
-        d="M4.4 6.5h.01M6.8 6.5h.01M9.2 6.5h.01M11.6 6.5h.01M4.4 9.6h.01M11.6 9.6h.01M6.6 9.6h2.8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-/** Phone outline for the device sections; the DSH icon set has none. */
-function PhoneGlyph({ size = 16, className }: IconProps) {
-  return (
-    <svg viewBox="0 0 16 16" width={size} height={size} className={className} aria-hidden>
-      <rect x="4.25" y="1.5" width="7.5" height="13" rx="2" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      <path d="M7.2 12.2h1.6" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    </svg>
-  );
 }
 
 const IPHONE: readonly SectionEntry[] =
   window.omo.platform === "darwin"
-    ? [{ id: "iphone", label: "shell.settings.nav.iphone", icon: PhoneGlyph, keys: [], terms: ["USB"], render: () => <IphoneSection /> }]
+    ? [{ id: "iphone", label: "shell.settings.nav.iphone", icon: Smartphone, keys: [], terms: ["USB"], render: () => <IphoneSection /> }]
     : [];
 
 const GROUPS: readonly SectionGroup[] = [
   {
     id: "app",
-    label: null,
+    label: "shell.settings.group.app",
     sections: [
       {
         id: "general",
         label: "shell.settings.nav.general",
-        icon: IconSettingsOutlineMedium,
+        icon: Settings2,
         keys: ["shell.settings.theme", "shell.settings.language", "shell.settings.threadNotifications", "shell.settings.timeFormat", "shell.settings.autoSettle"],
         terms: [],
         render: () => <GeneralSection />,
       },
       {
-        id: "archived",
-        label: "shell.settings.nav.archived",
-        icon: IconPanelLeftOutlineRegular,
-        keys: ["shell.settings.archived.restore"],
-        terms: [],
-        render: () => <ArchivedSection />,
-      },
-      {
         id: "appearance",
         label: "shell.settings.nav.appearance",
-        icon: IconPersonalizationOutlineMedium,
+        icon: Palette,
         keys: ["shell.settings.theme", "shell.settings.theme.light", "shell.settings.theme.dark"],
         terms: [],
         render: () => <AppearanceSection />,
@@ -125,7 +98,7 @@ const GROUPS: readonly SectionGroup[] = [
       {
         id: "keybindings",
         label: "shell.settings.nav.keybindings",
-        icon: KeyboardGlyph,
+        icon: Keyboard,
         keys: ["shell.toggleSidebar", "btw.toggle", "composer.send"],
         terms: [],
         render: () => <KeybindingsSection />,
@@ -139,7 +112,7 @@ const GROUPS: readonly SectionGroup[] = [
       {
         id: "model",
         label: "shell.settings.nav.model",
-        icon: IconSparkleMedium,
+        icon: Sparkles,
         keys: ["composer.profile.tab", "composer.profile.daily", "composer.profile.geeky", "composer.profile.automatic"],
         terms: [],
         render: () => <ModelSection />,
@@ -147,7 +120,7 @@ const GROUPS: readonly SectionGroup[] = [
       {
         id: "omo",
         label: "shell.settings.nav.runtime",
-        icon: IconApiOutlineMedium,
+        icon: Server,
         keys: [
           "shell.settings.omo.autoUpdate",
           "shell.settings.omo.sharedHost",
@@ -162,7 +135,7 @@ const GROUPS: readonly SectionGroup[] = [
       {
         id: "skills",
         label: "shell.settings.nav.skills",
-        icon: IconSparkleMedium,
+        icon: Wand2,
         keys: ["shell.settings.skills.intro"],
         terms: ["skills"],
         render: () => <SkillsSection />,
@@ -170,7 +143,7 @@ const GROUPS: readonly SectionGroup[] = [
       {
         id: "accounts",
         label: "shell.settings.nav.accounts",
-        icon: IconUserOutlineMedium,
+        icon: KeyRound,
         keys: ["shell.settings.accounts.signIn"],
         terms: ["opencodex", "Claude", "ChatGPT"],
         render: () => <AccountsSection />,
@@ -178,15 +151,37 @@ const GROUPS: readonly SectionGroup[] = [
       {
         id: "mcp",
         label: "shell.settings.nav.mcp",
-        icon: IconCordisPluginOutlineMedium,
+        icon: Plug,
         keys: ["shell.settings.mcp.import"],
         terms: ["mcp.json"],
         render: () => <McpSection />,
       },
+    ],
+  },
+  {
+    id: "workspace",
+    label: "shell.settings.group.workspace",
+    sections: [
+      {
+        id: "import",
+        label: "shell.settings.nav.import",
+        icon: Import,
+        keys: ["shell.import.title", "shell.settings.import.syncTitle"],
+        terms: [],
+        render: () => <ImportSection />,
+      },
+      {
+        id: "archived",
+        label: "shell.settings.nav.archived",
+        icon: Archive,
+        keys: ["shell.settings.archived.restore"],
+        terms: [],
+        render: () => <ArchivedSection />,
+      },
       {
         id: "android",
         label: "shell.settings.nav.android",
-        icon: PhoneGlyph,
+        icon: Smartphone,
         keys: ["shell.settings.android.refresh"],
         terms: ["ADB", "USB"],
         render: () => <AndroidSection />,
@@ -195,7 +190,7 @@ const GROUPS: readonly SectionGroup[] = [
       {
         id: "devices",
         label: "shell.settings.nav.devices",
-        icon: PhoneGlyph,
+        icon: MonitorSmartphone,
         keys: ["shell.settings.devices.memory"],
         terms: ["Windows", "Git"],
         render: () => <DevicesSection />,
@@ -204,12 +199,12 @@ const GROUPS: readonly SectionGroup[] = [
   },
   {
     id: "about",
-    label: null,
+    label: "shell.settings.group.info",
     sections: [
       {
         id: "about",
         label: "shell.settings.nav.about",
-        icon: IconInfoOutlineMedium,
+        icon: Info,
         keys: ["shell.settings.about.appVersion", "shell.settings.about.electronVersion"],
         terms: [],
         render: () => <AboutSection />,
@@ -241,6 +236,17 @@ function subscribeNarrow(notify: () => void): () => void {
 function useNarrow(): boolean {
   return useSyncExternalStore(subscribeNarrow, () => window.matchMedia(NARROW_QUERY).matches);
 }
+
+const kbdClass = "ml-auto rounded border border-solid border-border bg-background px-1.5 font-mono text-xs leading-4.5 text-muted-foreground";
+
+const navCellClass = clsx(
+  "relative box-border m-0 flex h-8 w-full shrink-0 cursor-pointer items-center gap-2.5 rounded-md border-0 bg-transparent px-2.5",
+  "[font-family:inherit] text-sm leading-5 text-sidebar-foreground/80 no-underline transition-colors duration-150 motion-reduce:transition-none",
+  "hover:bg-sidebar-accent hover:text-sidebar-foreground [&_svg]:size-4 [&_svg]:shrink-0",
+  "aria-[current=true]:bg-sidebar-accent aria-[current=true]:font-medium aria-[current=true]:text-sidebar-foreground",
+  "before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-transparent aria-[current=true]:before:bg-sidebar-primary",
+  focusRing,
+);
 
 function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onSelect(section: SectionId): void; onClose(): void }) {
   const t = useT();
@@ -316,11 +322,22 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
     }
   };
 
+  const restoreDefaults = (): void => {
+    setConfirmingReset(false);
+    updatePreferences({ ...DEFAULT_PREFERENCES, onboardingCompleted: true, modelProfile: null, profileModels: {} }).then(
+      () => {
+        setResetError(null);
+        store.dispatch({ type: "composer/modelSelected", modelId: null, effort: null, profile: null });
+      },
+      (error: unknown) => setResetError(errorMessage(error)),
+    );
+  };
+
   return createPortal(
     <div
       ref={panel}
       tabIndex={-1}
-      className={css.panel}
+      className="fixed inset-0 z-1000 flex bg-background font-sans text-foreground outline-none [word-break:keep-all] wrap-break-word"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -328,14 +345,35 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
       data-active-section={section}
       data-narrow={narrow || undefined}
     >
-      <nav ref={nav} className={css.nav} aria-label={t("shell.settings.sections")} hidden={narrow && !navOpen}>
-        <div className={css.dragStrip} data-window-drag />
-        <div className={css.search} role="search">
-          <IconSearchOutlineRegular size={14} className={css.searchIcon} />
+      <nav
+        ref={nav}
+        className={clsx(
+          "box-border flex w-65 flex-none flex-col border-0 border-r border-solid border-sidebar-border bg-sidebar px-2.5 pb-3 text-sidebar-foreground",
+          narrow ? "absolute inset-y-0 left-0 z-20 shadow-xl" : "relative",
+        )}
+        aria-label={t("shell.settings.sections")}
+        hidden={narrow && !navOpen}
+      >
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-13" data-window-drag />
+        <button
+          type="button"
+          className={clsx(navCellClass, "mt-2.5 h-9 font-medium text-sidebar-foreground")}
+          data-testid="settings-back"
+          onClick={onClose}
+        >
+          <ArrowLeft aria-hidden="true" />
+          <span className="min-w-0 truncate">{t("shell.settings.backToApp")}</span>
+          <kbd className={kbdClass}>Esc</kbd>
+        </button>
+        <div
+          className="relative mx-0.5 mt-3 mb-2 box-border flex h-9 flex-none items-center gap-2 rounded-md border border-solid border-input bg-background px-2.5 text-muted-foreground focus-within:border-ring"
+          role="search"
+        >
+          <Search aria-hidden="true" className="size-3.5 flex-none" />
           <input
             ref={search}
             type="text"
-            className={css.searchInput}
+            className="m-0 h-full min-w-0 flex-1 border-0 bg-transparent p-0 [font-family:inherit] text-sm text-foreground outline-none placeholder:text-muted-foreground"
             data-testid="settings-search"
             aria-label={t("shell.settings.search")}
             placeholder={t("shell.settings.search")}
@@ -344,99 +382,95 @@ function SettingsPanel({ section, onSelect, onClose }: { section: SectionId; onS
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onSearchKeyDown}
           />
-          {query !== "" && (
-            <button type="button" className={css.searchClear} aria-label={t("shell.search.clear")} onClick={clearSearch}>
-              <IconCloseCircleFillRegular size={14} />
+          {query === "" ? (
+            <kbd className={kbdClass} aria-hidden="true">/</kbd>
+          ) : (
+            <button
+              type="button"
+              className={clsx("-mr-1 inline-flex size-5 flex-none cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 text-muted-foreground hover:text-foreground", focusRing)}
+              aria-label={t("shell.search.clear")}
+              onClick={clearSearch}
+            >
+              <X aria-hidden="true" className="size-3.5" />
             </button>
           )}
         </div>
-        <div className={css.navList}>
+        <div className="-mr-2 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pt-1 pr-2 pb-4 [scrollbar-gutter:stable]">
           {groups.map((group) => (
-            <div
-              key={group.id}
-              className={css.navGroup}
-              role="group"
-              aria-labelledby={group.label === null ? undefined : `${titleId}-${group.id}`}
-            >
-              {group.label !== null && (
-                <div className={css.navGroupLabel} id={`${titleId}-${group.id}`}>
-                  {t(group.label)}
-                </div>
-              )}
+            <div key={group.id} className="flex flex-col gap-0.5" role="group" aria-labelledby={`${titleId}-${group.id}`}>
+              <div className="px-2.5 pb-1 text-xs font-medium leading-4 text-muted-foreground" id={`${titleId}-${group.id}`}>
+                {t(group.label)}
+              </div>
               {group.sections.map((entry) => (
                 <button
                   key={entry.id}
                   data-testid={TESTID.settingsNavItem}
                   type="button"
-                  className={clsx(css.navCell, entry.id === section && css.active)}
+                  className={navCellClass}
                   aria-current={entry.id === section ? "true" : undefined}
                   data-section={entry.id}
                   data-modal-autofocus={entry.id === section && !narrow ? "" : undefined}
                   onClick={() => select(entry.id)}
                 >
-                  <entry.icon className={css.navIcon} size={16} />
-                  <span className={css.navLabel}>{t(entry.label)}</span>
+                  <entry.icon aria-hidden="true" />
+                  <span className="min-w-0 truncate">{t(entry.label)}</span>
                 </button>
               ))}
             </div>
           ))}
           {groups.length === 0 && (
-            <p className={css.navEmpty} role="status" data-testid="settings-search-empty">
+            <p className="m-0 px-2.5 py-2 text-sm leading-5 text-muted-foreground" role="status" data-testid="settings-search-empty">
               {t("shell.settings.search.noMatch", { query: query.trim() })}
             </p>
           )}
         </div>
-        <div className={css.navFoot}>
-          <button type="button" className={css.back} data-testid="settings-back" onClick={onClose}>
-            <IconChevronLeftOutlineRegular size={16} />
-            <span className={css.navLabel}>{t("shell.settings.back")}</span>
-          </button>
-        </div>
       </nav>
-      {drawerOpen && <div className={css.scrim} aria-hidden="true" onClick={() => setNavOpen(false)} />}
-      <div ref={content} className={css.content}>
-        <header className={css.header} data-window-drag>
-          <div className={css.headerInner}>
+      {drawerOpen && <div className="absolute inset-0 z-10 bg-background/60" aria-hidden="true" onClick={() => setNavOpen(false)} />}
+      <div ref={content} className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-13 flex-none items-center border-0 border-b border-solid border-border px-6" data-window-drag>
+          <div className="flex min-w-0 items-center gap-2">
             {narrow && (
-              <Tooltip label={toggleLabel} side="bottom" align="center" delayMs={500}>
-                <button
-                  ref={toggle}
-                  type="button"
-                  className={css.navToggle}
-                  data-testid="settings-nav-toggle"
-                  data-modal-autofocus=""
-                  aria-label={toggleLabel}
-                  aria-expanded={navOpen}
-                  onClick={() => setNavOpen((open) => !open)}
-                >
-                  <IconPanelLeftOutlineRegular size={16} />
-                </button>
-              </Tooltip>
+              <IconButton
+                ref={toggle}
+                icon={<PanelLeft aria-hidden="true" />}
+                label={toggleLabel}
+                data-testid="settings-nav-toggle"
+                data-modal-autofocus=""
+                aria-expanded={navOpen}
+                onClick={() => setNavOpen((open) => !open)}
+              />
             )}
-            <div className={css.breadcrumb} data-testid="settings-breadcrumb">
-              <span className={css.crumbRoot} id={titleId}>
+            <div className="flex min-w-0 items-center gap-2 text-sm leading-5" data-testid="settings-breadcrumb">
+              <span className="text-muted-foreground" id={titleId}>
                 {t("shell.settings.title")}
               </span>
-              <span className={css.crumbSeparator} aria-hidden="true">
+              <span className="text-muted-foreground/60" aria-hidden="true">
                 /
               </span>
-              <h2 className={css.crumbCurrent}>{t(current.label)}</h2>
+              <h2 className="m-0 truncate text-sm font-medium text-foreground">{t(current.label)}</h2>
             </div>
           </div>
         </header>
-        <div className={css.options} key={section}>
-          {current.render()}
-          <div className={clsx(css.card, css.restoreCard)}>
-            <div className={css.cardBody}>
-              {confirmingReset ? <div role="alertdialog" aria-label={t("shell.settings.restoreConfirm")}>
-                <p>{t("shell.settings.restoreConfirm")}</p>
-                <Button variant="outline" onClick={() => setConfirmingReset(false)}>{t("common.cancel")}</Button>
-                <Button variant="primary" data-testid={TESTID.settingsRestoreConfirm} onClick={() => {
-                  setConfirmingReset(false);
-                  updatePreferences({ ...DEFAULT_PREFERENCES, onboardingCompleted: true, modelProfile: null, profileModels: {} }).then(() => { setResetError(null); store.dispatch({ type: "composer/modelSelected", modelId: null, effort: null, profile: null }); }, (error: unknown) => setResetError(error instanceof Error ? error.message : String(error)));
-                }}>{t("shell.settings.restoreConfirmAction")}</Button>
-              </div> : <Button variant="outline" data-testid={TESTID.settingsRestoreDefaults} onClick={() => setConfirmingReset(true)}>{t("shell.settings.restoreDefaults")}</Button>}
-              {resetError && <p role="alert" className={css.error}>{resetError}</p>}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto box-border flex w-full max-w-196 flex-col items-center gap-6 px-8 pt-8 pb-12" key={section}>
+            {current.render()}
+            <div className={clsx(ui.card, "max-w-180")}>
+              <div className="flex flex-wrap items-center gap-3 py-4">
+                {confirmingReset ? (
+                  <div className="flex flex-wrap items-center gap-3" role="alertdialog" aria-label={t("shell.settings.restoreConfirm")}>
+                    <p className={ui.text}>{t("shell.settings.restoreConfirm")}</p>
+                    <Button variant="outline" size="sm" onClick={() => setConfirmingReset(false)}>{t("common.cancel")}</Button>
+                    <Button variant="destructive" size="sm" icon={<RotateCcw aria-hidden="true" />} data-testid={TESTID.settingsRestoreConfirm} onClick={restoreDefaults}>
+                      {t("shell.settings.restoreConfirmAction")}
+                    </Button>
+                  </div>
+                ) : (
+                  <Button variant="outline" size="sm" icon={<RotateCcw aria-hidden="true" />} data-testid={TESTID.settingsRestoreDefaults} onClick={() => setConfirmingReset(true)}>
+                    {t("shell.settings.restoreDefaults")}
+                  </Button>
+                )}
+                {resetError && <ErrorText>{resetError}</ErrorText>}
+              </div>
             </div>
           </div>
         </div>

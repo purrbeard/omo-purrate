@@ -13,6 +13,7 @@ const SECTIONS: ReadonlyArray<{ section: string; label: string }> = [
   { section: "accounts", label: "Providers" },
   { section: "android", label: "Android" },
   { section: "devices", label: "Devices & memory" },
+  { section: "import", label: "Import" },
   { section: "omo", label: "Runtime" },
   { section: "about", label: "About" },
 ];

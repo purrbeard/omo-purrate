@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { IconRightUpOutlineRegular } from "@deepseek-ai/dsh-client-ui-primitives";
+import { ArrowUpRight } from "lucide-react";
 import { useT } from "../../i18n";
 import { errorMessage, useDiagnostics } from "./diagnostics";
 import { SectionHeading } from "./SectionHeading";
-import css from "./SettingsDialog.module.css";
+import { ErrorText, SettingsCard, ui } from "./SettingsCard";
 import { AppUpdateSection } from "./AppUpdateSection";
 import { uiState } from "../ui-state";
 import { TESTID } from "../testids";
@@ -33,30 +33,30 @@ export function AboutSection() {
   };
 
   return (
-    <section className={css.section}>
+    <section className={ui.section}>
       <SectionHeading title={t("shell.settings.nav.about")} intro={t("shell.settings.about.intro")} />
       <AppUpdateSection />
-      <div className={css.card}>
-        <div className={css.cardBody}>
-          <button className={css.link} type="button" data-testid="settings-show-onboarding" onClick={() => { uiState.setOnboardingOpen(true); }}>{t("shell.settings.about.showOnboarding")}</button>
-          <button className={css.link} type="button" data-testid={TESTID.settingsOpenLogs} onClick={openLogs}>{t("shell.settings.about.openLogs")}</button>
+      <SettingsCard>
+        <div className={ui.cardBody}>
+          <button className={ui.link} type="button" data-testid="settings-show-onboarding" onClick={() => { uiState.setOnboardingOpen(true); }}>{t("shell.settings.about.showOnboarding")}</button>
+          <button className={ui.link} type="button" data-testid={TESTID.settingsOpenLogs} onClick={openLogs}>{t("shell.settings.about.openLogs")}</button>
         </div>
-      </div>
-      <div className={css.card}>
-        <div className={css.cardBody}>
-          <dl className={css.facts}>
+      </SettingsCard>
+      <SettingsCard>
+        <div className={ui.cardBody}>
+          <dl className={ui.facts}>
             <dt>{t("shell.settings.about.appVersion")}</dt>
-            <dd className={versions === null ? undefined : css.mono}>{versions?.appVersion ?? pending}</dd>
+            <dd className={versions === null ? undefined : ui.mono}>{versions?.appVersion ?? pending}</dd>
             <dt>{t("shell.settings.about.electronVersion")}</dt>
-            <dd className={versions === null ? undefined : css.mono}>{versions?.electronVersion ?? pending}</dd>
+            <dd className={versions === null ? undefined : ui.mono}>{versions?.electronVersion ?? pending}</dd>
           </dl>
         </div>
-      </div>
-      <div className={css.card}>
-        <div className={css.cardBody}>
-          <p className={css.credit}>{t("shell.settings.about.derived")}</p>
+      </SettingsCard>
+      <SettingsCard>
+        <div className={ui.cardBody}>
+          <p className={ui.text}>{t("shell.settings.about.derived")}</p>
           <a
-            className={css.link}
+            className={ui.link}
             href={DSH_REPOSITORY_URL}
             onClick={(event) => {
               event.preventDefault();
@@ -64,19 +64,15 @@ export function AboutSection() {
             }}
           >
             {t("shell.settings.about.repository")}
-            <IconRightUpOutlineRegular size={14} />
+            <ArrowUpRight aria-hidden="true" />
           </a>
         </div>
-      </div>
+      </SettingsCard>
       {logsError !== null && (
-        <p className={css.error} role="alert">
-          {t("shell.settings.about.openLogsFailed", { message: logsError })}
-        </p>
+        <ErrorText>{t("shell.settings.about.openLogsFailed", { message: logsError })}</ErrorText>
       )}
       {openError !== null && (
-        <p className={css.error} role="alert">
-          {t("shell.settings.about.openFailed", { message: openError })}
-        </p>
+        <ErrorText>{t("shell.settings.about.openFailed", { message: openError })}</ErrorText>
       )}
     </section>
   );

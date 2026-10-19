@@ -3,8 +3,7 @@ import { useT } from "../../i18n";
 import { selectActiveCwd, selectSkillCatalog } from "../../state";
 import { useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
-import { SettingsCard, SettingsGroup } from "./SettingsCard";
-import css from "./SettingsCard.module.css";
+import { ErrorText, SettingsCard, SettingsGroup, ui } from "./SettingsCard";
 
 export function SkillsSection() {
   const t = useT();
@@ -17,11 +16,11 @@ export function SkillsSection() {
 
   if (cwd === null) {
     return (
-      <section className={css.section}>
+      <section className={ui.section}>
         <SettingsGroup title={t("shell.settings.nav.skills")} intro={t("shell.settings.skills.intro")} />
         <SettingsCard>
-          <div className={css.cardBody}>
-            <p className={css.muted}>{t("shell.settings.skills.noWorkspace")}</p>
+          <div className={ui.cardBody}>
+            <p className={ui.muted}>{t("shell.settings.skills.noWorkspace")}</p>
           </div>
         </SettingsCard>
       </section>
@@ -29,35 +28,33 @@ export function SkillsSection() {
   }
 
   return (
-    <section className={css.section} aria-busy={catalog?.status === "loading"}>
+    <section className={ui.section} aria-busy={catalog?.status === "loading"}>
       <SettingsGroup title={t("shell.settings.nav.skills")} intro={t("shell.settings.skills.intro")} />
       {catalog?.status === "error" && (
-        <p className={css.error} role="alert">
-          {t("shell.settings.skills.error", { message: catalog.errors.map((entry) => entry.message).join("; ") })}
-        </p>
+        <ErrorText>{t("shell.settings.skills.error", { message: catalog.errors.map((entry) => entry.message).join("; ") })}</ErrorText>
       )}
       {(catalog === null || catalog.status === "idle" || catalog.status === "loading") && (
-        <p className={css.muted}>{t("shell.settings.skills.loading")}</p>
+        <p className={ui.muted}>{t("shell.settings.skills.loading")}</p>
       )}
       {catalog?.status === "ready" && catalog.skills.length === 0 && (
         <SettingsCard>
-          <div className={css.cardBody}>
-            <p className={css.muted}>{t("shell.settings.skills.empty")}</p>
+          <div className={ui.cardBody}>
+            <p className={ui.muted}>{t("shell.settings.skills.empty")}</p>
           </div>
         </SettingsCard>
       )}
       {catalog?.status === "ready" && catalog.skills.length > 0 && (
         <SettingsCard>
-          <div className={css.cardBody}>
+          <div className={ui.cardBody}>
             {catalog.skills.map((skill) => (
-              <div key={skill.name} className={css.listRow} data-testid={TESTID.settingsSkillRow}>
-                <div className={css.rowText}>
-                  <div className={css.rowTitle}>
-                    <code className={css.mono}>{skill.name}</code>
+              <div key={skill.name} className="flex items-center gap-3 border-0 border-solid border-border py-2.5 first:pt-0 last:pb-0 [&+&]:border-t" data-testid={TESTID.settingsSkillRow}>
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <div className="text-sm leading-5 text-foreground">
+                    <code className={ui.mono}>{skill.name}</code>
                   </div>
-                  <div className={css.rowHint}>{skill.shortDescription ?? skill.description}</div>
+                  <div className="text-xs leading-4.5 text-muted-foreground">{skill.shortDescription ?? skill.description}</div>
                 </div>
-                <span className={css.badge}>{t(`shell.settings.skills.scope.${skill.scope}`)}</span>
+                <span className={ui.badge}>{t(`shell.settings.skills.scope.${skill.scope}`)}</span>
               </div>
             ))}
           </div>

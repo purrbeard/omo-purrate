@@ -1,5 +1,7 @@
 import { Fragment, useState } from "react";
-import { Button, IconDownloadOutlineRegular, IconRefreshOutlineRegular } from "@deepseek-ai/dsh-client-ui-primitives";
+import clsx from "clsx";
+import { Download, RefreshCw } from "lucide-react";
+import { Button } from "../kit";
 import { getOmoInstallCommand } from "../../../shared/ipc";
 import type { Diagnostics } from "../../../shared/ipc";
 import { useT } from "../../i18n";
@@ -10,7 +12,7 @@ import { TESTID } from "../testids";
 import { updatePreferences, useUiState } from "../ui-state";
 import { errorMessage, useDiagnostics } from "./diagnostics";
 import { SectionHeading, SettingRow } from "./SectionHeading";
-import css from "./SettingsDialog.module.css";
+import { ErrorText, SettingsCard, ui } from "./SettingsCard";
 import { ProxySection } from "./ProxySection";
 
 type RestartState = { kind: "idle" } | { kind: "running" } | { kind: "failed"; message: string };
@@ -19,7 +21,7 @@ function PathValue({ value }: { value: string }) {
   const separator = window.omo.platform === "win32" ? ";" : ":";
   const entries = value.split(separator);
   return (
-    <pre className={css.pathValue}>
+    <pre className={ui.codeBlock}>
       {entries.map((entry, index) => (
         <Fragment key={index}>
           {entry}
@@ -40,24 +42,24 @@ function DiagnosticsFacts({ value }: { value: Diagnostics }) {
   const notFound = t("shell.settings.omo.notFound");
   return (
     <>
-      <dl className={css.facts}>
+      <dl className={ui.facts}>
         <dt>{t("shell.settings.omo.binary")}</dt>
-        <dd className={omo === null ? undefined : css.mono}>{omo?.path ?? notFound}</dd>
+        <dd className={omo === null ? undefined : ui.mono}>{omo?.path ?? notFound}</dd>
         <dt>{t("shell.settings.omo.version")}</dt>
-        <dd className={omo === null ? undefined : css.mono}>{omo?.version ?? notFound}</dd>
+        <dd className={omo === null ? undefined : ui.mono}>{omo?.version ?? notFound}</dd>
         <dt>{t("shell.settings.omo.source")}</dt>
         <dd>{omo === null ? notFound : t(`shell.settings.omo.source.${omo.source}`)}</dd>
         <dt>{t("shell.settings.omo.pid")}</dt>
-        <dd className={value.childPid === null ? undefined : css.mono}>
+        <dd className={value.childPid === null ? undefined : ui.mono}>
           {value.childPid ?? t("shell.settings.omo.notRunning")}
         </dd>
         <dt>{t("shell.settings.omo.loginEnv")}</dt>
         <dd>{value.loginShellEnv ? t("shell.settings.omo.loginEnv.yes") : t("shell.settings.omo.loginEnv.no")}</dd>
       </dl>
-      <div className={css.pathBlock}>
-        <div className={css.factLabel}>{t("shell.settings.omo.path")}</div>
+      <div className="flex flex-col gap-1.5 border-0 border-t border-solid border-border pt-3.5">
+        <div className="text-sm leading-5 text-muted-foreground">{t("shell.settings.omo.path")}</div>
         {value.childPath === null ? (
-          <p className={css.muted}>{t("shell.settings.omo.notRunning")}</p>
+          <p className={ui.muted}>{t("shell.settings.omo.notRunning")}</p>
         ) : (
           <PathValue value={value.childPath} />
         )}
@@ -106,13 +108,14 @@ export function OmoSection() {
   };
 
   return (
-    <section className={css.section}>
+    <section className={ui.section}>
       <SectionHeading title={t("shell.settings.nav.omo")} intro={t("shell.settings.omo.intro")} />
       <ProxySection />
-      <div className={css.card}>
+      <div className={ui.card}>
         <SettingRow title={t("shell.settings.omo.autoUpdate")} hint={t("shell.settings.omo.autoUpdateHint")}>
           <Button
             variant="outline"
+            size="sm"
             data-testid={TESTID.omoAutoUpdate}
             aria-label={t("shell.settings.omo.autoUpdate")}
             aria-pressed={preferences?.omoAutoUpdate !== false}
@@ -123,7 +126,7 @@ export function OmoSection() {
           </Button>
         </SettingRow>
         {update && (
-          <p className={update.state === "failed" ? css.rowError : css.cardFooter} role="status"
+          <p className={update.state === "failed" ? "m-0 pb-4 text-sm leading-5 text-destructive-foreground" : ui.cardFooter} role="status"
             data-testid={TESTID.omoUpdateStatus} data-state={update.state}>
             {update.state === "updated"
               ? t("shell.settings.omo.update.updated", { from: update.from, to: update.to })
@@ -135,6 +138,7 @@ export function OmoSection() {
         <SettingRow title={t("shell.settings.omo.sharedHost")} hint={t("shell.settings.omo.sharedHostHint")}>
           <Button
             variant="outline"
+            size="sm"
             data-testid={TESTID.omoSharedHost}
             aria-label={t("shell.settings.omo.sharedHost")}
             aria-pressed={preferences?.sharedHost === true}
@@ -145,33 +149,30 @@ export function OmoSection() {
           </Button>
         </SettingRow>
         {transport !== undefined && (
-          <p className={css.cardFooter} role="status" data-testid={TESTID.omoHostTransport} data-transport={transport}>
+          <p className={ui.cardFooter} role="status" data-testid={TESTID.omoHostTransport} data-transport={transport}>
             {t(`shell.settings.omo.transport.${transport}`)}
           </p>
         )}
         {hostNotice !== null && (
-          <p className={css.rowError} role="alert" data-testid={TESTID.omoHostNotice}>
-            {t("shell.settings.omo.hostNotice", { message: hostNotice })}
-          </p>
+          <ErrorText className="pb-4" data-testid={TESTID.omoHostNotice}>{t("shell.settings.omo.hostNotice", { message: hostNotice })}</ErrorText>
         )}
-        {saveError !== null && <p className={css.rowError} role="alert">{t("shell.settings.saveFailed", { message: saveError })}</p>}
+        {saveError !== null && <ErrorText className="pb-4">{t("shell.settings.saveFailed", { message: saveError })}</ErrorText>}
       </div>
-      <div className={css.card} data-testid={TESTID.diagnostics} aria-busy={diagnostics.kind === "loading"}>
-        <div className={css.cardBody}>
-          {diagnostics.kind === "loading" && <p className={css.muted}>{t("shell.settings.omo.loading")}</p>}
+      <SettingsCard testId={TESTID.diagnostics} aria-busy={diagnostics.kind === "loading"}>
+        <div className={ui.cardBody}>
+          {diagnostics.kind === "loading" && <p className={ui.muted}>{t("shell.settings.omo.loading")}</p>}
           {diagnostics.kind === "failed" && (
-            <p className={css.error} role="alert">
-              {t("shell.settings.omo.loadFailed", { message: diagnostics.message })}
-            </p>
+            <ErrorText>{t("shell.settings.omo.loadFailed", { message: diagnostics.message })}</ErrorText>
           )}
           {diagnostics.kind === "ready" && <DiagnosticsFacts value={diagnostics.value} />}
         </div>
-      </div>
-      <div className={css.card}>
+      </SettingsCard>
+      <div className={ui.card}>
         <SettingRow title={t("shell.settings.omo.serverTitle")} hint={t("shell.settings.omo.restartHint")}>
           <Button
             variant="outline"
-            icon={<IconRefreshOutlineRegular />}
+            size="sm"
+            icon={<RefreshCw aria-hidden="true" />}
             data-testid={TESTID.restartOmo}
             disabled={restart.kind === "running" || installing || updating}
             onClick={runRestart}
@@ -180,14 +181,13 @@ export function OmoSection() {
           </Button>
         </SettingRow>
         {restart.kind === "failed" && (
-          <p className={css.rowError} role="alert">
-            {t("shell.settings.omo.restartFailed", { message: restart.message })}
-          </p>
+          <ErrorText className="pb-4">{t("shell.settings.omo.restartFailed", { message: restart.message })}</ErrorText>
         )}
         <SettingRow title={t("shell.settings.omo.installTitle")} hint={t("shell.settings.omo.installHint")}>
           <Button
             variant="primary"
-            icon={<IconDownloadOutlineRegular />}
+            size="sm"
+            icon={<Download aria-hidden="true" />}
             data-testid={TESTID.reinstallOmo}
             disabled={installing || updating}
             onClick={installer.start}
@@ -195,9 +195,9 @@ export function OmoSection() {
             {installing ? t("shell.onboarding.installing") : t("shell.settings.omo.reinstall")}
           </Button>
         </SettingRow>
-        <code className={css.commandLine}>{getOmoInstallCommand(window.omo.platform)}</code>
+        <code className={clsx(ui.codeBlock, "-mt-1 mb-4")}>{getOmoInstallCommand(window.omo.platform)}</code>
         {installer.phase.kind !== "idle" && (
-          <div className={css.cardFooter}>
+          <div className="pb-4">
             <InstallStatus installer={installer} />
           </div>
         )}

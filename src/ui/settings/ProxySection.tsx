@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Button } from "@deepseek-ai/dsh-client-ui-primitives";
+import clsx from "clsx";
+import { Check } from "lucide-react";
+import { Button, Input } from "../kit";
 import { useT } from "../../i18n";
 import { selectIsTurnActive, useAppSelector } from "../../state";
 import { errorMessage } from "./diagnostics";
 import { SettingRow } from "./SectionHeading";
-import css from "./SettingsDialog.module.css";
+import { ErrorText, ui } from "./SettingsCard";
 
 export function ProxySection() {
   const t = useT();
@@ -42,21 +44,21 @@ export function ProxySection() {
       setSaving(false);
     }
   };
-  return <div className={css.card} data-testid="proxy-settings" aria-busy={loading || saving}>
+  return <div className={ui.card} data-testid="proxy-settings" aria-busy={loading || saving}>
     <SettingRow title="opencodex" hint={t("shell.settings.proxy.hint")}>
-      <Button variant="outline" disabled={loading || saving || turnActive || !baseUrl.trim()} onClick={() => void apply()} data-testid="proxy-apply">
+      <Button variant="outline" size="sm" icon={<Check aria-hidden="true" />} disabled={loading || saving || turnActive || !baseUrl.trim()} onClick={() => void apply()} data-testid="proxy-apply">
         {t(saving ? "shell.settings.proxy.applying" : "shell.settings.proxy.apply")}
       </Button>
     </SettingRow>
-    <div className={css.cardBody}>
-      <label className={css.proxyField}>{t("shell.settings.proxy.url")}
-        <input className={css.proxyInput} type="url" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} disabled={loading || saving} data-testid="proxy-url" spellCheck={false} />
+    <div className={clsx(ui.cardBody, "border-0 border-t border-solid border-border")}>
+      <label className="flex flex-col gap-1.5 text-xs font-medium text-muted-foreground">{t("shell.settings.proxy.url")}
+        <Input className="font-mono" type="url" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} disabled={loading || saving} data-testid="proxy-url" spellCheck={false} />
       </label>
-      <label className={css.proxyField}>{t("shell.settings.proxy.key")}
-        <input className={css.proxyInput} type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} disabled={loading || saving} autoComplete="off" data-testid="proxy-key" placeholder={t(configured ? "shell.settings.proxy.keepKey" : "shell.settings.proxy.optionalKey")} />
+      <label className="flex flex-col gap-1.5 text-xs font-medium text-muted-foreground">{t("shell.settings.proxy.key")}
+        <Input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} disabled={loading || saving} autoComplete="off" data-testid="proxy-key" placeholder={t(configured ? "shell.settings.proxy.keepKey" : "shell.settings.proxy.optionalKey")} />
       </label>
-      {count !== null && <p role="status" data-testid="proxy-status">{t("shell.settings.proxy.models", { count })}</p>}
-      {error && <p className={css.error} role="alert">{error}</p>}
+      {count !== null && <p className={ui.muted} role="status" data-testid="proxy-status">{t("shell.settings.proxy.models", { count })}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
     </div>
   </div>;
 }

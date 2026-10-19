@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { IconCloseCircleFillRegular } from "@deepseek-ai/dsh-client-ui-primitives";
+import { X } from "lucide-react";
+import { Button, IconButton } from "../kit";
 import type { Preferences } from "../../../shared/ipc";
 import { useT } from "../../i18n";
 import { TESTID } from "../testids";
 import { uiState, updatePreferences, useUiState } from "../ui-state";
 import { BehaviorSettings } from "./BehaviorSettings";
 import { errorMessage } from "./diagnostics";
-import { SettingsCard, SettingsGroup, SettingsRow } from "./SettingsCard";
-import css from "./SettingsCard.module.css";
+import { ErrorText, SettingsCard, SettingsGroup, SettingsRow, selectClass, ui } from "./SettingsCard";
 
 async function savePreferences(patch: Partial<Preferences>): Promise<void> {
   const previous = uiState.get().preferences;
@@ -47,13 +47,13 @@ export function GeneralSection() {
   };
 
   return (
-    <section className={css.section}>
+    <section className={ui.section}>
       <SettingsGroup title={t("shell.settings.nav.general")} intro={t("shell.settings.general.intro")} />
       <BehaviorSettings />
       <SettingsCard>
         <SettingsRow title={t("shell.settings.general.workspace")} description={t("shell.settings.general.workspaceHint")}>
           <select
-            className={css.select}
+            className={selectClass}
             data-testid={TESTID.settingsWorkspaceDefault}
             aria-label={t("shell.settings.general.workspace")}
             disabled={preferences === null}
@@ -70,46 +70,41 @@ export function GeneralSection() {
         </SettingsRow>
       </SettingsCard>
       <SettingsCard>
-        <div className={css.cardBody}>
-          <div className={css.groupLabel}>{t("shell.settings.general.recent")}</div>
-          <p className={css.muted}>{t("shell.settings.general.recentHint")}</p>
+        <div className={ui.cardBody}>
+          <div className={ui.heading}>{t("shell.settings.general.recent")}</div>
+          <p className={ui.muted}>{t("shell.settings.general.recentHint")}</p>
           {recent.length === 0 ? (
-            <p className={css.muted}>{t("shell.settings.general.recentEmpty")}</p>
+            <p className={ui.muted}>{t("shell.settings.general.recentEmpty")}</p>
           ) : (
             recent.map((dir) => (
-              <div className={css.listRow} key={dir}>
-                <span className={css.listPath} title={dir}>
+              <div className="-my-1 flex min-w-0 items-center gap-2" key={dir}>
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground" title={dir}>
                   {dir}
                 </span>
-                <button
-                  type="button"
-                  className={css.iconButton}
+                <IconButton
+                  icon={<X aria-hidden="true" />}
                   data-testid={TESTID.settingsWorkspaceRemove}
-                  aria-label={t("shell.settings.general.removeWorkspace", { name: dir })}
+                  label={t("shell.settings.general.removeWorkspace", { name: dir })}
                   onClick={() => removeRecent(dir)}
-                >
-                  <IconCloseCircleFillRegular size={14} />
-                </button>
+                />
               </div>
             ))
           )}
         </div>
         {recent.length > 0 && (
-          <div className={css.cardFooterActions}>
-            <button
-              type="button"
-              className={css.textButton}
+          <div className="flex justify-end pb-3">
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => save({ recentWorkspaces: [], ...(lastWorkspace !== null ? { lastWorkspace: null } : {}) })}
             >
               {t("shell.settings.general.clearRecent")}
-            </button>
+            </Button>
           </div>
         )}
       </SettingsCard>
       {error !== null && (
-        <p className={css.error} role="alert">
-          {t("shell.settings.saveFailed", { message: error })}
-        </p>
+        <ErrorText>{t("shell.settings.saveFailed", { message: error })}</ErrorText>
       )}
     </section>
   );

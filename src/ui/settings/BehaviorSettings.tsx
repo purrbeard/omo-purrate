@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { SegmentedControl } from "@deepseek-ai/dsh-client-ui-primitives";
+import clsx from "clsx";
 import type { Preferences, ThreadNotificationPreference, TimeFormatPreference } from "../../../shared/ipc";
 import { useT } from "../../i18n";
 import { TESTID } from "../testids";
 import { uiState, updatePreferences, useUiState } from "../ui-state";
 import { errorMessage } from "./diagnostics";
-import { SettingsCard, SettingsGroup, SettingsRow, Toggle } from "./SettingsCard";
-import css from "./SettingsCard.module.css";
+import { ErrorText, Segmented, SettingsCard, SettingsGroup, SettingsRow, Toggle, ui } from "./SettingsCard";
 
 async function savePreferences(patch: Partial<Preferences>): Promise<void> {
   const previous = uiState.get().preferences;
@@ -52,7 +51,7 @@ export function BehaviorSettings() {
         <SettingsRow title={t("shell.settings.autoSettleDays")} description={t("shell.settings.autoSettleDays.hint")}>
           <input
             type="number"
-            className={css.numberInput}
+            className={clsx(ui.control, "w-18 text-right")}
             data-testid={TESTID.settingsAutoSettleDays}
             aria-label={t("shell.settings.autoSettleDays")}
             min={1}
@@ -67,17 +66,14 @@ export function BehaviorSettings() {
           />
         </SettingsRow>
         {error !== null && (
-          <p className={css.error} role="alert">
-            {t("shell.settings.saveFailed", { message: error })}
-          </p>
+          <ErrorText className="pb-4">{t("shell.settings.saveFailed", { message: error })}</ErrorText>
         )}
       </SettingsCard>
       <SettingsGroup title={t("shell.settings.group.behavior")} />
       <SettingsCard>
         <SettingsRow title={t("shell.settings.threadNotifications")} description={t("shell.settings.threadNotifications.hint")}>
           <div data-testid={TESTID.settingsThreadNotifications}>
-            <SegmentedControl<ThreadNotificationPreference>
-              id="settings-thread-notifications"
+            <Segmented<ThreadNotificationPreference>
               label={t("shell.settings.threadNotifications")}
               value={threadNotifications}
               options={[
@@ -94,8 +90,7 @@ export function BehaviorSettings() {
         </SettingsRow>
         <SettingsRow title={t("shell.settings.timeFormat")} description={t("shell.settings.timeFormat.hint")}>
           <div data-testid={TESTID.settingsTimeFormat}>
-            <SegmentedControl<TimeFormatPreference>
-              id="settings-time-format"
+            <Segmented<TimeFormatPreference>
               label={t("shell.settings.timeFormat")}
               value={timeFormat}
               options={[
@@ -108,9 +103,7 @@ export function BehaviorSettings() {
           </div>
         </SettingsRow>
         {error !== null && (
-          <p className={css.error} role="alert">
-            {t("shell.settings.saveFailed", { message: error })}
-          </p>
+          <ErrorText className="pb-4">{t("shell.settings.saveFailed", { message: error })}</ErrorText>
         )}
       </SettingsCard>
     </>
