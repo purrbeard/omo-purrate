@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { CodeBlock, StateDot } from "@deepseek-ai/dsh-client-ui-primitives";
+import { CodeBlock } from "../content/code/CodeBlock";
 import { Ban } from "lucide-react";
 import type { ApprovalDecision, ThreadItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { PendingRequest } from "../../state";
 import { useActions } from "../app-context";
-import { Button, Input } from "../kit";
+import { Button, Input, StateDot } from "../kit";
 import { TESTID } from "../testids";
 import { displayPath, isRecord } from "./format";
 import { useConversationLabels } from "./labels";
 
-const CODE_CLASS = "m-0! [--dsl-code-block-content-font:var(--dsw-font-markdown-code-block-small)]!";
+const CODE_CLASS = "m-0! [--code-block-font:var(--dsw-font-markdown-code-block-small)]";
 
 export type ApprovalRequest = Extract<PendingRequest, { kind: "commandApproval" | "fileChangeApproval" }>;
 

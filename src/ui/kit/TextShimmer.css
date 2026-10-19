@@ -1,0 +1,11 @@
+/* TextShimmer motion: the sweep mask and the copy inside it travel in opposite
+   directions, so glyphs stay aligned while only the highlight moves. */
+@keyframes omo-shimmer-sweep {
+  0% { transform: translateX(-100%); }
+  66.6667%, 100% { transform: translateX(100%); }
+}
+
+@keyframes omo-shimmer-highlight {
+  0% { transform: translateX(100%); }
+  66.6667%, 100% { transform: translateX(-100%); }
+}

@@ -20,7 +20,7 @@ test("palettes apply globally, retain the color scheme, persist and reset", asyn
       await expect(page.getByTestId(`settings-palette-${palette}`)).toHaveAttribute("aria-pressed", "true");
       const roles = await page.locator("body").evaluate((body) => {
         const style = getComputedStyle(body);
-        return ["--primary", "--ring", "--dsw-focus-ring-color", "--dsw-alias-brand-primary", "--foreground"].map((name) => style.getPropertyValue(name).trim());
+        return ["--primary", "--ring", "--dsw-focus-ring-color", "--dsw-alias-label-primary", "--foreground"].map((name) => style.getPropertyValue(name).trim());
       });
       expect(roles[1]).not.toBe(roles[0]);
       expect(roles[2]).toBe(roles[1]);

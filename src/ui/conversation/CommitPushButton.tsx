@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { IconChevronDownOutlineRegular, Menu, Tooltip } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { GitCommitResult } from "../../../shared/ipc";
 import { useT } from "../../i18n";
 import { TESTID } from "../testids";
 import { GIT_REFRESH_EVENT, useGitInfo } from "../git/use-git-info";
 import clsx from "clsx";
-import { CircleAlert } from "lucide-react";
-import { Button, Input, focusRing } from "../kit";
+import { ChevronDown, CircleAlert } from "lucide-react";
+import { Button, Input, Menu, Tooltip, focusRing } from "../kit";
 
 const segment = clsx(
   "m-0 inline-flex cursor-pointer items-center border-0 bg-transparent text-xs font-medium leading-[18px] text-muted-foreground [font-family:inherit]",
@@ -75,37 +74,34 @@ export function CommitPushButton({ cwd }: { cwd: string }) {
       .finally(() => setBusy(false));
   };
 
-  const menuItems = [{ id: "commit-only", label: t("conversation.commit.commitOnly") }];
   const canSubmit = !busy && message.trim() !== "";
 
   return (
     <>
       <div className="box-border inline-flex h-7 items-stretch overflow-hidden rounded-md border border-solid border-border bg-card" data-testid={TESTID.commitButton}>
-        <Tooltip label={t("conversation.commit.tooltip")} side="bottom" align="end" delayMs={500}>
-          <button type="button" className={clsx(segment, "gap-1.5 px-2.5")} onClick={() => start(true)} disabled={open}>
-            <span className="whitespace-nowrap">{t("conversation.commit.label")}</span>
-          </button>
-        </Tooltip>
-        <Menu
-          open={menuOpen}
-          onClose={() => setMenuOpen(false)}
-          items={menuItems}
-          onSelect={() => start(false)}
-          portal
-          anchor={
-            <button
-              type="button"
-              className={clsx(segment, "border-0 border-l border-solid border-border px-1.5")}
-              data-testid={TESTID.commitMenu}
-              aria-label={t("conversation.commit.more")}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((value) => !value)}
-            >
-              <IconChevronDownOutlineRegular size={12} />
-            </button>
-          }
-        />
+        <Tooltip.Root>
+          <Tooltip.Trigger
+            delay={500}
+            render={
+              <button type="button" className={clsx(segment, "gap-1.5 px-2.5")} onClick={() => start(true)} disabled={open}>
+                <span className="whitespace-nowrap">{t("conversation.commit.label")}</span>
+              </button>
+            }
+          />
+          <Tooltip.Content side="bottom" align="end">{t("conversation.commit.tooltip")}</Tooltip.Content>
+        </Tooltip.Root>
+        <Menu.Root open={menuOpen} onOpenChange={setMenuOpen}>
+          <Menu.Trigger
+            className={clsx(segment, "border-0 border-l border-solid border-border px-1.5")}
+            data-testid={TESTID.commitMenu}
+            aria-label={t("conversation.commit.more")}
+          >
+            <ChevronDown className="size-3" aria-hidden />
+          </Menu.Trigger>
+          <Menu.Content side="bottom">
+            <Menu.Item onClick={() => start(false)}>{t("conversation.commit.commitOnly")}</Menu.Item>
+          </Menu.Content>
+        </Menu.Root>
       </div>
 
       {open && (

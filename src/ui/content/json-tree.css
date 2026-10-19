@@ -1,0 +1,342 @@
+/* JsonTree: a devtools-style object inspector. The property/string/number palette is a
+   deliberate literal (Chrome DevTools colors, light and dark) scoped to the tree root;
+   chrome colors use semantic tokens. Plain CSS because rows rely on :has()/hover
+   relationships between nested rows that utilities cannot express. */
+
+.jt-root {
+  --json-tree-property: #881391;
+  --json-tree-string: #c41a16;
+  --json-tree-number: #1c00cf;
+  --json-tree-keyword: #1c00cf;
+  --json-tree-punctuation: #202124;
+  --json-tree-icon: #5f6368;
+  --json-tree-hover: rgb(60 64 67 / 4%);
+
+  min-width: 0;
+  overflow: auto;
+  position: relative;
+  color: var(--foreground);
+  background: var(--card);
+  font: 12px/16px var(--font-mono);
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
+}
+
+body[data-ds-dark-theme] .jt-root {
+  --json-tree-property: #5db0d7;
+  --json-tree-string: #f28b82;
+  --json-tree-number: #99c8ff;
+  --json-tree-keyword: #99c8ff;
+  --json-tree-punctuation: #e8eaed;
+  --json-tree-icon: #9aa0a6;
+  --json-tree-hover: rgb(232 234 237 / 5%);
+}
+
+.jt-container {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px 8px 8px;
+  white-space: pre;
+}
+
+.jt-expanded-top-level {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px 8px 14px;
+}
+
+.jt-expanded-top-level:has(> .jt-top-level-bracket[data-json-root-row]:hover),
+.jt-expanded-top-level:has(> .jt-top-level-bracket[data-json-root-row][data-json-copy-active]) {
+  background: var(--json-tree-hover);
+}
+
+.jt-expanded-top-level-container {
+  padding: 0;
+}
+
+.jt-row.jt-top-level-bracket {
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.jt-children {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jt-row {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 16px;
+  margin: 0;
+  padding: 0 0 0 10px;
+  list-style: none;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.jt-row:not(.jt-top-level-bracket):hover:not(:has(.jt-row:hover))::after,
+.jt-row:not(.jt-top-level-bracket)[data-json-copy-active]::after,
+.jt-row:has(> .jt-expander:focus-visible)::after {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--json-tree-row-height, 16px);
+  background: var(--json-tree-hover);
+  content: '';
+  pointer-events: none;
+}
+
+.jt-row > span:not(.jt-expander, .jt-copy-slot) {
+  position: relative;
+  z-index: 1;
+}
+
+.jt-label {
+  margin-right: 3px;
+  color: var(--json-tree-property);
+  font-weight: 400;
+}
+
+.jt-clickable-label {
+  cursor: pointer;
+}
+
+.jt-string-value {
+  color: var(--json-tree-string);
+}
+
+.jt-string-field {
+  position: relative;
+  z-index: 1;
+  display: flow-root;
+}
+
+.jt-string-text {
+  display: block;
+  max-height: calc(var(--json-tree-collapsed-lines) * 16px);
+  padding-left: 12px;
+  overflow: hidden;
+  text-indent: -12px;
+  word-break: break-all;
+}
+
+.jt-string-raw {
+  margin: 4px 0 0 12px;
+  overflow: auto;
+  color: var(--foreground);
+  font: inherit;
+  overflow-wrap: normal;
+  white-space: pre;
+  word-break: normal;
+}
+
+.jt-string-actions {
+  position: absolute;
+  top: 1px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: fit-content;
+  height: 16px;
+}
+
+.jt-string-raw[data-wrap='true'] {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.jt-string-actions > .jt-copy-slot {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.jt-string-toggle-slot {
+  display: flex;
+  float: right;
+  align-items: flex-end;
+  height: calc(var(--json-tree-collapsed-lines) * 16px);
+  margin-left: 2px;
+  shape-outside: inset(calc((var(--json-tree-collapsed-lines) - 1) * 16px) 0 0);
+  pointer-events: none;
+}
+
+.jt-string-toggle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--muted-foreground);
+  background: transparent;
+  font: inherit;
+  text-indent: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.jt-string-toggle:hover {
+  color: var(--foreground);
+}
+
+.jt-string-toggle:focus-visible {
+  outline: 1px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.jt-row:has(> .jt-string-field) {
+  --json-tree-row-height: 100%;
+}
+
+.jt-summary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jt-number-value {
+  color: var(--json-tree-number);
+}
+
+.jt-keyword-value {
+  color: var(--json-tree-keyword);
+}
+
+.jt-other-value {
+  color: var(--muted-foreground);
+}
+
+.jt-punctuation {
+  color: var(--json-tree-punctuation);
+}
+
+.jt-preview {
+  color: var(--json-tree-punctuation);
+}
+
+.jt-preview-property {
+  color: var(--json-tree-punctuation);
+}
+
+.jt-preview-ellipsis {
+  color: var(--muted-foreground);
+}
+
+.jt-copy-slot {
+  display: inline-flex;
+  width: 20px;
+  height: 16px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.jt-row > .jt-copy-slot {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+}
+
+.jt-row:has(> .jt-string-field) > .jt-copy-slot {
+  top: auto;
+  bottom: 0;
+}
+
+.jt-row:has(> .jt-copy-slot) > .jt-string-field .jt-string-toggle-slot {
+  padding-right: 24px;
+}
+
+.jt-row:hover:not(:has(.jt-row:hover)) > .jt-copy-slot,
+.jt-row[data-json-copy-active] > .jt-copy-slot,
+.jt-copy-slot:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.jt-action-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-xs);
+  color: var(--muted-foreground);
+  background: transparent;
+  cursor: pointer;
+}
+
+.jt-action-button:hover {
+  color: var(--foreground);
+}
+
+.jt-action-button[aria-pressed='true'] {
+  color: var(--ring);
+}
+
+.jt-action-button:focus-visible {
+  outline: 1px solid var(--ring);
+  outline-offset: -1px;
+}
+
+.jt-action-button[data-state='failed'] {
+  color: var(--destructive-foreground);
+}
+
+.jt-expander {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  width: 8px;
+  height: 16px;
+  margin: 0;
+  color: var(--json-tree-icon);
+  cursor: pointer;
+  user-select: none;
+}
+
+.jt-expander::before {
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid currentColor;
+  content: '';
+  transform: scale(0.75);
+  transform-origin: 33.333% center;
+}
+
+.jt-collapse-icon::before {
+  transform: rotate(90deg) scale(0.75);
+}
+
+.jt-expander:hover {
+  color: var(--foreground);
+}
+
+.jt-expander:focus-visible {
+  outline: none;
+}
+
+

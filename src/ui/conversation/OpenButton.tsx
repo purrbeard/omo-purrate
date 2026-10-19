@@ -1,19 +1,13 @@
 import { useContext, useEffect, useState } from "react";
 import clsx from "clsx";
-import {
-  IconChevronDownOutlineRegular,
-  IconFolderOpenOutlineRegular,
-  Menu,
-  Tooltip,
-} from "@deepseek-ai/dsh-client-ui-primitives";
-import type { MenuEntry } from "@deepseek-ai/dsh-client-ui-primitives";
+import { ChevronDown, FolderOpen } from "lucide-react";
 import type { OpenTarget, OpenTargetId } from "../../../shared/ipc";
 import { useT } from "../../i18n";
 import type { MessageKey } from "../../i18n";
 import { StoreContext } from "../app-context";
 import { EditorGlyph, TerminalGlyph } from "../glyphs";
 import { TESTID } from "../testids";
-import { focusRing } from "../kit";
+import { Menu, Tooltip, focusRing } from "../kit";
 
 const segment = clsx(
   "m-0 inline-flex cursor-pointer items-center gap-1.5 border-0 bg-transparent text-[13px] font-medium leading-5 text-inherit [font-family:inherit]",
@@ -42,7 +36,7 @@ function targetIcon(id: OpenTargetId) {
     case "terminal":
       return <TerminalGlyph size={14} />;
     case "finder":
-      return <IconFolderOpenOutlineRegular size={14} />;
+      return <FolderOpen className="size-3.5" aria-hidden />;
   }
 }
 
@@ -88,40 +82,36 @@ export function OpenButton({ cwd }: { cwd: string }) {
     });
   };
 
-  const items: MenuEntry[] = targets.map((target) => ({ id: target.id, label: t(targetKey(target.id)), icon: targetIcon(target.id) }));
-
   return (
     <div className={clsx("box-border inline-flex h-7 flex-none items-stretch overflow-hidden rounded-md border border-solid bg-card text-foreground hover:border-input", menuOpen ? "border-input" : "border-border")} data-testid={TESTID.openWorkspace} data-primary={primary}>
-      <Tooltip label={t("conversation.open.tooltip", { target: primaryLabel, path: cwd })} side="bottom" align="end" delayMs={500}>
-        <button type="button" className={clsx(segment, "px-2.5")} aria-label={t("conversation.open.aria", { target: primaryLabel })} onClick={() => open(null)}>
-          <span className="inline-flex text-muted-foreground">{targetIcon(primary)}</span>
-          <span className="whitespace-nowrap">{t("conversation.open.label")}</span>
-        </button>
-      </Tooltip>
-      <Menu
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        items={items}
-        onSelect={(id) => {
-          setMenuOpen(false);
-          const target = targets.find((entry) => entry.id === id);
-          if (target !== undefined) open(target.id);
-        }}
-        portal
-        anchor={
-          <button
-            type="button"
-            className={clsx(segment, "border-0 border-l border-solid border-border px-1.5 text-muted-foreground")}
-            data-testid={TESTID.openWorkspaceMenu}
-            aria-label={t("conversation.open.more")}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((value) => !value)}
-          >
-            <IconChevronDownOutlineRegular size={12} />
-          </button>
-        }
-      />
+      <Tooltip.Root>
+        <Tooltip.Trigger
+          delay={500}
+          render={
+            <button type="button" className={clsx(segment, "px-2.5")} aria-label={t("conversation.open.aria", { target: primaryLabel })} onClick={() => open(null)}>
+              <span className="inline-flex text-muted-foreground">{targetIcon(primary)}</span>
+              <span className="whitespace-nowrap">{t("conversation.open.label")}</span>
+            </button>
+          }
+        />
+        <Tooltip.Content side="bottom" align="end">{t("conversation.open.tooltip", { target: primaryLabel, path: cwd })}</Tooltip.Content>
+      </Tooltip.Root>
+      <Menu.Root open={menuOpen} onOpenChange={setMenuOpen}>
+        <Menu.Trigger
+          className={clsx(segment, "border-0 border-l border-solid border-border px-1.5 text-muted-foreground")}
+          data-testid={TESTID.openWorkspaceMenu}
+          aria-label={t("conversation.open.more")}
+        >
+          <ChevronDown className="size-3" aria-hidden />
+        </Menu.Trigger>
+        <Menu.Content side="bottom">
+          {targets.map((target) => (
+            <Menu.Item key={target.id} icon={targetIcon(target.id)} onClick={() => open(target.id)}>
+              {t(targetKey(target.id))}
+            </Menu.Item>
+          ))}
+        </Menu.Content>
+      </Menu.Root>
     </div>
   );
 }

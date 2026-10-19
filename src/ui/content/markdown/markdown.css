@@ -1,0 +1,258 @@
+/* Markdown document typography. The renderer emits plain semantic elements
+   (and shiki/KaTeX trees), so descendants are styled here rather than through
+   utilities. Colors are semantic tokens; sizes use the --dsw-font-markdown-*
+   and --dsh-content-font-* typography tokens so the user's content font size
+   applies. `.omo-markdown-compact` is the secondary-size variant used for
+   reasoning, work-log and side-panel text. */
+
+.omo-markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: var(--dsw-font-markdown-base);
+  color: var(--foreground);
+}
+
+.omo-markdown strong { font-weight: 600; }
+
+.omo-markdown h1 { font: var(--dsw-font-markdown-h1); margin: 32px 0 16px; }
+.omo-markdown h2 { font: var(--dsw-font-markdown-h2); margin: 32px 0 16px; }
+.omo-markdown h3 { font: var(--dsw-font-markdown-h3); margin: 32px 0 16px; }
+.omo-markdown h4 { font: var(--dsw-font-markdown-h4); margin: 16px 0; }
+.omo-markdown :where(h5, h6) { font: var(--dsw-font-markdown-base-strong); margin: 16px 0; }
+.omo-markdown :where(h1, h2, h3, h4, h5, h6) strong { font-weight: inherit; }
+
+.omo-markdown p { margin: 16px 0; }
+
+/* Tighten h4-h6 against a following list. */
+.omo-markdown :where(h4, h5, h6) + :where(ul, ol) { margin-top: 8px; }
+.omo-markdown :where(h4, h5, h6):has(+ :where(ul, ol)) { margin-bottom: 8px; }
+
+.omo-markdown a,
+.omo-markdown .md-file-link {
+  position: relative;
+  color: var(--foreground);
+  font-weight: 500;
+  text-decoration: none;
+  transition: box-shadow 150ms ease-in-out;
+  /* Transparent hit-area padding around the link text. */
+  border: solid transparent;
+  border-width: 2px 3px;
+  margin-left: -3px;
+  margin-right: -3px;
+}
+
+.omo-markdown a:hover,
+.omo-markdown a:focus {
+  outline: none;
+  text-decoration: underline dotted var(--foreground);
+  text-underline-offset: 3px;
+}
+
+.omo-markdown a:focus-visible,
+.md-file-mention:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+/* Leading link-category glyph: proportional to the surrounding text (it shrinks
+   with the code chip's 0.875em) and seated on the cap height. */
+.md-link-icon {
+  display: inline;
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
+  vertical-align: -0.25em;
+  margin-right: 5px;
+}
+
+.omo-markdown :where(ul, ol) { margin: 16px 0; padding-left: 18px; }
+.omo-markdown li:not(:first-child) { margin-top: 6px; }
+.omo-markdown li > :where(ul, ol) { margin-top: 4px; }
+.omo-markdown li::marker { line-height: 24px; color: var(--muted-foreground); }
+
+/* Nested ol under ul/ol: markers inside (models sometimes emit this shape). */
+.omo-markdown :where(ul, ol) ol { list-style-position: inside; padding-left: 0; }
+.omo-markdown :where(ul, ol) ol li p { display: inline; }
+.omo-markdown li > p { margin: 8px 0; }
+.omo-markdown li > *:first-child { margin-top: 0; }
+/* List-nested code blocks keep their bottom margin. */
+.omo-markdown li > *:last-child:not(.md-code-block) { margin-bottom: 0; }
+
+.omo-markdown hr {
+  display: block;
+  height: 0.5px;
+  margin: 32px 0;
+  border: none;
+  background: var(--border);
+}
+
+.omo-markdown blockquote {
+  margin: 16px 0 0;
+  padding-left: 14px;
+  border-left: 2px solid var(--muted-foreground);
+}
+
+.omo-markdown pre {
+  margin: 16px 0;
+  font-family: var(--font-mono);
+  overflow: auto;
+}
+
+.omo-markdown :not(pre) > code {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 5px;
+  font: var(--dsw-font-markdown-code);
+  font-family: var(--font-mono);
+  font-size: 0.875em !important;
+  background-color: var(--muted);
+  border: 0.5px solid var(--border);
+  border-radius: var(--dsw-radius-sm);
+}
+
+.omo-markdown :where(h1, h2, h3, h4, h5, h6) code { font: inherit; font-family: var(--font-mono); }
+
+.omo-markdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+
+.omo-markdown input[type='checkbox'] { margin: 0 8px 0 0; accent-color: var(--muted-foreground); }
+
+.md-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+/* Wide tables reveal their horizontal bar on hover or keyboard focus. Chromium
+   does not repaint state-conditioned scrollbar styles, so the toggle is
+   overflow-x itself; the resting padding matches the themed bar's height. */
+.md-table-scroll.md-table-wide { overflow-x: hidden; padding-bottom: var(--dsh-scrollbar-width, 5px); }
+.md-table-scroll.md-table-wide:hover,
+.md-table-scroll.md-table-wide:focus-visible { overflow-x: scroll; padding-bottom: 0; }
+.md-table-scroll:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+
+/* Many-column tables keep their natural width and scroll inside the wrapper. */
+.md-table-scroll table { border-collapse: collapse; width: max-content; max-width: max-content; }
+/* Narrower tables (and tables in blockquotes) fill the column and wrap. */
+.md-table-fill table { width: 100%; max-width: none; }
+
+.md-table-scroll th {
+  min-width: 100px;
+  max-width: min(30vw, 320px);
+  padding: 10px 16px;
+  text-align: start;
+  border-top: none;
+  border-bottom: 0.5px solid var(--border);
+  font: var(--dsw-font-markdown-table-head);
+}
+
+.md-table-scroll td {
+  min-width: 100px;
+  max-width: min(30vw, 320px);
+  padding: 10px 16px;
+  border-bottom: 0.5px solid var(--border);
+  font: var(--dsw-font-markdown-table);
+}
+
+.md-table-scroll th:first-child,
+.md-table-scroll td:first-child { padding-left: 0; }
+.md-table-scroll td:last-child { padding-right: 0; }
+.md-table-scroll table code { font-size: 11px; }
+
+.omo-markdown > *:first-child,
+.omo-markdown p:first-child { margin-top: 0 !important; }
+.omo-markdown > *:last-child,
+.omo-markdown p:last-child { margin-bottom: 0 !important; }
+
+.md-image-alt { color: var(--muted-foreground); font-style: italic; }
+
+.md-image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+  border-radius: var(--dsw-radius-md);
+  background: var(--background);
+  object-fit: contain;
+}
+
+/* Inline file mention and settled file link: the anchor language, with the
+   dotted underline only on hover/focus (an underline at rest collides with
+   monospace descenders inside the code chip). */
+.md-file-mention {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 500;
+  color: var(--foreground);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.md-file-link { max-width: 100%; text-align: inherit; }
+
+.md-file-mention:hover,
+.md-file-mention:focus {
+  outline: none;
+  text-decoration: underline dotted var(--foreground);
+  text-underline-offset: 3px;
+}
+
+/* Compact variant: secondary size, uniform bold headings, tight block spacing. */
+.omo-markdown-compact {
+  max-width: 100%;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
+  color: var(--muted-foreground);
+}
+
+.omo-markdown-compact :is(h1, h2, h3, h4, h5, h6) { margin: 8px 0 4px; font: inherit; font-weight: 600; color: inherit; }
+.omo-markdown-compact :is(p, ul, ol, blockquote) { margin: 4px 0; }
+.omo-markdown-compact li:not(:first-child) { margin-top: 2px; }
+.omo-markdown-compact li > p { margin: 4px 0; }
+.omo-markdown-compact li::marker { line-height: inherit; color: inherit; }
+.omo-markdown-compact blockquote { padding-left: 8px; }
+.omo-markdown-compact hr { margin: 8px 0; }
+
+.omo-markdown-compact a,
+.omo-markdown-compact .md-file-mention { font-weight: inherit; color: inherit; text-decoration: underline dotted; }
+
+.omo-markdown-compact a:hover,
+.omo-markdown-compact a:focus,
+.omo-markdown-compact .md-file-mention:hover,
+.omo-markdown-compact .md-file-mention:focus { text-decoration-color: currentColor; }
+
+.omo-markdown-compact :not(pre) > code {
+  display: inline;
+  padding: 0 3px;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 1em !important;
+  border-radius: var(--dsw-radius-xs);
+  box-decoration-break: clone;
+}
+
+.omo-markdown.omo-markdown-compact .md-code-block { margin: 4px 0; color: inherit; }
+.omo-markdown-compact .md-code-block > :has(> [data-code-block-banner]) { position: static; z-index: auto; }
+
+/* Shiki writes token colors inline; compact code uses the surrounding text color. */
+.omo-markdown-compact pre,
+.omo-markdown-compact pre :is(code, span) { color: inherit !important; }
+
+.omo-markdown.omo-markdown-compact .md-table-scroll { width: 100%; max-width: 100%; margin: 4px 0; padding-left: 0; }
+.omo-markdown.omo-markdown-compact .md-table-scroll > table { z-index: auto; }
+.omo-markdown-compact :is(th, td) { padding: 4px 8px; font: inherit; }
+.omo-markdown-compact th { font-weight: 600; }
+.omo-markdown-compact .katex { font-size: 1em; }
+
+/* Keep KaTeX's inline baseline and scroll the containing block only when needed. */
+.omo-markdown-compact :is(p, h1, h2, h3, h4, h5, h6, ul, ol):has(.katex) {
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* KaTeX descenders can paint one pixel below a fractional line-box edge. */
+  padding-bottom: 1px;
+}
+
+.omo-markdown-compact .katex-display { margin: 4px 0; }

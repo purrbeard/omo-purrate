@@ -1,28 +1,12 @@
 import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 import clsx from "clsx";
-import {
-  CodeBlock,
-  DiffBlock,
-  DisclosureRow,
-  IconAgentPresetOutlineRegular,
-  IconApiOutlineRegular,
-  IconBrowseOutlineRegular,
-  IconCheckOutlineRegular,
-  IconChecklistOutlineRegular,
-  IconCloseOutlineRegular,
-  IconCodeOutlineRegular,
-  IconEditOutlineRegular,
-  IconGlobeOutlineRegular,
-  IconPluginPinwheelOutlineRegular,
-  IconQuestionOutlineRegular,
-  IconSearchOutlineRegular,
-  IconSparkleRegular,
-  JsonTree,
-  StateDot,
-  TerminalBlock,
-  TextShimmer,
-} from "@deepseek-ai/dsh-client-ui-primitives";
-import { ImagePreview } from "@deepseek-ai/dsh-client-ui-primitives/src/ImagePreview.tsx";
+import { Bot, Check, CircleHelp, Code, FileText, Globe, ListChecks, Puzzle, Search, Sparkles, SquarePen, Terminal, X } from "lucide-react";
+import { CodeBlock } from "../content/code/CodeBlock";
+import { DiffBlock } from "../content/DiffBlock";
+import { ImagePreview } from "../content/ImagePreview";
+import { JsonTree } from "../content/JsonTree";
+import { TerminalBlock } from "../content/TerminalBlock";
+import { DisclosureRow, StateDot, TextShimmer } from "../kit";
 import type { CommandExecutionItem, DynamicToolCallItem, FileChangeItem, McpToolCallItem } from "../../../shared/protocol";
 import { useT, type MessageKey } from "../../i18n";
 import type { ConversationItem } from "../../state";
@@ -39,10 +23,11 @@ import {
   type ToolState,
 } from "./tool-model";
 
-// Vendored DSH blocks are unlayered CSS that outranks layered utilities, so overrides of their own properties use "!".
+// Content blocks set their own margins and radius, so overrides of those properties use "!"; JsonTree's root is
+// scoped plain CSS. TerminalBlock sizing rebinds through its --tb-* custom properties.
 const JSON_CLASS = "max-h-60! rounded-lg! border! border-solid! border-border!";
 const TERMINAL_CLASS =
-  "m-0! border! border-solid! border-border! [--dsl-terminal-font:var(--dsw-font-markdown-code-block-small)]! [--dsl-terminal-line-height:18px]! [--dsl-terminal-output-max-height:224px]!";
+  "m-0! border border-solid border-border [--tb-font:var(--dsw-font-markdown-code-block-small)] [--tb-line-height:18px] [--tb-output-max-height:224px]";
 
 const STATE_LABEL: Record<ToolState, MessageKey> = {
   running: "conversation.tool.state.running",
@@ -54,30 +39,30 @@ const STATE_LABEL: Record<ToolState, MessageKey> = {
 function ToolIcon({ kind }: { kind: ToolKind }) {
   switch (kind) {
     case "code":
-      return <IconCodeOutlineRegular size={14} />;
+      return <Code className="size-3.5" aria-hidden />;
     case "edit":
     case "write":
     case "fileChange":
-      return <IconEditOutlineRegular size={14} />;
+      return <SquarePen className="size-3.5" aria-hidden />;
     case "read":
     case "fetch":
-      return <IconBrowseOutlineRegular size={14} />;
+      return <FileText className="size-3.5" aria-hidden />;
     case "task":
-      return <IconAgentPresetOutlineRegular size={14} />;
+      return <Bot className="size-3.5" aria-hidden />;
     case "todo":
-      return <IconChecklistOutlineRegular size={14} />;
+      return <ListChecks className="size-3.5" aria-hidden />;
     case "question":
-      return <IconQuestionOutlineRegular size={14} />;
+      return <CircleHelp className="size-3.5" aria-hidden />;
     case "web":
-      return <IconGlobeOutlineRegular size={14} />;
+      return <Globe className="size-3.5" aria-hidden />;
     case "search":
-      return <IconSearchOutlineRegular size={14} />;
+      return <Search className="size-3.5" aria-hidden />;
     case "command":
-      return <IconApiOutlineRegular size={14} />;
+      return <Terminal className="size-3.5" aria-hidden />;
     case "mcp":
-      return <IconPluginPinwheelOutlineRegular size={14} />;
+      return <Puzzle className="size-3.5" aria-hidden />;
     case "generic":
-      return <IconSparkleRegular size={14} />;
+      return <Sparkles className="size-3.5" aria-hidden />;
   }
 }
 
@@ -88,9 +73,9 @@ function StatusMark({ state, durationMs }: { state: ToolState; durationMs: numbe
       {state === "running" ? (
         <StateDot state="ongoing" size={12} />
       ) : state === "ok" ? (
-        <IconCheckOutlineRegular size={14} className="text-success" />
+        <Check className="size-3.5 text-success" aria-hidden />
       ) : state === "error" ? (
-        <IconCloseOutlineRegular size={14} className="text-destructive-foreground" />
+        <X className="size-3.5 text-destructive-foreground" aria-hidden />
       ) : (
         <StateDot state="warning" size={8} />
       )}
@@ -169,7 +154,7 @@ function DynamicToolBody({ item, state }: { item: DynamicToolCallItem; state: To
                   output={part.text}
                   runStateDot={false}
                   labels={labels.terminal}
-                  className={clsx(TERMINAL_CLASS, "[--dsl-terminal-gutter:14px]! group-data-[error]/term:border-destructive-foreground!")}
+                  className={clsx(TERMINAL_CLASS, "[--tb-gutter:14px] group-data-[error]/term:border-destructive-foreground!")}
                 />
               </div>
             );

@@ -1,4 +1,4 @@
-import { languageForPath } from "@deepseek-ai/dsh-client-ui-primitives";
+import { languageForPath } from "../content/code/code-language";
 import type {
   CommandExecutionItem,
   DynamicToolCallContentItem,

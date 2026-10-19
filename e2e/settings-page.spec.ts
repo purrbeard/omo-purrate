@@ -19,7 +19,7 @@ const SECTIONS: ReadonlyArray<{ section: string; label: string }> = [
 ];
 
 const sidebarFill = (page: Page): Promise<string> =>
-  page.evaluate(() => getComputedStyle(document.body).getPropertyValue("--dsw-specific-sidebar-fill").trim());
+  page.evaluate(() => getComputedStyle(document.body).getPropertyValue("--sidebar-background").trim());
 
 /** True when the point over the app sidebar is covered by the Settings page. */
 const coversAppSidebar = (page: Page): Promise<boolean> =>

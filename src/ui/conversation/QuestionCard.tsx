@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import clsx from "clsx";
-import { IconCheckOutlineRegular, IconEditOutlineRegular } from "@deepseek-ai/dsh-client-ui-primitives";
+import { Check, SquarePen } from "lucide-react";
 import type { UserInputQuestion } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { PendingRequest } from "../../state";
@@ -189,7 +189,7 @@ function QuestionBlock({
             >
               {multi ? (
                 <span className={checkboxClass(selected)} aria-hidden="true">
-                  {selected && <IconCheckOutlineRegular size={12} />}
+                  {selected && <Check className="size-3" aria-hidden />}
                 </span>
               ) : (
                 <span className={numberBadge} aria-hidden="true">
@@ -210,11 +210,11 @@ function QuestionBlock({
             <div className={clsx("flex w-full min-h-10 shrink-0 items-start gap-2 rounded-md border border-solid py-2 pr-3 pl-2 transition-colors duration-150 motion-reduce:transition-none hover:bg-accent focus-within:border-border focus-within:bg-accent", draft.other !== "" ? "border-border bg-accent" : "border-transparent")}>
               {multi ? (
                 <span className={checkboxClass(draft.other !== "")} aria-hidden="true">
-                  {draft.other !== "" && <IconCheckOutlineRegular size={12} />}
+                  {draft.other !== "" && <Check className="size-3" aria-hidden />}
                 </span>
               ) : (
                 <span className={numberBadge} aria-hidden="true">
-                  <IconEditOutlineRegular size={12} />
+                  <SquarePen className="size-3" aria-hidden />
                 </span>
               )}
               {field}

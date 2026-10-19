@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
+import { MarkdownText } from "../content/markdown/MarkdownText";
 import { TESTID } from "../testids";
 import { useConversationLabels } from "./labels";
 

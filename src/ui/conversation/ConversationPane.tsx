@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SessionNotice } from "../../../shared/ipc";
 import clsx from "clsx";
-import { MarkdownDelegateProvider, StateDot, TextShimmer } from "@deepseek-ai/dsh-client-ui-primitives";
+import { MarkdownDelegateProvider } from "../content/markdown/MarkdownDelegate";
 import { ArrowDown, CircleAlert } from "lucide-react";
-import { resolveWorkspacePath } from "@deepseek-ai/dsh-util-workspace-path";
+import { resolveWorkspacePath } from "../content/workspace-path";
 import type { ThreadItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { Conversation, ConversationTurn, PendingRequest } from "../../state";
 import { selectActiveConversation, selectIsTurnActive, selectPendingRequestsForThread, selectMainThreadId, selectTasks } from "../../state";
 import { useActions, useAppSelector } from "../app-context";
-import { Button, focusRing } from "../kit";
+import { Button, StateDot, TextShimmer, focusRing } from "../kit";
 import { TESTID } from "../testids";
 import { uiState, useUiState } from "../ui-state";
 import { ActivityToggle } from "./ActivityPanel";

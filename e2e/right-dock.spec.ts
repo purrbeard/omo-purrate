@@ -24,14 +24,20 @@ test("right dock tabs show which panel is open and the docked panel edge resizes
     expect(await look(selected)).not.toBe(await look(other));
     const column = page.getByTestId(TESTID.appFrame);
     const width = async (): Promise<number> => Number((await column.evaluate((element) => getComputedStyle(element).gridTemplateColumns)).split(" ").at(-1)?.replace("px", ""));
-    const before = await width();
     const handle = page.getByTestId("right-panel-resize");
-    const box = await handle.boundingBox();
-    if (box === null) throw new Error("resize handle has no box");
-    await page.mouse.move(box.x + box.width / 2, box.y + 200);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 - 160, box.y + 200, { steps: 8 });
-    await page.mouse.up();
+    const drag = async (dx: number): Promise<void> => {
+      const box = await handle.boundingBox();
+      if (box === null) throw new Error("resize handle has no box");
+      await page.mouse.move(box.x + box.width / 2, box.y + 200);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width / 2 + dx, box.y + 200, { steps: 8 });
+      await page.mouse.up();
+    };
+    // Start from the narrowest dock: the widest one is capped by the window, so a restored width near the cap
+    // would leave no room to widen.
+    await drag(400);
+    const before = await width();
+    await drag(-160);
     await expect.poll(width).toBeGreaterThan(before + 100);
     const widened = await width();
     await page.getByTestId("right-tab-terminal").click();

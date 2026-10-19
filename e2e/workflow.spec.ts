@@ -48,7 +48,7 @@ test("workflow graph and background work stay in the same conversation after mai
     await graph.getByRole("button", { name: "Fit", exact: true }).click();
     await expect(zoom).toHaveText(fitZoom ?? "");
     expect(await graph.evaluate(element => {
-      const stage = element.querySelector('[class*="stage"]');
+      const stage = element.querySelector("[data-graph-stage]");
       return stage === null || stage.getBoundingClientRect().width <= (stage.parentElement?.clientWidth ?? 0) + 1;
     })).toBe(true);
     const firstNode = page.getByTestId("workflow-graph-node").filter({ hasText: "Read protocol" });

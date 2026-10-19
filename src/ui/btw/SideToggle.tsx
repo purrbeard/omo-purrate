@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { IconPanelLeftOutlineRegular, Tooltip } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useT } from "../../i18n";
 import { selectSidesOf } from "../../state";
 import { useActions, useAppSelector } from "../app-context";

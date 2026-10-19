@@ -1,17 +1,10 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import clsx from "clsx";
-import {
-  IconChevronDownOutlineRegular,
-  MarkdownDelegateProvider,
-  MarkdownText,
-  Menu,
-  StateDot,
-  TextShimmer,
-  Tooltip,
-} from "@deepseek-ai/dsh-client-ui-primitives";
-import type { MenuEntry } from "@deepseek-ai/dsh-client-ui-primitives";
-import { resolveWorkspacePath } from "@deepseek-ai/dsh-util-workspace-path";
+import { Check, ChevronDown } from "lucide-react";
+import { MarkdownDelegateProvider } from "../content/markdown/MarkdownDelegate";
+import { MarkdownText } from "../content/markdown/MarkdownText";
+import { resolveWorkspacePath } from "../content/workspace-path";
 import type { ThreadItem, UserMessageItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import { selectPanelNotices, selectPendingRequestsForThread, selectSidesOf, sideDraftKey } from "../../state";
@@ -31,7 +24,7 @@ import { sideDisplayText } from "./background";
 import { BubbleIcon, CloseIcon, PlusIcon, SendIcon, SparkIcon, StopIcon } from "./icons";
 import { useAskSide } from "./use-ask-side";
 import { CircleAlert } from "lucide-react";
-import { focusRing } from "../kit";
+import { Menu, StateDot, TextShimmer, Tooltip, focusRing } from "../kit";
 import { userErrorText } from "../conversation/user-error";
 
 const PAD_X = "px-3.5";
@@ -236,48 +229,42 @@ function SidePicker({ sides, selected, onSelect }: { sides: readonly SideChat[];
   const t = useT();
   const [open, setOpen] = useState(false);
   const position = selected === null ? -1 : sides.indexOf(selected);
-  const items: MenuEntry[] = [
-    ...(sides.length === 0 ? [] : [{ type: "label" as const, id: "label", text: t("btw.picker.label") }]),
-    ...sides.map((side, index) => ({
-      id: side.id,
-      label: (
-        <span className="flex min-w-0 max-w-[260px] flex-col">
-          <span className="font-medium">{t("btw.side.label", { n: index + 1 })}</span>
-          <span className="truncate text-xs text-muted-foreground">{side.question}</span>
-        </span>
-      ),
-    })),
-    ...(sides.length === 0 ? [] : [{ type: "separator" as const, id: "separator" }]),
-    { id: NEW_SIDE_ID, label: t("btw.picker.new"), icon: <PlusIcon size={12} /> },
-  ];
+  const selectedId = selected?.id ?? NEW_SIDE_ID;
+  const mark = (id: string) => (id === selectedId ? <Check className="ml-auto" aria-hidden /> : null);
   return (
-    <Menu
-      open={open}
-      portal
-      align="start"
-      className="flex! min-w-0! flex-[0_1_auto]!"
-      items={items}
-      selectedId={selected?.id ?? NEW_SIDE_ID}
-      onClose={() => setOpen(false)}
-      onSelect={(id) => {
-        setOpen(false);
-        onSelect(id === NEW_SIDE_ID ? null : id);
-      }}
-      anchor={
-        <button
-          type="button"
-          className={clsx("m-0 inline-flex h-7 min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 font-medium text-foreground [font:inherit] hover:bg-accent aria-expanded:bg-accent", focusRing)}
-          data-testid={TESTID.sidePicker}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
-        >
-          <span className="flex-none">{position < 0 ? t("btw.picker.new") : t("btw.side.label", { n: position + 1 })}</span>
-          {selected !== null && <span className="min-w-0 truncate font-normal text-muted-foreground">{selected.question}</span>}
-          <IconChevronDownOutlineRegular size={12} />
-        </button>
-      }
-    />
+    <Menu.Root open={open} onOpenChange={setOpen}>
+      <Menu.Trigger
+        className={clsx("m-0 inline-flex h-7 min-w-0 max-w-full flex-[0_1_auto] cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 font-medium text-foreground [font:inherit] hover:bg-accent aria-expanded:bg-accent", focusRing)}
+        data-testid={TESTID.sidePicker}
+      >
+        <span className="flex-none">{position < 0 ? t("btw.picker.new") : t("btw.side.label", { n: position + 1 })}</span>
+        {selected !== null && <span className="min-w-0 truncate font-normal text-muted-foreground">{selected.question}</span>}
+        <ChevronDown className="size-3 flex-none" aria-hidden />
+      </Menu.Trigger>
+      <Menu.Content side="bottom" align="start">
+        {sides.length > 0 && (
+          <>
+            <Menu.Group>
+              <Menu.GroupLabel>{t("btw.picker.label")}</Menu.GroupLabel>
+              {sides.map((side, index) => (
+                <Menu.Item key={side.id} onClick={() => onSelect(side.id)}>
+                  <span className="flex min-w-0 max-w-[260px] flex-col">
+                    <span className="font-medium">{t("btw.side.label", { n: index + 1 })}</span>
+                    <span className="truncate text-xs text-muted-foreground">{side.question}</span>
+                  </span>
+                  {mark(side.id)}
+                </Menu.Item>
+              ))}
+            </Menu.Group>
+            <Menu.Separator />
+          </>
+        )}
+        <Menu.Item icon={<PlusIcon size={12} />} onClick={() => onSelect(null)}>
+          {t("btw.picker.new")}
+          {mark(NEW_SIDE_ID)}
+        </Menu.Item>
+      </Menu.Content>
+    </Menu.Root>
   );
 }
 
@@ -367,25 +354,37 @@ function SideComposer({ parentId, side, connected, running, contextChip, onSubmi
           onKeyDown={onKeyDown}
         />
         {running && (
-          <Tooltip label={t("btw.stop")} side="top" delayMs={500}>
-            <button type="button" className={clsx(SEND, "bg-secondary text-secondary-foreground")} data-testid={TESTID.sideStop} aria-label={t("btw.stop")} onMouseDown={keepFocus} onClick={onStop}>
-              <StopIcon />
-            </button>
-          </Tooltip>
+          <Tooltip.Root>
+            <Tooltip.Trigger
+              delay={500}
+              render={
+                <button type="button" className={clsx(SEND, "bg-secondary text-secondary-foreground")} data-testid={TESTID.sideStop} aria-label={t("btw.stop")} onMouseDown={keepFocus} onClick={onStop}>
+                  <StopIcon />
+                </button>
+              }
+            />
+            <Tooltip.Content side="top">{t("btw.stop")}</Tooltip.Content>
+          </Tooltip.Root>
         )}
-        <Tooltip label={t("btw.send")} side="top" delayMs={500} disabled={disabled || blank}>
-          <button
-            type="button"
-            className={clsx(SEND, disabled || blank ? "cursor-not-allowed bg-muted text-muted-foreground" : "bg-composer-send text-composer-send-foreground")}
-            data-testid={TESTID.sideSend}
-            aria-label={t("btw.send")}
-            disabled={disabled || blank}
-            onMouseDown={keepFocus}
-            onClick={submit}
-          >
-            <SendIcon />
-          </button>
-        </Tooltip>
+        <Tooltip.Root disabled={disabled || blank}>
+          <Tooltip.Trigger
+            delay={500}
+            render={
+              <button
+                type="button"
+                className={clsx(SEND, disabled || blank ? "cursor-not-allowed bg-muted text-muted-foreground" : "bg-composer-send text-composer-send-foreground")}
+                data-testid={TESTID.sideSend}
+                aria-label={t("btw.send")}
+                disabled={disabled || blank}
+                onMouseDown={keepFocus}
+                onClick={submit}
+              >
+                <SendIcon />
+              </button>
+            }
+          />
+          <Tooltip.Content side="top">{t("btw.send")}</Tooltip.Content>
+        </Tooltip.Root>
       </div>
     </div>
   );

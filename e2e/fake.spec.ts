@@ -154,7 +154,7 @@ test("dark primary buttons keep readable text, and the send arrow stays white in
   await setTheme(page, "light");
   await expect(byTestId(page, TESTID.composerSend)).toHaveCSS("color", white);
   await byTestId(page, TESTID.composerInput).fill("");
-  const lightPrimary = await tokenColors(page, "--dsw-alias-label-primary-foreground", "--dsw-alias-button-primary-fill");
+  const lightPrimary = await tokenColors(page, "--primary-foreground", "--primary");
   expect(lightPrimary.color).toBe(white);
   expect(contrastRatio(lightPrimary.color, lightPrimary.background)).toBeGreaterThanOrEqual(4.5);
 });
