@@ -82,7 +82,7 @@ function toastType(value: string | undefined): ToastType {
 }
 
 const viewportClass = clsx(
-  'fixed right-4 bottom-4 z-50 box-border flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2 outline-none',
+  'fixed top-14 left-1/2 -translate-x-1/2 z-50 box-border flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2 outline-none',
 )
 
 const rootClass = clsx(
@@ -103,7 +103,7 @@ function ToastItem({ toast, closeLabel }: { toast: BaseToast.Root.ToastObject; c
   const type = toastType(toast.type)
   const Icon = icons[type]
   return (
-    <BaseToast.Root toast={toast} swipeDirection="right" className={rootClass}>
+    <BaseToast.Root toast={toast} swipeDirection="up" className={rootClass}>
       <Icon aria-hidden="true" className={clsx('mt-0.5 size-4 shrink-0', iconTone[type])} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {toast.title != null && <BaseToast.Title className="m-0 text-sm font-semibold leading-5 text-popover-foreground" />}
@@ -127,7 +127,7 @@ export type ViewportProps = Omit<BaseToast.Viewport.Props, 'children'> & {
 }
 
 /**
- * Portalled bottom-right stack rendering every toast from the Provider.
+ * Portalled top-centre stack (below the header, clear of the composer and the dock) rendering every toast from the Provider.
  * @param props.closeLabel - accessible name for the close buttons.
  * @returns the portalled Base UI Toast.Viewport; its props pass through.
  */
