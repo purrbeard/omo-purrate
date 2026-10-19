@@ -120,10 +120,13 @@ test("the in-app toast for another thread opens that thread", async () => {
     await finishInBackground(page, gateDir, watcher, worker);
     const toast = byTestId(page, TESTID.noticeToast);
     await expect(toast).toContainText("Turn finished", { timeout: 15_000 });
-    await openSettings(page);
-    await page.getByRole("button", { name: "Restore device defaults", exact: true }).last().focus();
-    await page.keyboard.press("Tab");
-    const openToast = page.getByRole("alert").getByRole("button", { name: "Open" });
+    // F6 is the notifications landmark key; focus inside the toasts pauses their timers. Tab then reaches the toast
+    // and its Open action.
+    const notifications = page.getByRole("region", { name: "Notifications" });
+    await page.keyboard.press("F6");
+    await expect(notifications).toBeFocused();
+    const openToast = notifications.getByRole("button", { name: "Open" });
+    for (let step = 0; step < 3 && !(await openToast.evaluate((element) => element === document.activeElement)); step++) await page.keyboard.press("Tab");
     await expect(openToast).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(threadRow(page, worker)).toHaveAttribute("aria-current", "page");
