@@ -65,7 +65,10 @@ test("plan menu invokes the installed skill; sketch produces a PNG and keyboard 
     expect(message).toMatch(/^\/skill:ulw-plan /);
     expect(message).toContain(".png");
     await page.getByTestId("composer-add").click();
+    // Escape must reach the open menu: pressed before it opens, the menu would open afterwards and take focus.
+    await expect(page.getByRole("menu")).toBeVisible();
     await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toBeHidden();
     await expect(page.getByTestId("composer-add")).toBeFocused();
   } finally { await launched.close(); }
 });
