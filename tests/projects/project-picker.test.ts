@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadSummary, WorkspaceGroup } from "../../src/state";
-import { projectPicker } from "../../src/ui/projects/picker-store";
 import { initialProject, listProjects } from "../../src/ui/projects/project-list";
 
 function group(cwd: string, threadCount: number): WorkspaceGroup {
@@ -56,27 +55,3 @@ describe("initialProject", () => {
   });
 });
 
-describe("projectPicker", () => {
-  it("joins a second request to the open one and resolves it with the started thread", async () => {
-    const openStates: boolean[] = [];
-    const unsubscribe = projectPicker.subscribe(() => openStates.push(projectPicker.isOpen()));
-    const first = projectPicker.request();
-    expect(projectPicker.request()).toBe(first);
-    projectPicker.settle("thread-1");
-    unsubscribe();
-    await expect(first).resolves.toBe("thread-1");
-    expect(openStates).toEqual([true, false]);
-  });
-
-  it("dismisses a pending request when the last host unmounts", async () => {
-    expect(projectPicker.hasHost()).toBe(false);
-    const unmountFirst = projectPicker.registerHost();
-    const unmountSecond = projectPicker.registerHost();
-    const request = projectPicker.request();
-    unmountFirst();
-    expect(projectPicker.isOpen()).toBe(true);
-    unmountSecond();
-    expect(projectPicker.hasHost()).toBe(false);
-    await expect(request).resolves.toBeNull();
-  });
-});

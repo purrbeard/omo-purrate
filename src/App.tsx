@@ -21,7 +21,7 @@ import { applyThemePreference } from "./ui/theme";
 import { shownTab, uiState, useUiState, WORKFLOW_PANEL_WIDTHS } from "./ui/ui-state";
 import type { RightTab, WorkView } from "./ui/ui-state";
 import { WorkflowPanel } from "./ui/conversation/WorkflowPanel";
-import { ProjectPickerHost } from "./ui/projects/ProjectPickerHost";
+import { NewThreadBar } from "./ui/projects/NewThreadBar";
 import { CommandPalette } from "./ui/palette/CommandPalette";
 import { buildPaletteEntries } from "./ui/palette/palette-model";
 import { APP_SHORTCUTS, rendererShortcut, shortcutKeys } from "./ui/shortcuts";
@@ -43,6 +43,7 @@ function MainPane() {
     <>
       <ConnectionBanner />
       <ConversationPane />
+      <NewThreadBar />
       <Composer />
     </>
   );
@@ -196,7 +197,6 @@ function Shell() {
       />
       {settingsOpen && <Suspense fallback={null}><SettingsDialog /></Suspense>}
       {paletteOpen && <CommandPalette entries={paletteEntries} onClose={() => setPaletteOpen(false)} />}
-      <ProjectPickerHost />
       {onboardingOpen && <Suspense fallback={null}><SetupWizard /></Suspense>}
       {ui.sessionImportOpen && !onboardingOpen && <Suspense fallback={null}><SessionImportDialog /></Suspense>}
       <ThreadNotifications />
