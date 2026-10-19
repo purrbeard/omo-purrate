@@ -4,6 +4,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import type { TerminalStream } from "../../../shared/workbench";
 import { isTerminalShortcut } from "../shell/RightDock";
+import { useUiState } from "../ui-state";
 import { readTerminalFont, readTerminalTheme } from "./terminal-theme";
 
 /** The element xterm opens into. Outside a packaged app it also carries the public xterm instance for e2e assertions. */
@@ -76,6 +77,15 @@ export function TerminalPane({ threadId, terminalId, cwd, active, ring, revision
   const [status, setStatus] = useState<PaneStatus>({ running: false, opening: true });
   const outputRef = useRef<TerminalOutputElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
+  const { preferences } = useUiState();
+  const sizePreference = preferences?.terminalFontSize ?? null;
+  const cursorBlink = preferences?.terminalCursorBlink ?? true;
+  /** Read when a terminal is created, so changing the preferences updates open terminals without recreating them. */
+  const optionsRef = useRef({ sizePreference, cursorBlink });
+  optionsRef.current = { sizePreference, cursorBlink };
+  /** The options xterm is running with, mirrored on the pane root for e2e. */
+  const [applied, setApplied] = useState<{ fontSize: number; cursorBlink: boolean } | null>(null);
   /** Set once the snapshot is written and cleared on exit: keystrokes and resizes go to the live shell only. */
   const liveRef = useRef(false);
   /** Keystroke writes run one after another so slices of a paste and the keys after it arrive in order. */
@@ -95,8 +105,9 @@ export function TerminalPane({ threadId, terminalId, cwd, active, ring, revision
     const font = readTerminalFont(host);
     const terminal = new Terminal({
       ...font,
+      fontSize: optionsRef.current.sizePreference ?? font.fontSize,
       theme: readTerminalTheme(host),
-      cursorBlink: true,
+      cursorBlink: optionsRef.current.cursorBlink,
       scrollback: 5000,
       // WCAG AA: shells pick ANSI colors for dark backgrounds, so xterm lifts low-contrast text on the light theme.
       minimumContrastRatio: 4.5,
@@ -108,6 +119,8 @@ export function TerminalPane({ threadId, terminalId, cwd, active, ring, revision
     terminal.open(host);
     fit.fit();
     terminalRef.current = terminal;
+    fitRef.current = fit;
+    setApplied({ fontSize: terminal.options.fontSize ?? font.fontSize, cursorBlink: terminal.options.cursorBlink ?? true });
     if (EXPOSE_TERMINAL) {
       Object.defineProperty(host, "terminal", { value: terminal, configurable: true });
       host.dispatchEvent(new CustomEvent("terminal-ready"));
@@ -198,16 +211,28 @@ export function TerminalPane({ threadId, terminalId, cwd, active, ring, revision
       resize.dispose();
       if (EXPOSE_TERMINAL) Reflect.deleteProperty(host, "terminal");
       terminalRef.current = null;
+      fitRef.current = null;
       terminal.dispose();
     };
   }, [threadId, terminalId, cwd, revision]);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    const host = outputRef.current;
+    if (terminal === null || host === null) return;
+    const fontSize = sizePreference ?? readTerminalFont(host).fontSize;
+    terminal.options.fontSize = fontSize;
+    terminal.options.cursorBlink = cursorBlink;
+    if (host.clientWidth > 0 && host.clientHeight > 0) fitRef.current?.fit();
+    setApplied({ fontSize, cursorBlink });
+  }, [sizePreference, cursorBlink]);
 
   useEffect(() => { if (active) terminalRef.current?.focus(); }, [active, placement]);
   useEffect(() => { if (active && status.running) terminalRef.current?.focus(); }, [active, status.running]);
 
   return (
     <div className="box-border flex size-full min-h-0 min-w-0 rounded-md p-1.5 ring-1 ring-inset ring-transparent data-ring:ring-ring/60" data-testid="terminal-pane" data-terminal-id={terminalId}
-      data-active={active || undefined} data-ring={(ring && active) || undefined} data-running={status.running} onFocusCapture={() => { if (!active) onActivate(); }} onPointerDown={() => { if (!active) onActivate(); }}>
+      data-active={active || undefined} data-ring={(ring && active) || undefined} data-running={status.running} data-font-size={applied?.fontSize} data-cursor-blink={applied?.cursorBlink} onFocusCapture={() => { if (!active) onActivate(); }} onPointerDown={() => { if (!active) onActivate(); }}>
       <div ref={outputRef} className="min-h-0 min-w-0 flex-1 overflow-hidden font-mono leading-tight" data-testid="terminal-output" />
     </div>
   );
