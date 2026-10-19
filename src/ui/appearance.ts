@@ -28,14 +28,10 @@ function px(root: HTMLElement, property: string, size: number | null): void {
 /** Mirrors the appearance preferences onto <html> attributes and CSS variables that appearance.css keys off. */
 export function applyAppearance(prefs: AppearancePreferences, root: HTMLElement = document.documentElement): void {
   const mix = contrastMix(prefs.contrast);
-  toggle(root, "data-contrast", mix !== null);
-  if (mix === null) {
-    root.style.removeProperty("--contrast-mix");
-    root.style.removeProperty("--contrast-target");
-  } else {
-    root.style.setProperty("--contrast-mix", `${mix.mix}%`);
-    root.style.setProperty("--contrast-target", `var(--${mix.target})`);
-  }
+  // The target color is picked in appearance.css on body, where the palette defines --foreground/--background.
+  toggle(root, "data-contrast", mix !== null, mix?.target);
+  if (mix === null) root.style.removeProperty("--contrast-mix");
+  else root.style.setProperty("--contrast-mix", `${mix.mix}%`);
   toggle(root, "data-reduce-motion", prefs.reduceMotion);
   toggle(root, "data-compact-sidebar", prefs.compactSidebar);
   if (prefs.diffColors === "blue-orange") root.setAttribute("data-diff-colors", "blue-orange");

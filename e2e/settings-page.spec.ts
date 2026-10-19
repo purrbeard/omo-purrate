@@ -165,10 +165,23 @@ test("general and appearance fine controls persist and take effect", async () =>
     const contrast = dialog.getByTestId(TESTID.settingsContrast);
     await contrast.focus();
     await page.keyboard.press("End");
-    await expect(html).toHaveAttribute("data-contrast", "");
+    await expect(html).toHaveAttribute("data-contrast", "foreground");
     await expect.poll(prefs).toMatchObject({ contrast: 150 });
     const border150 = await border();
     expect(border150).not.toBe(border100);
+    // More contrast moves the border toward the palette's foreground, whichever scheme is showing.
+    const distanceToForeground = (color: string) => page.evaluate((color) => {
+      const rgb = (css: string): number[] => {
+        const context = document.createElement("canvas").getContext("2d");
+        if (context === null) throw new Error("no 2d context");
+        context.fillStyle = css;
+        context.fillRect(0, 0, 1, 1);
+        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+      };
+      const foreground = rgb(getComputedStyle(document.body).color);
+      return rgb(color).reduce((sum, value, index) => sum + Math.abs(value - (foreground[index] ?? 0)), 0);
+    }, color);
+    expect(await distanceToForeground(border150)).toBeLessThan(await distanceToForeground(border100));
 
     await dialog.getByTestId(TESTID.settingsDiffColors).getByRole("tab", { name: "Blue & orange" }).click();
     await expect(html).toHaveAttribute("data-diff-colors", "blue-orange");
@@ -193,7 +206,7 @@ test("general and appearance fine controls persist and take effect", async () =>
 
     await byTestId(page, TESTID.settingsRestoreDefaults).click();
     await byTestId(page, TESTID.settingsRestoreConfirm).click();
-    await expect(html).not.toHaveAttribute("data-contrast", "");
+    await expect(html).not.toHaveAttribute("data-contrast");
     await expect(html).not.toHaveAttribute("data-diff-colors", "blue-orange");
     await expect(html).not.toHaveAttribute("data-compact-sidebar", "");
     await expect(html).not.toHaveAttribute("data-reduce-motion", "");

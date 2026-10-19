@@ -10,6 +10,11 @@ html[data-contrast] body {
   --contrast-base-message-border: var(--message-border);
   --contrast-base-composer-border: var(--composer-border);
   --contrast-base-toolbar-border: var(--toolbar-border);
+  --contrast-target: var(--foreground);
+}
+
+html[data-contrast='background'] body {
+  --contrast-target: var(--background);
 }
 
 html[data-contrast] body > * {
