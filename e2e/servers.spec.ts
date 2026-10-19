@@ -113,9 +113,12 @@ test("the servers dock lists ssh config hosts, probes them without prompting and
     await expect(page.getByTestId("servers-notice")).toHaveText("Copied: ssh linux-box");
 
     await page.getByTestId("server-terminal").click();
-    await expect(page.getByTestId("right-dock")).toHaveAttribute("data-tab", "terminal");
-    const output = page.getByTestId("terminal-panel").getByTestId("terminal-output");
-    await expect(page.getByTestId("terminal-panel")).toHaveAttribute("data-running", "true", { timeout: 30_000 });
+    // A new terminal opens where terminals are placed (the bottom drawer by default) and runs the command alone.
+    await expect(page.getByTestId("terminal-drawer")).toBeVisible();
+    const pane = page.getByTestId("terminal-panel").locator('[data-testid="terminal-pane"][data-active]');
+    await expect(pane).toHaveAttribute("data-terminal-id", "t2");
+    await expect(pane).toHaveAttribute("data-running", "true", { timeout: 30_000 });
+    const output = pane.getByTestId("terminal-output");
     await output.evaluate((element: HTMLDivElement & { terminal?: Terminal }) => new Promise<void>((resolve, reject) => {
       const terminal = element.terminal;
       if (terminal === undefined) { reject(new Error("xterm is not ready")); return; }
