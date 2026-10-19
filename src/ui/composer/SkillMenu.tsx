@@ -8,7 +8,15 @@ import type { MessageKey } from "../../i18n";
 import { TESTID } from "../testids";
 import type { MenuOption } from "./commands";
 import { MAX_SKILLS_PER_MESSAGE, skillSummary } from "./skill-draft";
-import css from "./SkillMenu.module.css";
+import { CircleAlert } from "lucide-react";
+import { focusRing } from "../kit";
+import { userErrorText } from "../conversation/user-error";
+
+const STATUS = "box-border flex min-h-[34px] flex-none items-center gap-2 px-2 py-1.5 text-xs leading-[18px] text-muted-foreground";
+const STATUS_TEXT = "min-w-0 flex-1 [overflow-wrap:anywhere]";
+const ITEM = "m-0 box-border flex min-h-10 w-full flex-none cursor-pointer flex-col items-stretch gap-0.5 rounded-lg border-0 px-2.5 py-2 text-left text-[13px] leading-5 text-popover-foreground [font-family:inherit]";
+const DESC = "line-clamp-2 text-xs leading-[18px] [overflow-wrap:anywhere] text-muted-foreground";
+const TAG = "flex-none text-[11px] leading-4 text-muted-foreground";
 
 const MAX_HEIGHT = 400;
 const TOP_MARGIN = 84;
@@ -95,46 +103,47 @@ export function SkillMenu({
         : null;
 
   return (
-    <MenuSurface ref={menuRef} className={css.menu} style={{ maxHeight }} data-testid={TESTID.skillMenu}>
+    <MenuSurface ref={menuRef} className="absolute! right-0! bottom-[calc(100%+4px)]! left-0! z-[100]! box-border! flex! max-h-[400px] flex-col! overflow-hidden! rounded-2xl! border! border-solid! border-border! bg-popover! p-1.5! shadow-lg!" style={{ maxHeight }} data-testid={TESTID.skillMenu}>
       {limitReached && (
-        <div className={clsx(css.status, css.notice)} role="alert" data-testid={TESTID.skillLimit}>
+        <div className={clsx(STATUS, "font-medium text-foreground")} role="alert" data-testid={TESTID.skillLimit}>
           {t("composer.skills.limit", { max: MAX_SKILLS_PER_MESSAGE })}
         </div>
       )}
       {hint !== null && (
-        <div className={css.status} role="status">
-          <span className={css.statusText}>{hint}</span>
+        <div className={STATUS} role="status">
+          <span className={STATUS_TEXT}>{hint}</span>
         </div>
       )}
       {status.kind === "error" && (
-        <div className={clsx(css.status, css.error)} role="alert">
-          <span className={css.statusText}>{t("composer.skills.error", { message: status.message })}</span>
-          <button type="button" className={css.retry} onMouseDown={keepFocus} onClick={onRetry}>
+        <div className={clsx("box-border flex min-h-[34px] flex-none items-center gap-2 px-2 py-1.5 text-xs leading-[18px]", "text-destructive-foreground")} role="alert">
+          <CircleAlert className="size-3.5 flex-none" aria-hidden />
+          <span className={STATUS_TEXT}>{t("composer.skills.error", { message: userErrorText(status.message, t("conversation.error.requestFailed")).text })}</span>
+          <button type="button" className={clsx("m-0 flex-none cursor-pointer rounded-md border-0 bg-secondary px-2 py-0.5 text-xs leading-[18px] text-secondary-foreground [font-family:inherit] hover:bg-accent", focusRing)} onMouseDown={keepFocus} onClick={onRetry}>
             {t("composer.skills.retry")}
           </button>
         </div>
       )}
       {status.kind === "ready" && diagnostics.length > 0 && (
         <div
-          className={css.status}
+          className={STATUS}
           role="status"
           data-testid={TESTID.skillMenuWarning}
           title={diagnostics.map((diagnostic) => `${diagnostic.path}: ${diagnostic.message}`).join("\n")}
         >
-          <span className={css.statusText}>{t("composer.skills.diagnostics", { count: diagnostics.length })}</span>
+          <span className={STATUS_TEXT}>{t("composer.skills.diagnostics", { count: diagnostics.length })}</span>
         </div>
       )}
       {status.kind === "loading" && options.length === 0 && (
-        <div className={css.status} role="status" aria-label={t("composer.skills.loading")}>
-          <span className={css.skeletonBar} style={{ width: "40%" }} />
+        <div className={STATUS} role="status" aria-label={t("composer.skills.loading")}>
+          <span className="h-[18px] animate-pulse rounded-xs bg-muted motion-reduce:animate-none" style={{ width: "40%" }} />
         </div>
       )}
       {status.kind === "ready" && options.length === 0 && (
-        <div className={css.status} role="status" data-testid={TESTID.skillMenuEmpty}>
-          <span className={css.statusText}>{t(catalogEmpty ? "composer.skills.empty" : "composer.skills.noMatch")}</span>
+        <div className={STATUS} role="status" data-testid={TESTID.skillMenuEmpty}>
+          <span className={STATUS_TEXT}>{t(catalogEmpty ? "composer.skills.empty" : "composer.skills.noMatch")}</span>
         </div>
       )}
-      <div id={listboxId} className={clsx(css.viewport, "scrollable")} role="listbox" aria-label={t("composer.skills.label")}>
+      <div id={listboxId} className="scrollable flex min-h-0 flex-col overflow-y-auto" role="listbox" aria-label={t("composer.skills.label")}>
         {options.map((option, index) => {
           const active = index === activeIndex;
           if (option.kind === "command") {
@@ -147,7 +156,7 @@ export function SkillMenu({
                 role="option"
                 tabIndex={-1}
                 aria-selected={active}
-                className={clsx(css.item, active && css.active)}
+                className={clsx(ITEM, active ? "bg-accent" : "bg-transparent")}
                 data-testid={TESTID.commandOption}
                 data-command={command.name}
                 onMouseDown={(event) => {
@@ -156,16 +165,16 @@ export function SkillMenu({
                 }}
                 onMouseMove={active ? undefined : () => onHover(index)}
               >
-                <span className={css.head}>
-                  <span className={css.name}>{`/${command.name}`}</span>
-                  <span className={css.scope}>{t(`composer.commands.${command.source ?? "builtin"}`)}</span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="min-w-0 flex-[0_1_auto] truncate">{`/${command.name}`}</span>
+                  <span className={TAG}>{t(`composer.commands.${command.source ?? "builtin"}`)}</span>
                   {command.aliases.map((alias) => (
-                    <span key={alias} className={css.scope}>
+                    <span key={alias} className={TAG}>
                       {t("btw.command.alias", { alias })}
                     </span>
                   ))}
                 </span>
-                <span className={css.description}>{command.nativeDescription ?? t(command.description)}</span>
+                <span className={DESC}>{command.nativeDescription ?? t(command.description)}</span>
               </button>
             );
           }
@@ -179,7 +188,7 @@ export function SkillMenu({
               role="option"
               tabIndex={-1}
               aria-selected={active}
-              className={clsx(css.item, active && css.active)}
+              className={clsx(ITEM, active ? "bg-accent" : "bg-transparent")}
               data-testid={TESTID.skillOption}
               data-skill-name={skill.name}
               title={skill.path}
@@ -189,17 +198,17 @@ export function SkillMenu({
               }}
               onMouseMove={active ? undefined : () => onHover(index)}
             >
-              <span className={css.head}>
-                <span className={css.name}>{skill.name}</span>
-                <span className={css.scope}>{t("composer.commands.skill")}</span>
-                <span className={css.scope}>{t(SCOPE_KEY[skill.scope])}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="min-w-0 flex-[0_1_auto] truncate">{skill.name}</span>
+                <span className={TAG}>{t("composer.commands.skill")}</span>
+                <span className={TAG}>{t(SCOPE_KEY[skill.scope])}</span>
                 {!skill.enabled && (
-                  <span className={css.badge} title={t("composer.skills.userOnlyHint")}>
+                  <span className="flex-none rounded-xs bg-muted px-[5px] text-[11px] leading-4 text-muted-foreground" title={t("composer.skills.userOnlyHint")}>
                     {t("composer.skills.userOnly")}
                   </span>
                 )}
               </span>
-              {summary !== "" && <span className={css.description}>{summary}</span>}
+              {summary !== "" && <span className={DESC}>{summary}</span>}
             </button>
           );
         })}

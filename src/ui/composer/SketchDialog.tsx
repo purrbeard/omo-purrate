@@ -2,7 +2,9 @@ import { useId, useLayoutEffect, useRef, useState, type PointerEvent } from "rea
 import { Button, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useT } from "../../i18n";
 import type { ImageInput } from "./attachments";
-import css from "./SketchDialog.module.css";
+import clsx from "clsx";
+
+const TOOLS = "flex flex-wrap items-center gap-2";
 
 const WIDTH = 960;
 const HEIGHT = 540;
@@ -105,8 +107,8 @@ export function SketchDialog({ onAttach, onClose }: {
       onClose={onClose}
       title={t("composer.sketch.title")}
       closeLabel={t("composer.sketch.close")}
-      className={css.dialog}
-      contentClassName={css.content}
+      className="w-full! max-w-[1008px]! max-h-full!"
+      contentClassName="min-h-0! shrink! overflow-y-auto! [&>*]:shrink-0"
       footer={
         <>
           <Button onClick={onClose}>{t("common.cancel")}</Button>
@@ -125,21 +127,21 @@ export function SketchDialog({ onAttach, onClose }: {
         </>
       }
     >
-      <div className={css.sketch}>
-        <div className={css.toolbar}>
-          <div className={css.tools} role="group" aria-label={t("composer.sketch.canvas")}>
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className={clsx(TOOLS, "justify-between gap-3 max-sm:flex-col max-sm:items-start")}>
+          <div className={TOOLS} role="group" aria-label={t("composer.sketch.canvas")}>
             <Button size="sm" variant={eraser ? "ghost" : "outline"} aria-pressed={!eraser} data-modal-autofocus onClick={() => setEraser(false)}>
               {t("composer.sketch.pen")}
             </Button>
             <Button size="sm" variant={eraser ? "outline" : "ghost"} aria-pressed={eraser} onClick={() => setEraser(true)}>
               {t("composer.sketch.eraser")}
             </Button>
-            <label className={css.colorLabel}>
+            <label className="inline-flex items-center gap-2 text-xs leading-5 text-muted-foreground">
               {t("composer.sketch.color")}
-              <input className={css.color} type="color" value={color} onChange={(event) => { setColor(event.currentTarget.value); setEraser(false); }} />
+              <input className="box-border h-7 w-9 cursor-pointer rounded-md border border-solid border-input bg-card p-0.5" type="color" value={color} onChange={(event) => { setColor(event.currentTarget.value); setEraser(false); }} />
             </label>
           </div>
-          <div className={css.tools}>
+          <div className={TOOLS}>
             <Button size="sm" disabled={strokeCount === 0} onClick={() => {
               strokes.current.pop();
               setStrokeCount(strokes.current.length);
@@ -156,10 +158,10 @@ export function SketchDialog({ onAttach, onClose }: {
             </Button>
           </div>
         </div>
-        <div className={css.paper}>
+        <div className="overflow-hidden rounded-md border border-solid border-input">
           <canvas
             ref={canvas}
-            className={css.canvas}
+            className="block aspect-video h-auto w-full cursor-crosshair touch-none select-none focus-visible:outline-2 focus-visible:-outline-offset-[3px] focus-visible:outline-ring data-[eraser]:cursor-cell"
             width={WIDTH}
             height={HEIGHT}
             tabIndex={0}
@@ -175,7 +177,7 @@ export function SketchDialog({ onAttach, onClose }: {
             {t("composer.sketch.hint")}
           </canvas>
         </div>
-        <p id={hintId} className={css.hint}>{t("composer.sketch.hint")}</p>
+        <p id={hintId} className="m-0 text-xs leading-5 text-muted-foreground">{t("composer.sketch.hint")}</p>
       </div>
     </Modal>
   );
