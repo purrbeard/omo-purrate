@@ -40,6 +40,14 @@ test("interactive PTY supports PowerShell colors, prompts, UTF-8, workspace and 
     await expect(panel).toHaveAttribute("data-running", "true");
     await expect(panel).toHaveAttribute("data-placement", "bottom");
     await expect(output.locator(".xterm-helper-textarea")).toBeFocused();
+    // The font size and cursor blink preferences reach the open xterm and are mirrored on the pane.
+    const pane = panel.getByTestId("terminal-pane");
+    await expect(pane).toHaveAttribute("data-cursor-blink", "true");
+    await running.page.evaluate(() => window.omo.setPreferences({ terminalFontSize: 17, terminalCursorBlink: false }));
+    await expect(pane).toHaveAttribute("data-font-size", "17");
+    await expect(pane).toHaveAttribute("data-cursor-blink", "false");
+    const options = await output.evaluate((element: HTMLDivElement & { terminal?: Terminal }) => ({ size: element.terminal?.options.fontSize, blink: element.terminal?.options.cursorBlink }));
+    expect(options).toEqual({ size: 17, blink: false });
     // When / Then: a normal interactive shell, not a command reader on piped stdin.
     await command(output, '"edition-$($PSVersionTable.PSEdition)"', ["edition-Desktop", "edition-Core"]);
     await command(output, "Write-Host -ForegroundColor Red red-ok", "red-ok");

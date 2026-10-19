@@ -26,6 +26,20 @@ test("running child agents can be stopped from the agent workspace", async () =>
   } finally { await launched.close(); }
 });
 
+test("a new live workflow run opens the graph when openWorkflowOnRun is on", async () => {
+  const launched = await launchApp({ omo: "fake", pickDir: tempDir("dag-open-on-run"), size: { width: 1440, height: 900 } });
+  const { page } = launched;
+  try {
+    await newSession(page);
+    await page.evaluate(() => window.omo.setPreferences({ openWorkflowOnRun: true }));
+    const panel = page.getByTestId("workflow-panel");
+    await expect(panel).toHaveCount(0);
+    await send(page, "SCENARIO:dag");
+    await expect(panel).toBeVisible();
+    await expect(panel).toHaveAttribute("data-view", "graph");
+  } finally { await launched.close(); }
+});
+
 test("compact DAG and nested subagent todos update without disturbing the conversation", async () => {
   const pickDir = tempDir("dag-workspace");
   const launched = await launchApp({ omo: "fake", pickDir, size: { width: 1440, height: 900 } });

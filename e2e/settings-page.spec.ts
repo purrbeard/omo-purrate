@@ -136,6 +136,80 @@ test("appearance changes the scheme and palette, and restore device defaults res
   }
 });
 
+test("general and appearance fine controls persist and take effect", async () => {
+  const launched = await launchApp({ omo: "fake", size: { width: 1440, height: 900 } });
+  try {
+    const { page, app } = launched;
+    const html = page.locator("html");
+    const prefs = () => page.evaluate(() => window.omo.getPreferences());
+    const zoom = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.webContents.getZoomFactor());
+    await byTestId(page, TESTID.openSettings).click();
+    const dialog = byTestId(page, TESTID.settingsDialog);
+    await page.evaluate(() => window.omo.setPreferences({ theme: "dark", locale: "en" }));
+
+    // General: composer and workflow rows write their preferences.
+    await dialog.getByTestId(TESTID.settingsFollowUp).getByRole("tab", { name: "Queue" }).click();
+    await dialog.getByTestId(TESTID.settingsKeywordEffects).click();
+    await dialog.getByTestId(TESTID.settingsShowContextUsage).click();
+    await dialog.getByTestId(TESTID.settingsOpenWorkflowOnRun).click();
+    await expect.poll(prefs).toMatchObject({ followUpBehavior: "queue", keywordEffects: false, showContextUsage: false, openWorkflowOnRun: true });
+    await page.getByTestId("settings-search").fill("workflow graph");
+    await expect(dialog.locator('[data-section="general"]')).toBeVisible();
+    await page.getByTestId("settings-search").fill("");
+    await shot(page, "settings-general-fine-dark");
+
+    // Appearance.
+    await dialog.locator('[data-section="appearance"]').click();
+    const border = () => dialog.locator("div.border-border").first().evaluate((node) => getComputedStyle(node).borderTopColor);
+    const border100 = await border();
+    const contrast = dialog.getByTestId(TESTID.settingsContrast);
+    await contrast.focus();
+    await page.keyboard.press("End");
+    await expect(html).toHaveAttribute("data-contrast", "");
+    await expect.poll(prefs).toMatchObject({ contrast: 150 });
+    const border150 = await border();
+    expect(border150).not.toBe(border100);
+
+    await dialog.getByTestId(TESTID.settingsDiffColors).getByRole("tab", { name: "Blue & orange" }).click();
+    await expect(html).toHaveAttribute("data-diff-colors", "blue-orange");
+    await dialog.getByTestId(TESTID.settingsCompactSidebar).click();
+    await expect(html).toHaveAttribute("data-compact-sidebar", "");
+    await dialog.getByTestId(TESTID.settingsReduceMotion).click();
+    await expect(html).toHaveAttribute("data-reduce-motion", "");
+    await dialog.getByTestId(TESTID.settingsTerminalCursorBlink).click();
+    // The code size starts at the theme size; Default off then a slider key press sets an explicit size.
+    await dialog.getByTestId(`${TESTID.settingsCodeFontSize}-default`).click();
+    await dialog.getByTestId(TESTID.settingsCodeFontSize).focus();
+    await page.keyboard.press("End");
+    await expect(html).toHaveAttribute("data-code-font", "");
+    await expect.poll(() => html.evaluate((node) => node.style.getPropertyValue("--code-font-size"))).toBe("18px");
+    // Range inputs move in steps of 5, so 120% is written through the bridge.
+    await page.evaluate(() => window.omo.setPreferences({ uiScale: 120 }));
+    await expect.poll(zoom).toBeCloseTo(1.2, 5);
+    await expect.poll(prefs).toMatchObject({
+      contrast: 150, diffColors: "blue-orange", compactSidebar: true, reduceMotion: true, terminalCursorBlink: false, codeFontSize: 18, uiScale: 120,
+    });
+    await shot(page, "settings-appearance-fine-dark");
+
+    await byTestId(page, TESTID.settingsRestoreDefaults).click();
+    await byTestId(page, TESTID.settingsRestoreConfirm).click();
+    await expect(html).not.toHaveAttribute("data-contrast", "");
+    await expect(html).not.toHaveAttribute("data-diff-colors", "blue-orange");
+    await expect(html).not.toHaveAttribute("data-compact-sidebar", "");
+    await expect(html).not.toHaveAttribute("data-reduce-motion", "");
+    await expect(html).not.toHaveAttribute("data-code-font", "");
+    await expect.poll(zoom).toBeCloseTo(1, 5);
+    // Restore also returns the scheme to System (light), so compare with the mixed value rather than the dark one.
+    await expect.poll(border).not.toBe(border150);
+    expect(await prefs()).toMatchObject({
+      followUpBehavior: "steer", keywordEffects: true, showContextUsage: true, openWorkflowOnRun: false, uiScale: 100, contrast: 100,
+      promptFontSize: null, codeFontSize: null, terminalFontSize: null, terminalCursorBlink: true, diffColors: "red-green", compactSidebar: false, reduceMotion: false,
+    });
+  } finally {
+    await launched.close();
+  }
+});
+
 test("the default model picker writes the preference and restore resets it", async () => {
   const launched = await launchApp({ omo: "fake" });
   try {
