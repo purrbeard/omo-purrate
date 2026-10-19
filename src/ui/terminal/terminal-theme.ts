@@ -2,13 +2,33 @@ import type { ITheme } from "@xterm/xterm";
 
 type ColorKey = Exclude<keyof ITheme, "extendedAnsi">;
 
-/** Every ITheme color; each reads the kebab-case `--omo-terminal-*` property TerminalPanel.module.css declares for it. */
-const COLORS: readonly ColorKey[] = [
-  "foreground", "background", "cursor", "cursorAccent", "selectionBackground",
-  "scrollbarSliderBackground", "scrollbarSliderHoverBackground", "scrollbarSliderActiveBackground",
-  "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
-  "brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue", "brightMagenta", "brightCyan", "brightWhite",
-];
+/** Every ITheme color as a semantic token expression (tokens.css `--terminal-*` roles, per light/dark scheme). */
+const COLORS: Readonly<Partial<Record<ColorKey, string>>> = {
+  foreground: "var(--terminal-foreground)",
+  background: "var(--terminal-background)",
+  cursor: "var(--terminal-cursor)",
+  cursorAccent: "var(--terminal-background)",
+  selectionBackground: "var(--terminal-selection)",
+  scrollbarSliderBackground: "var(--border)",
+  scrollbarSliderHoverBackground: "var(--muted-foreground)",
+  scrollbarSliderActiveBackground: "var(--foreground)",
+  black: "var(--terminal-black)",
+  red: "var(--terminal-red)",
+  green: "var(--terminal-green)",
+  yellow: "var(--terminal-yellow)",
+  blue: "var(--terminal-blue)",
+  magenta: "var(--terminal-magenta)",
+  cyan: "var(--terminal-cyan)",
+  white: "var(--terminal-white)",
+  brightBlack: "var(--muted-foreground)",
+  brightRed: "var(--terminal-red)",
+  brightGreen: "var(--terminal-green)",
+  brightYellow: "var(--terminal-yellow)",
+  brightBlue: "var(--terminal-blue)",
+  brightMagenta: "var(--terminal-magenta)",
+  brightCyan: "var(--terminal-cyan)",
+  brightWhite: "var(--terminal-white)",
+};
 
 /**
  * Resolves the terminal palette under `scope` into `rgba()` strings. Tokens are built from var() and color-mix(), whose
@@ -23,8 +43,8 @@ export function readTerminalTheme(scope: HTMLElement): ITheme {
   const computed = getComputedStyle(probe);
   const context = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
   const theme: ITheme = {};
-  for (const key of COLORS) {
-    probe.style.color = `var(--omo-terminal-${key.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)})`;
+  for (const [key, token] of Object.entries(COLORS) as [ColorKey, string][]) {
+    probe.style.color = token;
     theme[key] = context === null ? computed.color : rasterize(context, computed.color);
   }
   probe.remove();

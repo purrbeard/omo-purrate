@@ -31,6 +31,7 @@ import { ContextDialog } from "./ContextDialog";
 import { SketchDialog } from "./SketchDialog";
 import { addContext, contextMessage, CONTEXT_LIMIT, type DraftContext } from "./context-draft";
 import { userMessageParts } from "../conversation/UserBubble";
+import { userErrorText } from "../conversation/user-error";
 
 /** Ghost 28px chip in the composer row (attach, workspace). */
 const chipClass = clsx(
@@ -145,7 +146,7 @@ export function Composer() {
       const imagePaths = kind === "files" ? paths.filter(path => isImageFile(path)) : [];
       addImages(imagePaths.map(path => ({ type: "localImage", path })));
       addReferences(paths.filter(path => !imagePaths.includes(path)).map(value => ({ kind: kind === "folder" ? "folder" : "file", value })));
-    } catch (error) { setImageNotice(String(error)); }
+    } catch (error) { setImageNotice(userErrorText(error, t("conversation.error.requestFailed")).text); }
   };
   const addAction = (action: AddAction): void => {
     dismissMenu();
@@ -273,7 +274,7 @@ export function Composer() {
         case "plan": setPlanMode(current => !current); break;
       }
     } catch (error) {
-      setImageNotice(error instanceof Error ? error.message : String(error));
+      setImageNotice(userErrorText(error, t("conversation.error.requestFailed")).text);
     }
   };
 
@@ -408,7 +409,7 @@ export function Composer() {
         }
       }
     } catch (error) {
-      setImageNotice(String(error));
+      setImageNotice(userErrorText(error, t("conversation.error.requestFailed")).text);
       if (!accepted) {
         setPlanMode(planMode);
         setContext(current => addContext(context, current));

@@ -176,6 +176,7 @@ export const messages = {
     "conversation.question.submitting": "Submitting…",
     "conversation.question.incomplete": "Answer every question to submit.",
     // Track B (design/thread): conversation and composer
+    "conversation.error.requestFailed": "The request could not be completed. Try again.",
     "conversation.history.errorHint": "Check the connection and try again.",
     "conversation.workLog.worked": "Worked for {duration}",
     "conversation.workLog.tools": "{count} tool calls",
@@ -363,6 +364,7 @@ export const messages = {
     "conversation.question.submitting": "제출 중…",
     "conversation.question.incomplete": "모든 질문에 답해야 제출할 수 있습니다.",
     // Track B (design/thread): conversation and composer
+    "conversation.error.requestFailed": "요청을 처리하지 못했습니다. 다시 시도하세요.",
     "conversation.history.errorHint": "연결을 확인한 뒤 다시 시도하세요.",
     "conversation.workLog.worked": "작업 {duration}",
     "conversation.workLog.tools": "도구 {count}개",

@@ -6,7 +6,10 @@ import type { WorkView } from "../ui-state";
 import { ActivityPanel } from "./ActivityPanel";
 import { AgentWorkspace } from "./AgentWorkspace";
 import { WorkflowActivity } from "./WorkflowActivity";
-import css from "./WorkflowPanel.module.css";
+import clsx from "clsx";
+import { focusRing } from "../kit";
+
+const viewButton = clsx("m-0 cursor-pointer rounded-md border-0 bg-transparent px-2 py-1.5 text-xs text-muted-foreground [font-family:inherit] hover:bg-accent hover:text-accent-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground aria-selected:bg-accent aria-selected:text-accent-foreground", focusRing);
 
 const VIEWS: readonly { id: WorkView; label: MessageKey; testId: string }[] = [
   { id: "agents", label: "activity.agents", testId: "workflow-agents-view" },
@@ -20,22 +23,22 @@ export function WorkflowPanel({ placement }: { placement: "docked" | "overlay" }
   const t = useT();
   const threadId = useAppSelector(state => state.activeThreadId);
   const { workflowPanelSize, workView } = useUiState();
-  return <section id="workflow-panel" className={css.panel} data-testid="workflow-panel" data-placement={placement} data-size={workflowPanelSize} data-view={workView}
+  return <section id="workflow-panel" className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-solid border-border bg-background text-xs text-foreground data-[placement=overlay]:shadow-lg" data-testid="workflow-panel" data-placement={placement} data-size={workflowPanelSize} data-view={workView}
     aria-label={t("activity.work")}>
-    <nav className={css.views} aria-label={t("activity.view")}>
-      <div role="tablist" aria-label={t("activity.view")}>
-        {VIEWS.map(view => <button key={view.id} id={`workflow-tab-${view.id}`} type="button" role="tab" aria-selected={workView === view.id}
+    <nav className="flex flex-none gap-1 border-0 border-b border-solid border-border px-3 py-2" aria-label={t("activity.view")}>
+      <div className="flex gap-1" role="tablist" aria-label={t("activity.view")}>
+        {VIEWS.map(view => <button key={view.id} id={`workflow-tab-${view.id}`} type="button" role="tab" className={viewButton} aria-selected={workView === view.id}
           aria-controls="workflow-content" data-testid={view.testId} onClick={() => uiState.setWorkView(view.id)}>{t(view.label)}</button>)}
       </div>
-      <span className={css.spacer} />
-      <button type="button" aria-pressed={workflowPanelSize === "wide"} data-testid="workflow-widen"
+      <span className="flex-1" />
+      <button type="button" className={viewButton} aria-pressed={workflowPanelSize === "wide"} data-testid="workflow-widen"
         onClick={() => uiState.setWorkflowPanelSize(workflowPanelSize === "wide" ? "normal" : "wide")}>{t("activity.widen")}</button>
-      <button type="button" aria-pressed={workflowPanelSize === "maximized"} data-testid="workflow-maximize"
+      <button type="button" className={viewButton} aria-pressed={workflowPanelSize === "maximized"} data-testid="workflow-maximize"
         onClick={() => uiState.setWorkflowPanelSize(workflowPanelSize === "maximized" ? "normal" : "maximized")}>{t("activity.maximize")}</button>
     </nav>
-    <div id="workflow-content" className={css.body} role="tabpanel" aria-labelledby={`workflow-tab-${workView}`} data-view={workView}>
+    <div id="workflow-content" className={clsx("min-h-0 min-w-0 flex-1", workView === "agents" ? "flex overflow-hidden [&>section]:rounded-none [&>section]:border-0" : "overflow-auto")} role="tabpanel" aria-labelledby={`workflow-tab-${workView}`} data-view={workView}>
       {workView === "agents" ? <AgentWorkspace placement={placement} />
-        : threadId === null ? <p className={css.empty}>{t("activity.selectThread")}</p>
+        : threadId === null ? <p className="m-0 p-4 text-muted-foreground">{t("activity.selectThread")}</p>
         : workView === "activity" ? <WorkflowActivity key={`log:${threadId}`} threadId={threadId} />
         : <ActivityPanel key={threadId} threadId={threadId} id="workflow-activity" view={workView} docked />}
     </div>
