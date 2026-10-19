@@ -505,6 +505,9 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   /** Downloads and runs the official installer script in a login shell, streams output through onInstallLog, and restarts the bridge on success. */
   install(): Promise<InstallResult>;
   onInstallLog(listener: (line: InstallLogLine) => void): () => void;
+  /** Writes the session at `threadId` as one HTML file: omo's `export_html`.
+   * Returns the written path, or null when the user cancels the save dialog. */
+  exportSession(threadId: string): Promise<{ path: string } | null>;
   /** Parses the session JSONL at sessionPath, which must resolve inside the omo sessions directory. */
   loadHistory(sessionPath: string): Promise<HistoryResult>;
   /** Follows one session file for writes by another omo process; null stops. Changes arrive through onHistoryChanged. */
@@ -606,6 +609,7 @@ export const IPC = {
   install: "omo:install",
   installLog: "omo:install-log",
   loadHistory: "history:load",
+  exportSession: "session:export",
   watchHistory: "history:watch",
   historyChanged: "history:changed",
   loadTaskWork: "history:task-work",
@@ -654,6 +658,8 @@ export const ENV = {
   qaPickAttachments: "OMO_UI_QA_PICK_ATTACHMENTS",
   /** Overrides Electron's userData directory (tests and QA). */
   userData: "OMO_UI_USER_DATA",
+  /** The path a save dialog returns instead of prompting (tests and QA). */
+  qaSavePath: "OMO_UI_QA_SAVE_PATH",
   /** Appends one JSON line per macOS thread notification to this file (tests and QA); the notification still shows. */
   qaNotifyLog: "OMO_UI_QA_NOTIFY_LOG",
   /** Renderer dev-server URL loaded instead of dist/index.html. */

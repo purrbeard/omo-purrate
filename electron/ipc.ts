@@ -4,7 +4,7 @@ import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { app, clipboard, dialog, ipcMain, shell } from "electron";
-import type { BrowserWindow, OpenDialogOptions } from "electron";
+import type { BrowserWindow, OpenDialogOptions, SaveDialogOptions } from "electron";
 import { ENV, IPC, PERMISSION_PRESETS } from "../shared/ipc";
 import type { PermissionPreset } from "../shared/ipc";
 import type { BranchResult, Diagnostics, HistoryResult, InstallResult, RequestEnvelope, SessionTreeOperation } from "../shared/ipc";
@@ -313,6 +313,28 @@ export function registerIpc(deps: IpcDeps): () => void {
     },
     [IPC.loadHistory]: async (_event, sessionPath): Promise<HistoryResult> =>
       parseSessionJsonl(await readFile(await sessionFile(sessionPath), "utf8")),
+    // The session's own export: omo writes the HTML, the save dialog only picks the path.
+    [IPC.exportSession]: async (_event, threadId): Promise<{ path: string } | null> => {
+      const id = requireString(threadId, "threadId");
+      const { thread } = await supervisor.request("thread/read", { threadId: id, includeTurns: false });
+      const qa = process.env[ENV.qaSavePath];
+      let target: string;
+      if (qa !== undefined && qa !== "") {
+        if (!path.isAbsolute(qa)) throw new Error("OMO_UI_QA_SAVE_PATH must be an absolute path");
+        target = qa;
+      } else {
+        const options: SaveDialogOptions = {
+          title: "Export session",
+          defaultPath: `${(thread.name ?? thread.id).replace(/[\\/:*?"<>|]/g, "-")}.html`,
+          filters: [{ name: "HTML", extensions: ["html"] }],
+        };
+        const window = getWindow();
+        const saved = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
+        if (saved.canceled || saved.filePath === "") return null;
+        target = saved.filePath;
+      }
+      return supervisor.request("thread/export", { threadId: id, outputPath: target });
+    },
     [IPC.watchHistory]: async (_event, sessionPath): Promise<void> => {
       if (sessionPath === null) return sessionWatcher.set(null, null);
       sessionWatcher.set(await sessionFile(sessionPath), requireString(sessionPath, "sessionPath"));

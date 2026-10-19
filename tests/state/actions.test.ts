@@ -104,6 +104,7 @@ class FakeBridge implements OmoBridgeApi {
   loadImportCandidates(): ReturnType<OmoBridgeApi["loadImportCandidates"]> { return Promise.resolve({ items: [], nextCursor: null, emptyCount: 0 }); }
   importSessions(): ReturnType<OmoBridgeApi["importSessions"]> { return Promise.resolve({ imported: [] }); }
   loadContextUsage(): ReturnType<OmoBridgeApi["loadContextUsage"]> { return Promise.resolve({ tokens: null, provider: null, model: null, compacted: false }); }
+  exportSession(): ReturnType<OmoBridgeApi["exportSession"]> { return Promise.resolve(null); }
   loadNativeCatalog(): ReturnType<OmoBridgeApi["loadNativeCatalog"]> { return Promise.resolve({ commands: [], contextWindows: {}, error: null }); }
   readonly dagLoads: Array<{ cwd: string; threadId: string }> = [];
   dagRuns: (cwd: string, threadId: string) => Promise<DagRun[]> = async () => [];

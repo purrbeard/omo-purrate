@@ -16,6 +16,10 @@ test("context usage and native slash command menu", async () => {
     await expect(gauge).toHaveAttribute("data-tokens", "25000");
     expect(Number(await gauge.getAttribute("data-tokens"))).toBeGreaterThan(0);
     await expect(gauge).toHaveAttribute("data-window", "128000");
+    // omo's get_session_stats supplies the tooltip's session totals and cost.
+    await expect(gauge).toHaveAttribute("data-total-tokens", "25000");
+    await expect(gauge).toHaveAttribute("data-cost", "0.07");
+    await expect(gauge).toHaveAttribute("aria-label", /Session total: 25,000 tokens · Session cost: \$0\.07/);
 
     const input = byTestId(page, TESTID.composerInput);
     const menu = byTestId(page, TESTID.skillMenu);

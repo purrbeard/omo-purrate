@@ -1,13 +1,13 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { Check, ChevronDown, CircleX, Database, Sparkles } from "lucide-react";
 import { observeStickyMenuGroups } from "../lib/sticky-menu-groups";
-import type { Model } from "../../../shared/protocol";
+import type { FastModeState, Model } from "../../../shared/protocol";
 import type { ModelProfile } from "../../../shared/ipc";
 import { useT } from "../../i18n";
-import { useActions, useAppSelector } from "../app-context";
+import { StoreContext, useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
 import { uiState, updatePreferences, useUiState } from "../ui-state";
 import { resolveComposerModel, selectActiveSessionModel } from "../../state";
@@ -43,6 +43,8 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
   const modelId = useAppSelector((state) => state.composer.modelId);
   const effort = useAppSelector((state) => state.composer.effort);
   const session = useAppSelector(selectActiveSessionModel);
+  const activeThreadId = useAppSelector((state) => state.activeThreadId);
+  const store = useContext(StoreContext);
 
   const profile = useAppSelector((state) => state.composer.profile ?? null);
   const [tab, setTab] = useState<"profile" | "specific">("profile");
@@ -50,6 +52,9 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
+  // omo's fast-mode tier for the active thread; null until get_fast_mode answers (and on hosts that refuse it).
+  const [fastMode, setFastMode] = useState<FastModeState | null>(null);
+  const [fastBusy, setFastBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
   const [menuPos, setMenuPos] = useState<CSSProperties | null>(null);
@@ -154,6 +159,35 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
       window.removeEventListener("resize", place);
     };
   }, [open, visibleGroups, query, tab]);
+
+  useEffect(() => {
+    if (!open || activeThreadId === null) return;
+    let current = true;
+    void window.omo.request("thread/fastMode/get", { threadId: activeThreadId }).then(({ fastMode: loaded }) => {
+      if (current) setFastMode(loaded);
+    }).catch(() => {
+      if (current) setFastMode(null);
+    });
+    return () => { current = false; };
+  }, [open, activeThreadId]);
+
+  const toggleFastMode = (): void => {
+    if (fastBusy || fastMode === null || activeThreadId === null) return;
+    setFastBusy(true);
+    void window.omo.request("thread/fastMode/set", { threadId: activeThreadId, enabled: !fastMode.enabled }).then(({ fastMode: next }) => {
+      setFastMode(next);
+    }).catch((error: unknown) => {
+      store?.dispatch({
+        type: "notice/pushed",
+        notice: {
+          id: crypto.randomUUID(), level: "error", threadId: activeThreadId,
+          message: t("composer.model.fastModeFailed", { message: error instanceof Error ? error.message : String(error) }),
+        },
+      });
+    }).finally(() => {
+      setFastBusy(false);
+    });
+  };
 
   const show = (): void => {
     const currentIndex = current === null ? -1 : visibleModels.findIndex((model) => model.id === current.id);
@@ -288,6 +322,24 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
               <button type="button" role="tab" className={tabButton} disabled={saving} aria-selected={tab === "profile"} data-testid={TESTID.profileTab} onClick={() => { setEditingProfile(null); setTab("profile"); }}>{t("composer.profile.tab")}</button>
               <button type="button" role="tab" className={tabButton} disabled={saving} aria-selected={tab === "specific"} data-testid={TESTID.specificModelTab} onClick={() => { setEditingProfile(null); setTab("specific"); focusPending.current = true; }}>{t("composer.profile.specific")}</button>
             </div>
+            {fastMode !== null && activeThreadId !== null && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={fastMode.enabled}
+                disabled={fastBusy}
+                data-testid={TESTID.fastModeToggle}
+                title={t("composer.model.fastModeHint")}
+                className={clsx(optionBase, "mb-[3px] shrink-0")}
+                onClick={toggleFastMode}
+              >
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[13px] font-normal leading-[18px]">{t("composer.model.fastMode")}</span>
+                  <span className="truncate text-[11px] leading-4 text-muted-foreground">{fastMode.serviceTier ?? t("composer.model.fastModeHint")}</span>
+                </span>
+                <span className={checkClass}>{fastMode.enabled && <Check aria-hidden />}</span>
+              </button>
+            )}
             {saveError !== null && <div className={emptyClass} role="alert">{t("shell.settings.saveFailed", { message: saveError })}</div>}
             {tab === "profile" ? <ProfilePicker models={models} current={profile} profileModels={preferences?.profileModels} onConfigure={(next) => {
               setEditingProfile(next);

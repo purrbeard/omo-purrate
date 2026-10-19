@@ -1,6 +1,42 @@
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, newSession, send, shot, tempDir, prompts } from "./helpers.ts";
+import { byTestId, lastTurn, launchApp, newSession, send, shot, tempDir, prompts } from "./helpers.ts";
+
+test("fast mode toggles for a ChatGPT model and reports omo's refusal on any other", async () => {
+  const launched = await launchApp({ omo: "fake", pickDir: tempDir("fast-mode") });
+  const { page } = launched;
+  try {
+    const threadId = await newSession(page);
+    const toggle = byTestId(page, TESTID.fastModeToggle);
+
+    // The default Fake Alpha model carries no priority tier, so omo refuses the change.
+    await byTestId(page, TESTID.modelPicker).click();
+    await toggle.click();
+    await expect(byTestId(page, TESTID.noticeToast)).toContainText("Fast mode is only available for ChatGPT Subscription models.");
+
+    await byTestId(page, TESTID.specificModelTab).click();
+    await byTestId(page, TESTID.modelOption).filter({ hasText: "GPT-6 Sol Fast" }).click();
+    await expect(byTestId(page, TESTID.modelPicker)).toContainText("GPT-6 Sol Fast");
+    // omo takes the model from the turn, so the switch has to reach it before the tier can change.
+    await send(page, "ping");
+    await expect(lastTurn(page)).toHaveAttribute("data-status", "completed");
+
+    await byTestId(page, TESTID.modelPicker).click();
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await shot(page, "fast-mode-on");
+    await expect
+      .poll(launched.readFakeLog)
+      .toContainEqual(expect.objectContaining({ type: "set_fast_mode", threadId, enabled: true }));
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect
+      .poll(launched.readFakeLog)
+      .toContainEqual(expect.objectContaining({ type: "set_fast_mode", threadId, enabled: false }));
+  } finally { await launched.close(); }
+});
 
 test("continuing a conversation on another model is held once with a warning, then goes through", async () => {
   const launched = await launchApp({ omo: "fake", pickDir: tempDir("model-switch") });

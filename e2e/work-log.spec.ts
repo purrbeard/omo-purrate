@@ -132,3 +132,28 @@ test("restored memory receipts stay outside the fold and unknown answer clocks r
     await expect(byTestId(page, TESTID.reasoning)).toBeVisible();
   } finally { await launched.close(); }
 });
+
+test("denying an approval with instructions reaches omo as the deny-with-feedback answer", async () => {
+  const workspace = test.info().outputPath("deny-workspace");
+  mkdirSync(workspace, { recursive: true });
+  const launched = await launchApp({ omo: "fake", pickDir: workspace });
+  try {
+    const { page, readFakeLog } = launched;
+    await newSession(page);
+    await send(page, "SCENARIO:full");
+    const approval = byTestId(page, TESTID.approvalCard);
+    await expect(approval).toBeVisible();
+
+    await approval.getByPlaceholder("Reason for denying (optional)").fill("not on this machine");
+    await byTestId(page, TESTID.approvalDecline).click();
+
+    // omo's own protocol: the choice, then the follow-up input carrying the instruction.
+    await expect
+      .poll(readFakeLog)
+      .toContainEqual(expect.objectContaining({ type: "extension_ui_response", value: "Deny with feedback" }));
+    await expect
+      .poll(readFakeLog)
+      .toContainEqual(expect.objectContaining({ type: "extension_ui_response", value: "not on this machine" }));
+    await expect(approval).toBeHidden();
+  } finally { await launched.close(); }
+});

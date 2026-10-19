@@ -1,7 +1,8 @@
-import { memo, type ReactElement, type ReactNode } from "react";
-import { PanelLeft } from "lucide-react";
+import { memo, useContext, useState, type ReactElement, type ReactNode } from "react";
+import { Download, Ellipsis, PanelLeft } from "lucide-react";
 import { useT } from "../../i18n";
 import type { ThreadSummary } from "../../state";
+import { StoreContext } from "../app-context";
 import { WorkspaceBadge } from "../sidebar/WorkspaceBadge";
 import { TESTID } from "../testids";
 import { shownTab, uiState, useUiState } from "../ui-state";
@@ -9,7 +10,7 @@ import { threadTitle, workspaceName } from "./format";
 import { OpenButton } from "./OpenButton";
 import { CommitPushButton } from "./CommitPushButton";
 import clsx from "clsx";
-import { StateDot, TextShimmer, Tooltip, focusRing } from "../kit";
+import { Menu, StateDot, TextShimmer, Tooltip, focusRing } from "../kit";
 
 const headerButton = clsx("m-0 -ml-1 inline-flex size-7 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground motion-reduce:transition-none", focusRing);
 
@@ -21,6 +22,38 @@ function HeaderTooltip({ label, align, children }: { label: string; align: "cent
       <Tooltip.Trigger delay={500} render={children} />
       <Tooltip.Content side="bottom" align={align}>{label}</Tooltip.Content>
     </Tooltip.Root>
+  );
+}
+
+/** The header's overflow menu: exporting the active session through omo's own HTML writer. */
+function HeaderMenu({ threadId }: { threadId: string }) {
+  const t = useT();
+  const store = useContext(StoreContext);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const say = (level: "info" | "error", message: string): void => {
+    store?.dispatch({ type: "notice/pushed", notice: { id: crypto.randomUUID(), level, message, threadId } });
+  };
+  const exportSession = (): void => {
+    if (busy) return;
+    setBusy(true);
+    window.omo.exportSession(threadId).then((saved) => {
+      if (saved !== null) say("info", t("conversation.export.done", { path: saved.path }));
+    }).catch((error: unknown) => {
+      say("error", t("conversation.export.failed", { message: error instanceof Error ? error.message : String(error) }));
+    }).finally(() => setBusy(false));
+  };
+  return (
+    <Menu.Root open={open} onOpenChange={setOpen}>
+      <Menu.Trigger className={headerButton} data-testid={TESTID.headerMenu} aria-label={t("conversation.menu.label")}>
+        <Ellipsis className="size-4" aria-hidden />
+      </Menu.Trigger>
+      <Menu.Content align="end" side="bottom">
+        <Menu.Item icon={<Download aria-hidden />} disabled={busy} data-testid={TESTID.headerExport} onClick={exportSession}>
+          {t("conversation.export.label")}
+        </Menu.Item>
+      </Menu.Content>
+    </Menu.Root>
   );
 }
 
@@ -101,6 +134,7 @@ export const ConversationHeader = memo(function ConversationHeader({
         )}
         {cwd !== "" && <CommitPushButton key={cwd} cwd={cwd} />}
         {cwd !== "" && <OpenButton cwd={cwd} />}
+        {thread !== null && <HeaderMenu key={thread.id} threadId={thread.id} />}
         {panels}
         <HeaderTooltip label={t(dockOpen ? "shell.dock.close" : "shell.dock.open")} align="end">
           <button type="button" className={headerButton} data-testid="dock-toggle" aria-pressed={dockOpen}
