@@ -63,6 +63,8 @@ export interface UiState {
   dockLauncher: boolean;
   /** The list the Files panel starts on: changed files or every file. */
   filesView: FilesView;
+  /** A pending request to show the session's change history at one turn; the Files panel clears it once handled. */
+  filesFocus: { turnId: string } | null;
   /** False while the frame is too narrow for a third column; auto-opened agents wait for room instead of covering the conversation. */
   canDock: boolean;
   workspacePanelOpen: boolean;
@@ -95,6 +97,7 @@ let state: UiState = {
   lastTab: null,
   dockLauncher: false,
   filesView: "changes",
+  filesFocus: null,
   canDock: true,
   workspacePanelOpen: false,
   workflowPanelOpen: false,
@@ -140,6 +143,9 @@ export const uiState = {
   setRightTab: (rightTab: RightTab | null): void => update({ rightTab, ...(rightTab === null ? { agentAuto: false, dockLauncher: false } : {}) }),
   /** Opens the Files panel on the changed-files list or on every file. */
   openFiles: (filesView: FilesView): void => update({ rightTab: "files", filesView }),
+  /** Opens the Files panel on the session's change history, scrolled to `turnId`. */
+  openSessionChanges: (turnId: string): void => update({ rightTab: "files", filesFocus: { turnId } }),
+  clearFilesFocus: (): void => { if (state.filesFocus !== null) update({ filesFocus: null }); },
   /** Closes the panel the dock shows (including Work opened by itself) or opens `tab`. */
   toggleRightTab: (tab: RightTab): void => update(shownTab(state) === tab ? { rightTab: null, agentAuto: false } : { rightTab: tab }),
   /** Closes `tab` when the dock shows it; closing the auto-opened Work keeps it closed for this window. */

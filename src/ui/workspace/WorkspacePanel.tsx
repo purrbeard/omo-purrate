@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SessionWorktree, WorkspaceFile } from "../../../shared/workspace";
 import { useT } from "../../i18n";
 import { useAppSelector } from "../app-context";
 import { GIT_REFRESH_EVENT, selectCompletedTurnCount } from "../git/use-git-info";
-import { uiState } from "../ui-state";
+import { uiState, useUiState } from "../ui-state";
+import { SessionChanges } from "./SessionChanges";
 import clsx from "clsx";
 import { Input } from "../kit";
 
@@ -43,7 +44,17 @@ function WorkspaceContents({ cwd, threadId, placement }: WorkspacePanelProps & {
   const t = useT();
   const labels = Object.fromEntries((["title", "refresh", "changed", "all", "search", "file", "diff", "loading", "empty", "noChanges", "noDiff", "select", "noWorkspace", "readOnly", "tabClose", "error", "binary"] as const)
     .map(key => [key, t(`workspace.panel.${key}`)])) as Record<"title" | "refresh" | "changed" | "all" | "search" | "file" | "diff" | "loading" | "empty" | "noChanges" | "noDiff" | "select" | "noWorkspace" | "readOnly" | "tabClose" | "error" | "binary", string>;
+  const filesFocus = useUiState().filesFocus;
   const [sessionView, setSessionView] = useState(false);
+  /** The turn a "View changes" request asked for, until the session history has scrolled to it. */
+  const [focusTurn, setFocusTurn] = useState<string | null>(null);
+  useEffect(() => {
+    if (filesFocus === null) return;
+    setSessionView(true);
+    setFocusTurn(filesFocus.turnId);
+    uiState.clearFilesFocus();
+  }, [filesFocus]);
+  const focused = useCallback(() => setFocusTurn(null), []);
   const [sessionWork, setSessionWork] = useState<SessionWorktree[]>([]);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
@@ -155,14 +166,14 @@ function WorkspaceContents({ cwd, threadId, placement }: WorkspacePanelProps & {
             <button type="button" className={SEGMENT} aria-pressed={mode === "diff"} onClick={() => setMode("diff")}>{labels.diff}</button>
           </div>
         </div>
-        <div className={clsx("min-h-[90px] flex-[1_1_50%] overflow-auto", FOCUS)} aria-busy={previewLoading} tabIndex={0} role="region" aria-label={selected ?? labels.select} data-read={mode === "file" || undefined} data-diff={mode === "diff" || undefined}>
+        <div className={clsx("min-h-[90px] overflow-auto", sessionView ? "flex-[0_1_22%]" : "flex-[1_1_50%]", FOCUS)} aria-busy={previewLoading} tabIndex={0} role="region" aria-label={selected ?? labels.select} data-read={mode === "file" || undefined} data-diff={mode === "diff" || undefined}>
           {previewError !== null ? <p className={ERROR} role="alert">{previewError}</p>
             : previewLoading ? <p className={EMPTY} role="status">{labels.loading}</p>
             : preview === null ? <p className={EMPTY}>{labels.select}</p>
             : mode === "diff" && preview.text === "" ? <p className={EMPTY}>{labels.noDiff}</p>
             : <pre className={clsx("m-0 min-w-max px-0 py-3 text-[11px] leading-[19px] [tab-size:2]", MONO)} data-language={preview.language}>{lines.map((line, index) => <span key={index} className="block min-h-[19px] pr-4 whitespace-pre data-[kind=added]:bg-success/12 data-[kind=added]:text-success data-[kind=hunk]:bg-ring/7 data-[kind=hunk]:text-ring data-[kind=removed]:bg-destructive-foreground/12 data-[kind=removed]:text-destructive-foreground" data-kind={mode === "diff" ? line.startsWith("+") && !line.startsWith("+++") ? "added" : line.startsWith("-") && !line.startsWith("---") ? "removed" : line.startsWith("@@") ? "hunk" : undefined : undefined}><span className="box-border inline-block w-11 pr-3 text-right text-muted-foreground select-none" aria-hidden="true">{mode === "file" ? index + 1 : ""}</span><span>{line || " "}</span>{"\n"}</span>)}</pre>}
         </div>
-        <section className="flex min-h-[140px] flex-[0_1_34%] flex-col overflow-hidden border-t border-border" aria-label={labels.changed}>
+        <section className={clsx("flex min-h-[140px] flex-col overflow-hidden border-t border-border", sessionView ? "flex-[1_1_66%]" : "flex-[0_1_34%]")} aria-label={labels.changed}>
           <div className={clsx(BAR, "h-[38px] px-3")}>
             <div className="flex items-center gap-3">
               <button type="button" className={LIST_SWITCH} aria-pressed={!sessionView && changesOnly} onClick={() => { setSessionView(false); setChangesOnly(true); }}>{labels.changed} <span className="rounded-[5px] bg-foreground/7 px-[5px] text-[10px] font-normal text-muted-foreground">{changed}</span></button>
@@ -174,10 +185,12 @@ function WorkspaceContents({ cwd, threadId, placement }: WorkspacePanelProps & {
           <Input className="mx-3 mb-2 h-auto! w-[calc(100%-24px)]! flex-none rounded-md! border-border! bg-transparent! px-[9px]! py-[5px]! text-xs! leading-[1.5]!" type="search" aria-label={labels.search} placeholder={labels.search} value={filter} onChange={(event) => setFilter(event.target.value)} />
           <div className="min-h-0 flex-1 overflow-auto px-1.5 pb-1.5" aria-busy={sessionView ? sessionLoading : listLoading}>
             {sessionView ? <>
+              {threadId !== null && <SessionChanges threadId={threadId} cwd={cwd} filter={filter} focusTurnId={focusTurn} onFocused={focused} />}
+              {(sessionError !== null || sessionLoading || sessionWork.some((work) => work.commits.length > 0 || work.changes.length > 0)) && <section className="border-t border-border pt-1" data-testid="workspace-session-git">
+              <h3 className="mx-2 mt-1.5 mb-0 text-xs leading-[1.5] font-semibold [font-family:inherit]">{t("workspace.panel.sessionCommits")}</h3>
               <p className="mx-2 my-1.5 text-[11px] text-muted-foreground">{t("workspace.panel.sessionNote")}</p>
               {sessionError !== null ? <p className={ERROR} role="alert">{sessionError}</p>
                 : sessionLoading ? <p className={EMPTY} role="status">{labels.loading}</p>
-                : sessionWork.every((work) => work.commits.length === 0 && work.changes.length === 0) ? <p className={EMPTY}>{labels.noChanges}</p>
                 : sessionWork.map((work) => <section key={work.root} data-testid="workspace-session-worktree" className="border-b border-border px-2 py-1.5">
                   <h3 className="mx-0 my-1 text-xs leading-[1.5] font-semibold [font-family:inherit] [overflow-wrap:anywhere]" title={work.root} data-base={work.base || undefined}>
                     {work.branch ?? "HEAD"}
@@ -201,6 +214,7 @@ function WorkspaceContents({ cwd, threadId, placement }: WorkspacePanelProps & {
                     </div>)}
                   </details>)}
                 </section>)}
+              </section>}
             </> : listError !== null ? <p className={ERROR} role="alert">{labels.error}: {listError}</p>
               : listLoading ? <p className={EMPTY} role="status">{labels.loading}</p>
               : filtered.length === 0 ? <p className={EMPTY}>{changesOnly && filter === "" ? labels.noChanges : labels.empty}</p>

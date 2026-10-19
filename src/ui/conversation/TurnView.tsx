@@ -332,7 +332,7 @@ export const TurnView = memo(function TurnView({
             {!workIds.has(entry.item.id) && memoryWrites[entry.item.id] === undefined && <ItemView entry={entry} cwd={cwd} branch={turnBranch} />}
             {entry === answer && entry.item.type === "agentMessage" && (
               <>
-                {files.length > 0 && <EditedFilesCard files={files} />}
+                {files.length > 0 && <EditedFilesCard files={files} turnId={turn.id} />}
                 <AnswerFooter text={entry.item.text} completedAt={answerCompletedAt(turn, entry)}>{regenerate}</AnswerFooter>
               </>
             )}
@@ -340,7 +340,7 @@ export const TurnView = memo(function TurnView({
         );
       })}
       {notices.filter((notice) => notice.afterItems >= turn.items.length).map((notice) => <NoticeRow key={notice.id} notice={notice} />)}
-      {answer === null && files.length > 0 && <EditedFilesCard files={files} />}
+      {answer === null && files.length > 0 && <EditedFilesCard files={files} turnId={turn.id} />}
       {subagents.length > 0 && (
         <section className="min-w-0 rounded-lg border border-solid border-border px-3 py-2 text-xs leading-5" data-testid="turn-subagents" aria-label={t("conversation.subagents.title")}>
           <span className="text-muted-foreground [overflow-wrap:anywhere]">{t("conversation.subagents.title")}</span>

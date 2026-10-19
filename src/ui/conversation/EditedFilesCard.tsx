@@ -17,8 +17,8 @@ function Counts({ added, removed, className }: { added: number | null; removed: 
   );
 }
 
-/** The files one turn changed, with per-file line counts; "View changes" opens the workspace changes panel. */
-export const EditedFilesCard = memo(function EditedFilesCard({ files }: { files: readonly EditedFile[] }) {
+/** The files one turn changed, with per-file line counts; "View changes" opens the session change history at this turn. */
+export const EditedFilesCard = memo(function EditedFilesCard({ files, turnId }: { files: readonly EditedFile[]; turnId: string }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
   const counted = files.filter((file) => file.added !== null && file.removed !== null);
@@ -42,7 +42,7 @@ export const EditedFilesCard = memo(function EditedFilesCard({ files }: { files:
           <span className="truncate text-sm font-medium leading-5">{title}</span>
           {counted.length > 0 && <Counts added={added} removed={removed} />}
         </div>
-        <Button variant="outline" size="sm" data-testid="edited-files-view" onClick={() => uiState.setWorkspacePanelOpen(true)}>
+        <Button variant="outline" size="sm" data-testid="edited-files-view" onClick={() => uiState.openSessionChanges(turnId)}>
           {t("conversation.files.view")}
         </Button>
       </header>
