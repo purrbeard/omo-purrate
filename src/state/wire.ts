@@ -79,6 +79,14 @@ function isOptionalString(value: unknown): boolean {
   return value === undefined || value === null || isString(value);
 }
 
+function isOptionalNumber(value: unknown): boolean {
+  return value === undefined || value === null || (typeof value === "number" && Number.isFinite(value));
+}
+
+function isOptionalOneOf(value: unknown, allowed: readonly string[]): boolean {
+  return value === undefined || value === null || (isString(value) && allowed.includes(value));
+}
+
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isString);
 }
@@ -112,7 +120,12 @@ const ITEM_FIELD_CHECKS: Record<ThreadItem["type"], (value: JsonObject) => boole
     (value["contentItems"] === undefined || value["contentItems"] === null || isArrayOf(value["contentItems"], isTypedPart("inputText"))) &&
     (value["changes"] === undefined || isArrayOf(value["changes"], isFileUpdateChange)),
   webSearch: (value) => isString(value["query"]),
-  contextCompaction: () => true,
+  contextCompaction: (value) =>
+    isOptionalOneOf(value["reason"], ["manual", "threshold", "overflow"]) &&
+    isOptionalOneOf(value["status"], ["inProgress", "completed", "failed", "aborted"]) &&
+    isOptionalNumber(value["tokensBefore"]) && isOptionalNumber(value["estimatedTokensAfter"]) &&
+    isOptionalString(value["summary"]) && isOptionalString(value["error"]) &&
+    (value["willRetry"] === undefined || typeof value["willRetry"] === "boolean"),
 };
 
 /** Parses one wire item; unknown item types and items whose consumed fields are missing or malformed return null. */

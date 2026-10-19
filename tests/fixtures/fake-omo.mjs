@@ -1149,11 +1149,15 @@ async function handleCommand(frame, record, reply) {
       handles.delete(record.handle);
       reply({});
       return;
-    case "compact":
+    case "compact": {
+      // Shaped like omo 5.1.35: the session file gets a compaction entry, the events carry the result.
+      const result = { summary: "## Kept\n- the open plan\n- the last answer", firstKeptEntryId: record.lastEntryId, tokensBefore: 150000, estimatedTokensAfter: 32000 };
       event(record, "compaction_start", { reason: "manual" });
-      event(record, "compaction_end", { reason: "manual", result: { summary: "", tokensBefore: 0 }, aborted: false, willRetry: false });
-      reply({ summary: "", tokensBefore: 0 });
+      recordEntry(record, { type: "compaction", summary: result.summary, firstKeptEntryId: result.firstKeptEntryId, tokensBefore: result.tokensBefore, details: {} });
+      event(record, "compaction_end", { reason: "manual", result, aborted: false, willRetry: false });
+      reply(result);
       return;
+    }
     case "get_available_models":
       reply({ models: MODELS.map(nativeModel) });
       return;

@@ -113,6 +113,22 @@ test("slow scenario stops on interrupt", async () => {
   await shot(page, "C002-stopped");
 });
 
+test("/compact shows the compaction, its token change and its summary in the conversation", async () => {
+  const { page, readFakeLog } = current();
+  await send(page, "/compact");
+  await expect.poll(readFakeLog).toContainEqual(expect.objectContaining({ type: "compact" }));
+  const card = byTestId(page, TESTID.compaction).last();
+  await expect(card).toHaveAttribute("data-status", "completed");
+  await expect(card).toContainText("Context compacted");
+  await expect(card).toContainText("requested");
+  await expect(card).toContainText("150K → ~32K tokens");
+  const toggle = card.getByTestId(TESTID.compactionSummaryToggle);
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(card).toContainText("the open plan");
+  await shot(page, "C002-compacted");
+});
+
 test("relaunch lists the thread and restores its history", async () => {
   await current().close();
   launched = null;
@@ -124,6 +140,11 @@ test("relaunch lists the thread and restores its history", async () => {
   await page.getByTestId("turn-work-log").first().locator(":scope > summary").click();
   await expect(page.locator(`[data-testid="${TESTID.toolCard}"][data-tool="eval"]`)).toBeVisible();
   await expect(byTestId(page, TESTID.assistantMessage).filter({ hasText: "You picked B" })).toBeVisible();
+  // Read back from the session file: the summary and the size before compaction survive, the reason is not recorded.
+  const compaction = byTestId(page, TESTID.compaction).last();
+  await expect(compaction).toHaveAttribute("data-status", "completed");
+  await expect(compaction).toContainText("150K tokens before");
+  await expect(compaction.getByTestId(TESTID.compactionSummaryToggle)).toBeVisible();
   await shot(page, "C002-resumed");
 });
 

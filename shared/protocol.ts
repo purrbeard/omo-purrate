@@ -151,9 +151,22 @@ export interface WebSearchItem {
   query: string;
 }
 
+export type ContextCompactionReason = "manual" | "threshold" | "overflow";
+
 export interface ContextCompactionItem {
   type: "contextCompaction";
   id: string;
+  /** Why omo compacted; null when unknown (a session file does not record it). */
+  reason?: ContextCompactionReason | null;
+  /** Absent on older items, which only ever described a finished compaction. */
+  status?: "inProgress" | "completed" | "failed" | "aborted";
+  tokensBefore?: number | null;
+  /** omo's heuristic size of the rebuilt context right after compaction (live events only). */
+  estimatedTokensAfter?: number | null;
+  summary?: string | null;
+  error?: string | null;
+  /** A successful overflow compaction retries the prompt that overflowed. */
+  willRetry?: boolean;
 }
 
 export type ThreadItem =

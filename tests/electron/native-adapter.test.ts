@@ -47,6 +47,44 @@ describe("TurnProjector", () => {
     expect(turn.activeTurnId).toBeNull();
   });
 
+  it("carries a compaction's reason, progress and outcome onto its item", () => {
+    const done = projector();
+    done.turn.handle({ type: "compaction_start", reason: "threshold" });
+    const started = done.sent.find((entry) => entry.method === "item/started");
+    expect(started?.params).toMatchObject({ item: { type: "contextCompaction", reason: "threshold", status: "inProgress" } });
+    done.turn.handle({
+      type: "compaction_end",
+      reason: "threshold",
+      result: { summary: "kept the plan", firstKeptEntryId: "e1", tokensBefore: 150000, estimatedTokensAfter: 32000 },
+      aborted: false,
+      willRetry: false,
+    });
+    expect(done.completed().items).toEqual([{
+      type: "contextCompaction",
+      id: (started?.params as { item: { id: string } }).item.id,
+      reason: "threshold",
+      status: "completed",
+      tokensBefore: 150000,
+      estimatedTokensAfter: 32000,
+      summary: "kept the plan",
+      error: null,
+      willRetry: false,
+    }]);
+
+    const failed = projector();
+    failed.turn.handle({ type: "compaction_start", reason: "overflow" });
+    failed.turn.handle({ type: "compaction_end", reason: "overflow", result: null, aborted: false, willRetry: false, errorMessage: "quota exceeded" });
+    expect(failed.completed()).toMatchObject({
+      status: "failed",
+      items: [{ type: "contextCompaction", reason: "overflow", status: "failed", tokensBefore: null, summary: null, error: "quota exceeded" }],
+    });
+
+    const cancelled = projector();
+    cancelled.turn.handle({ type: "compaction_start", reason: "manual" });
+    cancelled.turn.handle({ type: "compaction_end", reason: "manual", result: null, aborted: true, willRetry: false });
+    expect(cancelled.completed()).toMatchObject({ status: "interrupted", items: [{ status: "aborted", error: null }] });
+  });
+
   it("reports an interrupt both from the client's abort and from an aborted stop reason", () => {
     const first = projector();
     first.turn.beginClientTurn([], null);

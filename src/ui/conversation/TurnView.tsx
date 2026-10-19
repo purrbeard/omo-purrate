@@ -1,9 +1,9 @@
 import { Fragment, memo, useMemo, useState, type ReactNode } from "react";
-import { ChevronRight, CircleAlert, CircleX, FileText, Layers, TriangleAlert } from "lucide-react";
+import { ChevronRight, CircleAlert, CircleX, FileText, Layers, LoaderCircle, TriangleAlert } from "lucide-react";
 import clsx from "clsx";
 import type { HistoricalTask, MemoryWriteNotice, SessionNotice } from "../../../shared/ipc";
 import { MarkdownText } from "../content/markdown/MarkdownText";
-import type { LiveTask, TurnError, UserMessageItem } from "../../../shared/protocol";
+import type { ContextCompactionItem, LiveTask, TurnError, UserMessageItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { ConversationItem, ConversationTurn } from "../../state";
 import { Badge, StateDot, focusRing } from "../kit";
@@ -70,12 +70,58 @@ function PlanBlock({ text, streaming }: { text: string; streaming: boolean }) {
   );
 }
 
-function CompactionDivider() {
+const COMPACT_TOKENS = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+
+function CompactionCard({ item, streaming }: { item: ContextCompactionItem; streaming: boolean }) {
   const t = useT();
+  const labels = useConversationLabels();
+  const [open, setOpen] = useState(false);
+  // Items without a status predate it and only ever described a finished compaction.
+  const status = streaming ? "inProgress" : item.status === undefined || item.status === "inProgress" ? "completed" : item.status;
+  const title = t(status === "inProgress" ? "conversation.compaction.running" : status === "failed" ? "conversation.compaction.failed"
+    : status === "aborted" ? "conversation.compaction.aborted" : "conversation.compacted");
+  const before = item.tokensBefore ?? null;
+  const after = item.estimatedTokensAfter ?? null;
+  const details = [
+    item.reason == null ? null : t(`conversation.compaction.reason.${item.reason}`),
+    status !== "completed" || before === null || before <= 0 ? null
+      : after === null ? t("conversation.compaction.tokensBefore", { before: COMPACT_TOKENS.format(before) })
+      : t("conversation.compaction.tokens", { before: COMPACT_TOKENS.format(before), after: COMPACT_TOKENS.format(after) }),
+    status === "completed" && item.willRetry === true ? t("conversation.compaction.retry") : null,
+    status === "failed" ? item.error ?? null : null,
+  ].filter((part): part is string => part !== null && part !== "");
+  const summary = status === "completed" ? item.summary ?? null : null;
+  const Icon = status === "inProgress" ? LoaderCircle : status === "failed" ? CircleAlert : status === "aborted" ? CircleX : Layers;
   return (
-    <div className="my-1.5 flex items-center gap-1.5 whitespace-nowrap text-xs leading-5 text-muted-foreground before:h-px before:flex-1 before:bg-border before:content-[''] after:h-px after:flex-1 after:bg-border after:content-['']" data-flow="compaction">
-      <Layers className="size-3.5" aria-hidden />
-      <span>{t("conversation.compacted")}</span>
+    <div className="my-1.5 flex min-w-0 flex-col gap-1.5" data-flow="compaction" data-testid={TESTID.compaction} data-status={status}>
+      <div
+        className="flex min-w-0 items-center gap-2 text-xs leading-5 text-muted-foreground before:h-px before:min-w-4 before:flex-1 before:bg-border before:content-[''] after:h-px after:min-w-4 after:flex-1 after:bg-border after:content-['']"
+        role="status"
+      >
+        <Icon
+          className={clsx("size-3.5 shrink-0", status === "inProgress" && "animate-spin motion-reduce:animate-none", status === "failed" && "text-destructive-foreground")}
+          aria-hidden
+        />
+        <span className={clsx("shrink-0 font-medium", status === "failed" ? "text-destructive-foreground" : "text-foreground")}>{title}</span>
+        {details.length > 0 && <span className="min-w-0 truncate tabular-nums" title={details.join(" · ")}>{details.join(" · ")}</span>}
+        {summary !== null && (
+          <button
+            type="button"
+            className={clsx("inline-flex shrink-0 items-center gap-0.5 rounded-sm text-xs text-muted-foreground hover:text-foreground", focusRing)}
+            aria-expanded={open}
+            data-testid={TESTID.compactionSummaryToggle}
+            onClick={() => setOpen((value) => !value)}
+          >
+            <ChevronRight className={clsx("size-3 transition-transform motion-reduce:transition-none", open && "rotate-90")} aria-hidden />
+            {t(open ? "conversation.compaction.hideSummary" : "conversation.compaction.showSummary")}
+          </button>
+        )}
+      </div>
+      {summary !== null && open && (
+        <div className="max-h-80 overflow-y-auto rounded-lg border border-solid border-border px-3.5 py-2.5">
+          <MarkdownText text={summary} streaming={false} labels={labels.markdown} variant="compact" />
+        </div>
+      )}
     </div>
   );
 }
@@ -98,7 +144,7 @@ function renderItem(entry: ConversationItem, cwd: string | null, branch: TurnBra
     case "plan":
       return <PlanBlock text={item.text} streaming={entry.streaming} />;
     case "contextCompaction":
-      return <CompactionDivider />;
+      return <CompactionCard item={item} streaming={entry.streaming} />;
     case "commandExecution":
     case "fileChange":
     case "mcpToolCall":

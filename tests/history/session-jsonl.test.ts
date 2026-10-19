@@ -235,7 +235,7 @@ describe("parseSessionJsonl", () => {
         ],
       }),
       assistant("a1", "u1", 2, [{ type: "thinking", thinking: "" }, { type: "text", text: "ok" }]),
-      { type: "compaction", id: "c1", parentId: "a1", timestamp: ts(3), summary: "s", firstKeptEntryId: "u1" },
+      { type: "compaction", id: "c1", parentId: "a1", timestamp: ts(3), summary: "s", firstKeptEntryId: "u1", tokensBefore: 338210 },
     ]);
 
     const turns = parseSessionJsonl(text).turns;
@@ -251,7 +251,7 @@ describe("parseSessionJsonl", () => {
         ],
       },
       { type: "agentMessage", id: "a1:1", text: "ok", phase: null },
-      { type: "contextCompaction", id: "c1" },
+      { type: "contextCompaction", id: "c1", status: "completed", tokensBefore: 338210, summary: "s" },
     ]);
   });
 

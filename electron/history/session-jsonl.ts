@@ -291,7 +291,15 @@ export function parseSessionJsonl(text: string): HistoryResult {
     if (entry.type === "compaction") {
       turn ??= startTurn(entry);
       if (builders.at(-1) !== turn) builders.push(turn);
-      turn.items.push({ type: "contextCompaction", id: entry.id });
+      const tokensBefore = entry.raw["tokensBefore"];
+      const summary = entry.raw["summary"];
+      turn.items.push({
+        type: "contextCompaction",
+        id: entry.id,
+        status: "completed",
+        tokensBefore: typeof tokensBefore === "number" && Number.isFinite(tokensBefore) ? tokensBefore : null,
+        summary: typeof summary === "string" && summary.trim() !== "" ? summary : null,
+      });
     } else if (entry.type === "message" && isRecord(entry.raw["message"])) {
       const message = entry.raw["message"];
       const role = message["role"];

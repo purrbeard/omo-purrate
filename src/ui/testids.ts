@@ -66,6 +66,8 @@ export const TESTID = {
   sessionNotice: "session-notice",
   assistantMessage: "assistant-message",
   reasoning: "reasoning",
+  compaction: "compaction",
+  compactionSummaryToggle: "compaction-summary-toggle",
   toolCard: "tool-card",
   approvalCard: "approval-card",
   approvalAccept: "approval-accept",

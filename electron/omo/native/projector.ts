@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { RpcNotification, ThreadItem, Turn, TurnStatus, UserInput } from "../../../shared/protocol";
+import type { ContextCompactionReason, RpcNotification, ThreadItem, Turn, TurnStatus, UserInput } from "../../../shared/protocol";
 import { toolFileChanges } from "./file-changes";
 
 type JsonObject = Record<string, unknown>;
@@ -34,6 +34,7 @@ interface ActiveTurn {
   messageId: string | null;
   messageCounter: number;
   compactionId: string | null;
+  compactionReason: ContextCompactionReason | null;
   outcome: { status: TurnStatus; error: string | null } | null;
   interrupted: boolean;
   userMessageShown: boolean;
@@ -41,6 +42,14 @@ interface ActiveTurn {
 
 function isRecord(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function compactionReason(value: unknown): ContextCompactionReason | null {
+  return value === "manual" || value === "threshold" || value === "overflow" ? value : null;
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function readString(record: JsonObject, key: string): string | undefined {
@@ -165,7 +174,7 @@ export class TurnProjector {
         this.toolEnd(event);
         return;
       case "compaction_start":
-        this.compactionStart();
+        this.compactionStart(event);
         return;
       case "compaction_end":
         this.compactionEnd(event);
@@ -197,6 +206,7 @@ export class TurnProjector {
       messageId: null,
       messageCounter: 0,
       compactionId: null,
+      compactionReason: null,
       outcome: null,
       interrupted: false,
       userMessageShown: false,
@@ -385,18 +395,36 @@ export class TurnProjector {
     }
   }
 
-  private compactionStart(): void {
+  private compactionStart(event: JsonObject): void {
     const turn = this.active ?? this.open();
     turn.compactionId = `context-compaction:${randomUUID()}`;
-    this.emit({ method: "item/started", params: { threadId: this.threadId, turnId: turn.id, item: { type: "contextCompaction", id: turn.compactionId }, startedAtMs: this.now() } });
+    turn.compactionReason = compactionReason(event["reason"]);
+    const item: ThreadItem = { type: "contextCompaction", id: turn.compactionId, reason: turn.compactionReason, status: "inProgress" };
+    this.emit({ method: "item/started", params: { threadId: this.threadId, turnId: turn.id, item, startedAtMs: this.now() } });
   }
 
   private compactionEnd(event: JsonObject): void {
     const turn = this.active;
     if (turn === null || turn.compactionId === null) return;
     const id = turn.compactionId;
+    const reason = compactionReason(event["reason"]) ?? turn.compactionReason;
     turn.compactionId = null;
-    this.completed(turn, { type: "contextCompaction", id });
+    turn.compactionReason = null;
+    // rpc.md compaction_end: `result` null with `aborted` means cancelled, without it a failure carrying `errorMessage`.
+    const result = isRecord(event["result"]) ? event["result"] : null;
+    const aborted = result === null && event["aborted"] === true;
+    const summary = result?.["summary"];
+    this.completed(turn, {
+      type: "contextCompaction",
+      id,
+      reason,
+      status: result !== null ? "completed" : aborted ? "aborted" : "failed",
+      tokensBefore: finiteOrNull(result?.["tokensBefore"]),
+      estimatedTokensAfter: finiteOrNull(result?.["estimatedTokensAfter"]),
+      summary: typeof summary === "string" && summary.trim() !== "" ? summary : null,
+      error: result === null && !aborted && typeof event["errorMessage"] === "string" ? event["errorMessage"] : null,
+      willRetry: result !== null && event["willRetry"] === true,
+    });
     // A manual compaction runs outside any agent run, so no agent_settled closes its synthetic turn.
     if (turn.outcome === null && turn.tools.size === 0 && turn.texts.size === 0 && !turn.userMessageShown) {
       const failed = event["result"] === null && event["aborted"] !== true && typeof event["errorMessage"] === "string";
@@ -417,7 +445,8 @@ export class TurnProjector {
     for (const [index, state] of turn.texts) if (!state.completed) this.completeText(turn, turn.texts, index, "agentMessage", undefined);
     for (const [index, state] of turn.reasoning) if (!state.completed) this.completeText(turn, turn.reasoning, index, "reasoning", undefined);
     for (const tool of turn.tools.values()) if (!tool.completed) this.completeTool(turn, tool, false, undefined);
-    if (turn.compactionId !== null) this.completed(turn, { type: "contextCompaction", id: turn.compactionId });
+    // The turn ended before compaction_end arrived: the compaction did not finish.
+    if (turn.compactionId !== null) this.completed(turn, { type: "contextCompaction", id: turn.compactionId, reason: turn.compactionReason, status: "aborted" });
     this.active = null;
     const wire = this.wireTurn(turn, status, error);
     this.emit({ method: "thread/status/changed", params: { threadId: this.threadId, status: { type: "idle" } } });
