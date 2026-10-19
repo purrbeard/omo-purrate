@@ -158,6 +158,8 @@ async function main() {
     env.OMO_UI_OMO_BIN = FAKE_OMO;
     env.FAKE_OMO_HOME = options.home ?? fresh("fake-home");
     env.FAKE_OMO_LOG = path.join(env.FAKE_OMO_HOME, "fake-omo.log");
+    // Without this the app indexes the real ~/.omo/agent sessions; the fake keeps its sessions under FAKE_OMO_HOME.
+    env.OMO_UI_QA_AGENT_DIR = env.FAKE_OMO_HOME;
     console.log(`FAKE_OMO_HOME=${env.FAKE_OMO_HOME}`);
     console.log(`FAKE_OMO_LOG=${env.FAKE_OMO_LOG}`);
     if (options.seed !== undefined) env.FAKE_OMO_SEED_THREADS = options.seed;
