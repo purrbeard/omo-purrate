@@ -150,7 +150,7 @@ export function NativeSessionsDialog({ onClose }: { onClose: () => void }) {
                   </td>
                   <td className={cellClass}>
                     <button type="button" className={`m-0 max-w-full cursor-pointer truncate rounded-sm border-0 bg-transparent p-0 text-left [font-family:inherit] text-sm font-medium text-foreground hover:underline ${focusRing}`}
-                      title={`${title}\n${id}`} disabled={busy} onClick={() => { void actions.openThread(id); onClose(); }}>
+                      title={`${title}\n${id}`} aria-label={`${t("shell.managed.open")}: ${title}`} disabled={busy} onClick={() => { void actions.openThread(id); onClose(); }}>
                       {title}
                     </button>
                   </td>
