@@ -7,6 +7,7 @@ import { app, clipboard, dialog, ipcMain, shell } from "electron";
 import type { BrowserWindow, OpenDialogOptions } from "electron";
 import { ENV, IPC, PERMISSION_PRESETS } from "../shared/ipc";
 import type { PermissionPreset } from "../shared/ipc";
+import type { WorkspaceFileMatch } from "../shared/workspace";
 import type { BranchResult, Diagnostics, HistoryResult, InstallResult, RequestEnvelope, SessionTreeOperation } from "../shared/ipc";
 import { CLIENT_METHODS } from "../shared/protocol";
 import type { ClientMethod, ClientParams, RequestId } from "../shared/protocol";
@@ -110,6 +111,19 @@ export function createSessionFileResolver(supervisor: OmoSupervisor, homeDir: st
     if (!isInside(root, target)) throw new Error("sessionPath is outside the omo sessions directory");
     return target;
   };
+}
+
+/** The renderer names the cwd it believes the thread has; only the thread's own workspace is ever searched. */
+export async function searchThreadWorkspaceFiles(
+  readThread: (threadId: string) => Promise<{ thread: { cwd: string } }>,
+  threadId: unknown,
+  cwd: unknown,
+  query: unknown,
+): Promise<WorkspaceFileMatch[]> {
+  if (typeof query !== "string" || query.length > 200) throw new TypeError("query must be a short string");
+  const { thread } = await readThread(requireString(threadId, "threadId"));
+  if (thread.cwd !== requireString(cwd, "cwd")) throw new Error("cwd is not the thread's workspace");
+  return searchWorkspaceFiles(thread.cwd, query);
 }
 
 function isInside(root: string, target: string): boolean {
@@ -236,13 +250,8 @@ export function registerIpc(deps: IpcDeps): () => void {
     [IPC.installAppUpdate]: () => updater.install(),
     [IPC.getDeviceOverview]: () => getDeviceOverview(homeDir, app.getVersion(), supervisor.getStatus().omo?.version ?? null),
     [IPC.listWorkspaceFiles]: (_event, cwd) => listWorkspaceFiles(requireString(cwd, "cwd")),
-    [IPC.searchWorkspaceFiles]: async (_event, threadId, cwd, query) => {
-      if (typeof query !== "string" || query.length > 200) throw new TypeError("query must be a short string");
-      // The renderer names the cwd it believes the thread has; only the thread's own workspace is ever searched.
-      const { thread } = await supervisor.request("thread/read", { threadId: requireString(threadId, "threadId"), includeTurns: false });
-      if (thread.cwd !== requireString(cwd, "cwd")) throw new Error("cwd is not the thread's workspace");
-      return searchWorkspaceFiles(thread.cwd, query);
-    },
+    [IPC.searchWorkspaceFiles]: (_event, threadId, cwd, query) =>
+      searchThreadWorkspaceFiles((id) => supervisor.request("thread/read", { threadId: id, includeTurns: false }), threadId, cwd, query),
     [IPC.readWorkspaceFile]: (_event, cwd, file) => readWorkspaceFile(requireString(cwd, "cwd"), requireString(file, "relativePath")),
     [IPC.getWorkspaceDiff]: (_event, cwd, file) => getWorkspaceDiff(requireString(cwd, "cwd"), requireString(file, "relativePath")),
     [IPC.listSessionWork]: (_event, cwd, sinceMs) => {
