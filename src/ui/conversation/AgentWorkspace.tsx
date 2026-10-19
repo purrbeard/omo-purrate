@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import type { FormEvent, KeyboardEvent } from "react";
+import type { FormEvent } from "react";
 import type { HistoricalTask, TaskWork } from "../../../shared/ipc";
 import type { LiveTask } from "../../../shared/protocol";
 import { useT } from "../../i18n";
@@ -16,6 +16,7 @@ import clsx from "clsx";
 import { CircleAlert } from "lucide-react";
 import { Button, focusRing } from "../kit";
 import { userErrorText } from "./user-error";
+import { AgentTabStrip } from "./AgentTabStrip";
 
 type Task = LiveTask | HistoricalTask;
 type WorkspaceState = { selected: string | null; closed: string[]; drafts: Record<string, string> };
@@ -36,6 +37,15 @@ function restore(parentId: string): WorkspaceState {
     || (entry.selected !== null && typeof entry.selected !== "string") || !Array.isArray(entry.closed) || !entry.closed.every(id => typeof id === "string")
     || typeof entry.drafts !== "object" || entry.drafts === null || !Object.values(entry.drafts).every(text => typeof text === "string")) return EMPTY;
   return { selected: entry.selected, closed: entry.closed, drafts: entry.drafts as Record<string, string> };
+}
+
+const OPEN_TAB_EVENT = "omo-ui:agent-tab";
+
+/** Selects `taskId` in the agent workspace of `parentId`, reopening a closed tab; a workspace mounted later starts on it. */
+export function openAgentTab(parentId: string, taskId: string): void {
+  const current = restore(parentId);
+  sessions.set(parentId, { ...current, selected: taskId, closed: current.closed.filter(id => id !== taskId) });
+  window.dispatchEvent(new CustomEvent(OPEN_TAB_EVENT, { detail: { parentId, taskId } }));
 }
 
 function historyTurns(work: TaskWork | undefined): ConversationTurn[] {
@@ -65,6 +75,15 @@ function Workspace({ parentId, placement }: { parentId: string; placement: "dock
   const agentChildren = useMemo(() => { const snapshot = store?.getState(); return snapshot === undefined ? [] : selectAgentChildren(snapshot, parentId); }, [store, parentId, threadLinks, threads]);
   const [state, setState] = useState<WorkspaceState>(() => restore(parentId));
   const scroll = useStickToBottom();
+  useEffect(() => {
+    const opened = (event: Event): void => {
+      if (!(event instanceof CustomEvent) || event.detail?.parentId !== parentId || typeof event.detail.taskId !== "string") return;
+      const taskId: string = event.detail.taskId;
+      setState(value => ({ ...value, selected: taskId, closed: value.closed.filter(id => id !== taskId) }));
+    };
+    window.addEventListener(OPEN_TAB_EVENT, opened);
+    return () => window.removeEventListener(OPEN_TAB_EVENT, opened);
+  }, [parentId]);
   // Native holds a message to a finished agent open until that agent has answered, so the wait is tracked per agent.
   const [sending, setSending] = useState<readonly string[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -94,12 +113,8 @@ function Workspace({ parentId, placement }: { parentId: string; placement: "dock
   const work = live?.taskWork.find(item => item.task.task_id === selected?.task_id);
   const turns = useMemo(() => historyTurns(work), [work]);
   const draft = selected === undefined ? "" : state.drafts[selected.task_id] ?? "";
-  const selectedId = selected?.task_id;
-  useEffect(() => {
-    if (selectedId !== undefined) document.getElementById(`agent-tab-${selectedId}`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [selectedId]);
   const canSend = selected !== undefined && !["cancelled", "killed", "lost"].includes(selected.status);
-  const select = (taskId: string) => setState(value => ({ ...value, selected: taskId }));
+  const select = (taskId: string) => setState(value => ({ ...value, selected: taskId, closed: value.closed.filter(id => id !== taskId) }));
   const close = (taskId: string) => setState(value => ({ ...value, selected: value.selected === taskId ? null : value.selected, closed: [...value.closed, taskId] }));
   const send = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
@@ -122,27 +137,9 @@ function Workspace({ parentId, placement }: { parentId: string; placement: "dock
     catch (cause) { setErrors(value => ({ ...value, [taskId]: userErrorText(cause, t("conversation.error.requestFailed")).text })); }
     finally { setStopping(value => value.filter(entry => entry !== taskId)); }
   };
-  const tabKeys = (event: KeyboardEvent<HTMLDivElement>) => {
-    const index = open.findIndex(task => task.task_id === selected?.task_id);
-    const offset = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-    const next = offset !== 0 ? open[(index + offset + open.length) % open.length]
-      : event.key === "Home" ? open[0] : event.key === "End" ? open.at(-1) : undefined;
-    if (next === undefined) return;
-    event.preventDefault(); select(next.task_id);
-    document.getElementById(`agent-tab-${next.task_id}`)?.focus();
-  };
   return <section className={"flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-lg border border-solid border-border bg-background"} data-testid="agent-workspace" data-parent-id={parentId} data-placement={placement}>
-    <div className={"flex shrink-0 overflow-x-auto border-0 border-b border-solid border-border px-2 [scrollbar-width:none]"} role="tablist" aria-label={t("activity.agents")} onKeyDown={tabKeys}>
-      {open.map(task => <div key={task.task_id} className={"flex shrink-0 items-center"}>
-        <button id={`agent-tab-${task.task_id}`} type="button" role="tab" className={clsx("m-0 flex min-h-10 cursor-pointer items-center gap-[7px] border-0 border-b-2 border-solid border-transparent bg-transparent px-2.5 py-2 whitespace-nowrap text-muted-foreground [font-family:inherit] aria-selected:border-foreground aria-selected:text-foreground", focusRing)}
-          aria-selected={task.task_id === selected?.task_id} aria-controls="agent-chat-panel" tabIndex={task.task_id === selected?.task_id ? 0 : -1}
-          data-testid="agent-chat-tab" data-task-id={task.task_id} data-status={task.status} onClick={() => select(task.task_id)}>
-          <span className={"size-[7px] shrink-0 rounded-full bg-muted-foreground data-[status=error]:bg-destructive-foreground data-[status=running]:bg-foreground"} data-status={task.status} />{task.name ?? task.agent_type ?? task.category ?? task.task_id}
-        </button>
-        <button type="button" className={clsx("m-0 min-h-10 cursor-pointer border-0 bg-transparent px-1.5 text-muted-foreground hover:text-foreground", focusRing)} aria-label={`${task.name ?? task.task_id} · ${t("activity.closeAgents")}`} onClick={() => close(task.task_id)}>×</button>
-      </div>)}
-      {state.closed.length > 0 && <button className={clsx("m-0 min-h-10 cursor-pointer border-0 bg-transparent px-2 text-muted-foreground [font-family:inherit] hover:text-foreground", focusRing)} type="button" onClick={() => setState(value => ({ ...value, closed: [] }))}>+ {t("activity.agents")}</button>}
-    </div>
+    <AgentTabStrip open={open} all={tasks} selectedId={selected?.task_id} closedCount={state.closed.length} live={live?.freshness === "live"}
+      onSelect={select} onClose={close} onReopen={() => setState(value => ({ ...value, closed: [] }))} />
     {linkedSessions.length > 0 && <div className={"flex shrink-0 flex-col gap-1.5 border-0 border-b border-solid border-border px-3 py-2.5"}>
       {linkedSessions.map(child => <button key={child.id} type="button" className={clsx("m-0 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-solid border-border bg-transparent px-2.5 py-2 text-left text-[13px] text-foreground [font-family:inherit] hover:bg-accent aria-pressed:bg-accent [&>span]:shrink-0 [&>span]:text-[11px] [&>span]:text-muted-foreground", focusRing)} data-testid="agent-row" data-agent-thread-id={child.id}
         aria-pressed={activeThreadId === child.id} onClick={() => { void actions.openThread(child.id); if (placement === "overlay") uiState.setAgentPanelOpen(false); }}>
