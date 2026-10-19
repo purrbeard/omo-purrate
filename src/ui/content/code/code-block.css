@@ -33,7 +33,8 @@ body[data-ds-dark-theme] {
 
 /* Callers pick the code size through --code-block-font (default 11/19 code). */
 [data-code-block] pre {
-  margin: 0;
+  /* Beats the markdown document's `pre` margin regardless of sheet order. */
+  margin: 0 !important;
   padding: 6px 22px 20px;
   overflow-x: auto;
   font: var(--code-block-font, var(--dsw-font-markdown-code-block));

@@ -156,7 +156,7 @@ const SCROLLBAR = clsx(
  */
 const HEADER = clsx(
   '-ml-[var(--tb-gutter,30px)] flex max-h-[150px] items-start gap-3 overflow-y-auto rounded-t-[var(--dsw-radius-lg)]',
-  'py-[9px] pr-3.5 pl-[var(--tb-gutter,30px)] group-data-body/terminal:border-b-[0.5px] group-data-body/terminal:border-solid group-data-body/terminal:border-border',
+  'border-0 border-solid border-border py-[9px] pr-3.5 pl-[var(--tb-gutter,30px)] group-data-body/terminal:border-b-[0.5px]',
   SCROLLBAR,
 )
 

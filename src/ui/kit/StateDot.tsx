@@ -74,14 +74,14 @@ export function StateDot({ state, size, className }: StateDotProps) {
   }
   return (
     <span
-      className={clsx(
-        "relative inline-block flex-none after:absolute after:inset-[20%] after:rounded-full after:bg-current after:content-['']",
-        tone[state],
-        className,
-      )}
+      // No position of its own, so a caller may place the dot absolutely.
+      className={clsx('inline-grid flex-none place-items-center', tone[state], className)}
       data-state={state}
       style={{ width: edge, height: edge }}
       aria-hidden="true"
-    />
+    >
+      {/* 50%, not rounded-full: an infinite radius squares off under a scaled canvas (WorkflowGraph zoom). */}
+      <span className="size-[60%] rounded-[50%] bg-current" />
+    </span>
   )
 }
