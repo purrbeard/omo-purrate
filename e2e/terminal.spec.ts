@@ -40,14 +40,8 @@ test("interactive PTY supports PowerShell colors, prompts, UTF-8, workspace and 
     await expect(panel).toHaveAttribute("data-running", "true");
     await expect(panel).toHaveAttribute("data-placement", "bottom");
     await expect(output.locator(".xterm-helper-textarea")).toBeFocused();
-    // The font size and cursor blink preferences reach the open xterm and are mirrored on the pane.
     const pane = panel.getByTestId("terminal-pane");
     await expect(pane).toHaveAttribute("data-cursor-blink", "true");
-    await running.page.evaluate(() => window.omo.setPreferences({ terminalFontSize: 17, terminalCursorBlink: false }));
-    await expect(pane).toHaveAttribute("data-font-size", "17");
-    await expect(pane).toHaveAttribute("data-cursor-blink", "false");
-    const options = await output.evaluate((element: HTMLDivElement & { terminal?: Terminal }) => ({ size: element.terminal?.options.fontSize, blink: element.terminal?.options.cursorBlink }));
-    expect(options).toEqual({ size: 17, blink: false });
     // When / Then: a normal interactive shell, not a command reader on piped stdin.
     await command(output, '"edition-$($PSVersionTable.PSEdition)"', ["edition-Desktop", "edition-Core"]);
     await command(output, "Write-Host -ForegroundColor Red red-ok", "red-ok");
@@ -121,6 +115,15 @@ test("interactive PTY supports PowerShell colors, prompts, UTF-8, workspace and 
     const width = await answered;
     expect(width.reported).toBe(width.cols);
     expect(width.cols).not.toBe(before);
+    // The font size and cursor blink preferences reach the open xterm and are mirrored on the pane. Changing the font
+    // refits the PTY, so it runs after the output and resize checks above.
+    await running.page.evaluate(() => window.omo.setPreferences({ terminalFontSize: 17, terminalCursorBlink: false }));
+    await expect(pane).toHaveAttribute("data-font-size", "17");
+    await expect(pane).toHaveAttribute("data-cursor-blink", "false");
+    const options = await output.evaluate((element: HTMLDivElement & { terminal?: Terminal }) => ({ size: element.terminal?.options.fontSize, blink: element.terminal?.options.cursorBlink }));
+    expect(options).toEqual({ size: 17, blink: false });
+    await running.page.evaluate(() => window.omo.setPreferences({ terminalFontSize: null, terminalCursorBlink: true }));
+    await expect(pane).toHaveAttribute("data-cursor-blink", "true");
     await running.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1280, 820));
     await setTheme(running.page, "light");
     await shot(running.page, "terminal-light");

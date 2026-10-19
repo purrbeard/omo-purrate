@@ -101,6 +101,8 @@ export async function launchApp(options: LaunchOptions): Promise<LaunchedApp> {
   delete env[ENV.omoBin];
   delete env["FAKE_OMO_HOME"];
   delete env["FAKE_OMO_LOG"];
+  // The terminal spec asserts ANSI colors, and PowerShell 7 renders plain text when the caller's shell sets NO_COLOR.
+  delete env["NO_COLOR"];
 
   const userData = options.userData ?? own("user-data");
   const preferences = path.join(userData, "preferences.json");
