@@ -2,9 +2,9 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import clsx from "clsx";
 import { Search } from "lucide-react";
-import { observeComposition, ShortcutKeys } from "@deepseek-ai/dsh-client-ui-primitives";
+import { observeComposition } from "../lib/keyboard-composition";
 import { useT } from "../../i18n";
-import { Dialog } from "../kit";
+import { Dialog, ShortcutKeys } from "../kit";
 import { TESTID } from "../testids";
 import { filterPaletteEntries, type PaletteEntry } from "./palette-model";
 

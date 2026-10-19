@@ -1,4 +1,4 @@
-import { relativeTime } from "../../dsh/primitives/relative-time";
+import { relativeTime } from "../lib/relative-time";
 import type { TimeFormatPreference } from "../../../shared/ipc";
 import type { Translate } from "../../i18n";
 import { formatClockTime } from "../time-format";

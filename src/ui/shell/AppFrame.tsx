@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { TESTID } from "../testids";
-import { useModalLayer } from "../../dsh/primitives/useModalLayer";
+import { useModalLayer } from "../lib/modal-layer";
 import { useT } from "../../i18n";
 import { CENTER_MIN, RIGHTBAR_MIN, computeColumns } from "./columns";
 import clsx from "clsx";

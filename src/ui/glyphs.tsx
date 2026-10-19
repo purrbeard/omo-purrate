@@ -1,7 +1,12 @@
-import type { IconProps } from "@deepseek-ai/dsh-client-ui-primitives";
+/** Shared props for the app glyphs; color rides currentColor. */
+export interface GlyphProps {
+  /** Square edge in px; each glyph has its own default. */
+  size?: number | undefined;
+  className?: string | undefined;
+}
 
 /** The OmO app icon (build/icon.svg) at UI size: dark rounded tile, two eye rings, orange smile. */
-export function BrandMark({ size = 20, className }: IconProps) {
+export function BrandMark({ size = 20, className }: GlyphProps) {
   return (
     <svg viewBox="0 0 1024 1024" width={size} height={size} className={className} aria-hidden>
       <rect x="100" y="100" width="824" height="824" rx="185" fill="#26272d" />
@@ -23,7 +28,7 @@ export function BrandMark({ size = 20, className }: IconProps) {
 }
 
 /** 2x3 dot grip. */
-export function GripGlyph({ size = 14, className }: IconProps) {
+export function GripGlyph({ size = 14, className }: GlyphProps) {
   return (
     <svg viewBox="0 0 14 14" width={size} height={size} className={className} aria-hidden>
       {[3, 7, 11].flatMap((y) =>
@@ -34,7 +39,7 @@ export function GripGlyph({ size = 14, className }: IconProps) {
 }
 
 /** Open padlock. */
-export function LockOpenGlyph({ size = 14, className }: IconProps) {
+export function LockOpenGlyph({ size = 14, className }: GlyphProps) {
   return (
     <svg viewBox="0 0 16 16" width={size} height={size} className={className} aria-hidden>
       <rect x="3" y="7" width="10" height="7" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
@@ -44,7 +49,7 @@ export function LockOpenGlyph({ size = 14, className }: IconProps) {
 }
 
 /** Generic code-editor glyph used for the Open button (a chevron pair in a rounded tile). */
-export function EditorGlyph({ size = 14, className }: IconProps) {
+export function EditorGlyph({ size = 14, className }: GlyphProps) {
   return (
     <svg viewBox="0 0 16 16" width={size} height={size} className={className} aria-hidden>
       <rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="none" stroke="currentColor" strokeWidth="1.3" />
@@ -54,7 +59,7 @@ export function EditorGlyph({ size = 14, className }: IconProps) {
 }
 
 /** Terminal prompt in a rounded tile. */
-export function TerminalGlyph({ size = 14, className }: IconProps) {
+export function TerminalGlyph({ size = 14, className }: GlyphProps) {
   return (
     <svg viewBox="0 0 16 16" width={size} height={size} className={className} aria-hidden>
       <rect x="1.5" y="2.5" width="13" height="11" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
@@ -64,7 +69,7 @@ export function TerminalGlyph({ size = 14, className }: IconProps) {
 }
 
 /** Git branch: a vertical line forking into two commits. */
-export function BranchGlyph({ size = 14, className }: IconProps) {
+export function BranchGlyph({ size = 14, className }: GlyphProps) {
   return (
     <svg viewBox="0 0 16 16" width={size} height={size} className={className} aria-hidden>
       <circle cx="4.5" cy="3.8" r="1.7" fill="none" stroke="currentColor" strokeWidth="1.3" />
@@ -76,7 +81,7 @@ export function BranchGlyph({ size = 14, className }: IconProps) {
 }
 
 /** Plus inside a circle, for the dashed New project button. */
-export function PlusCircleGlyph({ size = 16, className }: IconProps) {
+export function PlusCircleGlyph({ size = 16, className }: GlyphProps) {
   return (
     <svg viewBox="0 0 16 16" width={size} height={size} className={className} aria-hidden>
       <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
@@ -86,7 +91,7 @@ export function PlusCircleGlyph({ size = 16, className }: IconProps) {
 }
 
 /** Up arrow for the round send button. */
-export function ArrowUpGlyph({ size = 16, className }: IconProps) {
+export function ArrowUpGlyph({ size = 16, className }: GlyphProps) {
   return (
     <svg viewBox="0 0 16 16" width={size} height={size} className={className} aria-hidden>
       <path d="M8 13V3.5M3.8 7.7 8 3.5l4.2 4.2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />

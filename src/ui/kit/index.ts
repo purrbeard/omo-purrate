@@ -28,3 +28,9 @@ export { TextShimmer } from './TextShimmer'
 export type { TextShimmerProps } from './TextShimmer'
 export { DisclosureRow } from './DisclosureRow'
 export type { DisclosureRowProps } from './DisclosureRow'
+
+// controls track
+export { MenuGroup, MenuSurface } from './MenuSurface'
+export type { MenuGroupProps, MenuSurfaceProps } from './MenuSurface'
+export { ShortcutKeys } from './ShortcutKeys'
+export type { ShortcutKeysProps } from './ShortcutKeys'

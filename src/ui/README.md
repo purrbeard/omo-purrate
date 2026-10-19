@@ -37,7 +37,7 @@
 
 ## Styling rules
 
-Only DSH `--dsw-*` / `--ds-*` variables (see `src/dsh/theme/design-platform.css`) through CSS modules; no hardcoded colors. `src/ui/theme/omo-theme.css` loads last and overrides the token values with the OmO palette (Geist and Geist Mono from `src/dsh/theme/geist-font.css`, neutral text on violet-tinted light/dark backgrounds, which also cover the DSH layer, bubble, code-block, sidebar-item and menu fills, the radius scale) and declares the OmO-only tokens (`--dsw-omo-*`: accents and the icon color on them, keyword gradient, badge saturation/lightness, sidebar glow, the violet tint of the translucent macOS sidebar). In the dark theme `--dsw-alias-label-primary-foreground` stays dark because the DSH primary fill is light there. Dark theme is `body[data-ds-dark-theme]`.
+Only DSH `--dsw-*` / `--ds-*` variables (see `src/ui/theme/legacy-tokens.css` and `src/ui/theme/dsw-bridge.css`) through CSS modules; no hardcoded colors. `src/ui/theme/omo-theme.css` loads last and overrides the token values with the OmO palette (Geist and Geist Mono from `src/ui/theme/fonts.css`, neutral text on violet-tinted light/dark backgrounds, which also cover the DSH layer, bubble, code-block, sidebar-item and menu fills, the radius scale) and declares the OmO-only tokens (`--dsw-omo-*`: accents and the icon color on them, keyword gradient, badge saturation/lightness, sidebar glow, the violet tint of the translucent macOS sidebar). In the dark theme `--dsw-alias-label-primary-foreground` stays dark because the DSH primary fill is light there. Dark theme is `body[data-ds-dark-theme]`.
 
 ## QA
 

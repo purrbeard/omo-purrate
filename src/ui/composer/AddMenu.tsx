@@ -1,13 +1,27 @@
 import { useState } from "react";
-import { IconPaperclipOutlineRegular, IconFolderOpenOutlineRegular, IconPlanOutlineRegular, IconSkillOutlineRegular, IconEditOutlineRegular, Menu } from "@deepseek-ai/dsh-client-ui-primitives";
-import type { MenuEntry } from "@deepseek-ai/dsh-client-ui-primitives";
+import type { ReactNode } from "react";
+import { Check, ClipboardList, FolderOpen, Paperclip, ScrollText, SquarePen } from "lucide-react";
 import type { SkillMetadata } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import { skillSummary } from "./skill-draft";
 import clsx from "clsx";
-import { focusRing } from "../kit";
+import { focusRing, Menu } from "../kit";
 
 export type AddAction = "files" | "folder" | "terminal" | "goal" | "plan" | "sketch";
+
+/** A row label: the action name, then a muted hint that truncates (or wraps below it on narrow windows). */
+function Label({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <span className="flex min-w-0 flex-1 items-baseline gap-2 max-[720px]:flex-col max-[720px]:items-start max-[720px]:gap-0">
+      <span className="shrink-0 font-medium">{title}</span>
+      {hint !== undefined && <small className="min-w-0 truncate text-xs text-muted-foreground max-[720px]:whitespace-normal max-[720px]:leading-[18px]">{hint}</small>}
+    </span>
+  );
+}
+
+const GoalIcon = (): ReactNode => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" /><circle cx="8" cy="8" r="2.5" fill="none" stroke="currentColor" /></svg>
+);
 
 export function AddMenu({ disabled, skills, loading, plan, onOpen, onAction, onSkill }: {
   disabled: boolean;
@@ -20,31 +34,38 @@ export function AddMenu({ disabled, skills, loading, plan, onOpen, onAction, onS
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const entries: MenuEntry[] = [
-    { type: "label", id: "add-label", text: t("composer.add.label") },
-    { id: "files", label: t("composer.add.files"), icon: <IconPaperclipOutlineRegular size={16} /> },
-    { id: "folder", label: t("composer.add.folder"), icon: <IconFolderOpenOutlineRegular size={16} /> },
-    { id: "terminal", label: <><span>{t("composer.add.terminal")}</span><small>{t("composer.add.terminalHint")}</small></>, icon: <span aria-hidden>›_</span> },
-    { id: "goal", label: <><span>{t("composer.add.goal")}</span><small>{t("composer.add.goalHint")}</small></>, icon: <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" /><circle cx="8" cy="8" r="2.5" fill="none" stroke="currentColor" /></svg> },
-    { id: "plan", disabled: !skills.some(skill => skill.name === "ulw-plan"), label: <><span>{t("composer.add.plan")}</span><small>{plan ? t("composer.add.planRemove") : t("composer.add.planHint")}</small></>, icon: <IconPlanOutlineRegular size={16} /> },
-    { id: "sketch", label: t("composer.add.sketch"), icon: <IconEditOutlineRegular size={16} /> },
-    { type: "separator", id: "skills-separator" },
-    { type: "label", id: "skills-label", text: t("composer.add.skills") },
-    ...skills.map(skill => ({ id: `skill:${skill.name}`, label: <><span>{skill.interface?.displayName ?? skill.name}</span><small>{skillSummary(skill)}</small></>, icon: <IconSkillOutlineRegular size={16} /> })),
-  ];
-  if (skills.length === 0) entries.push({ type: "label", id: "skills-status", text: loading ? t("composer.add.skillsLoading") : t("composer.add.skillsNone") });
-  return <Menu open={open} side="top" portal autoFocus listClassName="w-[min(540px,calc(100vw-32px))]! max-w-[min(540px,calc(100vw-32px))]! rounded-2xl! [&_small]:ml-2 [&_small]:text-xs [&_small]:text-muted-foreground max-[720px]:[&_small]:ml-0 max-[720px]:[&_small]:block max-[720px]:[&_small]:leading-[18px] max-[720px]:[&_small]:whitespace-normal" items={entries}
-    selectedId={plan ? "plan" : undefined} onClose={() => setOpen(false)}
-    onSelect={id => {
-      setOpen(false);
-      const skill = skills.find(skill => id === `skill:${skill.name}`);
-      if (skill !== undefined) { onSkill(skill); return; }
-      switch (id) {
-        case "files": case "folder": case "terminal": case "goal": case "plan": case "sketch": onAction(id); break;
-      }
-    }}
-    anchor={<button type="button" className={clsx("m-0 inline-flex size-7 cursor-pointer items-center justify-center rounded-full border-0 bg-accent p-0 text-muted-foreground transition-colors duration-150 hover:not-disabled:text-foreground disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none", focusRing)} data-testid="composer-add" aria-label={t("composer.add.label")}
-      aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => { if (!open) onOpen(); setOpen(!open); }}>
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-    </button>} />;
+  return (
+    <Menu.Root open={open} onOpenChange={(next) => { if (next) onOpen(); setOpen(next); }}>
+      <Menu.Trigger className={clsx("m-0 inline-flex size-7 cursor-pointer items-center justify-center rounded-full border-0 bg-accent p-0 text-muted-foreground transition-colors duration-150 hover:not-disabled:text-foreground disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none", focusRing)} data-testid="composer-add" aria-label={t("composer.add.label")}
+        disabled={disabled}>
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+      </Menu.Trigger>
+      <Menu.Content side="top" className="w-[min(540px,calc(100vw-32px))] rounded-2xl! p-1.5!">
+        <Menu.Group>
+          <Menu.GroupLabel>{t("composer.add.label")}</Menu.GroupLabel>
+          <Menu.Item icon={<Paperclip />} onClick={() => onAction("files")}><Label title={t("composer.add.files")} /></Menu.Item>
+          <Menu.Item icon={<FolderOpen />} onClick={() => onAction("folder")}><Label title={t("composer.add.folder")} /></Menu.Item>
+          <Menu.Item icon={<span className="inline-flex w-4 shrink-0 justify-center" aria-hidden>›_</span>} onClick={() => onAction("terminal")}>
+            <Label title={t("composer.add.terminal")} hint={t("composer.add.terminalHint")} />
+          </Menu.Item>
+          <Menu.Item icon={<GoalIcon />} onClick={() => onAction("goal")}><Label title={t("composer.add.goal")} hint={t("composer.add.goalHint")} /></Menu.Item>
+          <Menu.Item icon={<ClipboardList />} disabled={!skills.some(skill => skill.name === "ulw-plan")} onClick={() => onAction("plan")}>
+            <Label title={t("composer.add.plan")} hint={plan ? t("composer.add.planRemove") : t("composer.add.planHint")} />
+            {plan && <Check className="ml-auto" aria-hidden />}
+          </Menu.Item>
+          <Menu.Item icon={<SquarePen />} onClick={() => onAction("sketch")}><Label title={t("composer.add.sketch")} /></Menu.Item>
+        </Menu.Group>
+        <Menu.Separator />
+        <Menu.Group>
+          <Menu.GroupLabel>{t("composer.add.skills")}</Menu.GroupLabel>
+          {skills.map(skill => (
+            <Menu.Item key={skill.name} icon={<ScrollText />} onClick={() => onSkill(skill)}>
+              <Label title={skill.interface?.displayName ?? skill.name} hint={skillSummary(skill)} />
+            </Menu.Item>
+          ))}
+          {skills.length === 0 && <div className="px-2 py-1.5 text-xs text-muted-foreground">{loading ? t("composer.add.skillsLoading") : t("composer.add.skillsNone")}</div>}
+        </Menu.Group>
+      </Menu.Content>
+    </Menu.Root>
+  );
 }

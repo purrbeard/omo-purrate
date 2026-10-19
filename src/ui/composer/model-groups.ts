@@ -1,4 +1,4 @@
-import { rankByName } from "../../dsh/primitives/rank-by-name";
+import { rankByName } from "../lib/rank-by-name";
 import type { Model, ReasoningEffort } from "../../../shared/protocol";
 
 export interface ModelGroup {

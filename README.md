@@ -323,7 +323,7 @@ Environment variables (defined in `shared/ipc.ts`):
 ## Credits
 
 - The interface, design tokens and icons are taken from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), Copyright (c) 2026 DeepSeek, MIT License. See [NOTICE](NOTICE).
-- The Geist and Geist Mono fonts (`src/dsh/theme/Geist-OFL.txt`) and the Montserrat font (`src/dsh/theme/Montserrat-OFL.txt`) are licensed under the SIL Open Font License 1.1.
+- The Geist and Geist Mono fonts (`src/ui/theme/fonts/Geist-OFL.txt`) are licensed under the SIL Open Font License 1.1.
 - The side chat's layout follows a study of the [Aside](https://aside.com) browser's side panel; no Aside code, artwork or fonts are included.
 - The OmO UI app icon is an original design.
 

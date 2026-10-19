@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent, SyntheticEvent } from "react";
 import clsx from "clsx";
-import { IconFolderOpenOutlineRegular, IconPaperclipOutlineRegular, IconCloseOutlineRegular, Tooltip } from "@deepseek-ai/dsh-client-ui-primitives";
-import { focusRing } from "../kit";
+import { FolderOpen, Paperclip, X } from "lucide-react";
+import { focusRing, Tooltip } from "../kit";
 import { ArrowUpGlyph } from "../glyphs";
 import { parseBtwCommand, selectActiveCwd, selectIsTurnActive, selectSkillCatalog } from "../../state";
 import type { SkillCatalog } from "../../state";
@@ -504,7 +504,7 @@ export function Composer() {
         {images.length > 0 && <div className="flex flex-wrap gap-2.5 px-4 py-1">
           {userMessageParts(images).images.map((image, index) => <div key={image.key} className="relative size-[72px]" data-testid={TESTID.attachmentThumbnail}>
             <img className="size-full rounded-sm border border-solid border-border object-cover" src={image.src} alt={t("composer.images.preview", { number: index + 1 })} />
-            <button type="button" className={clsx("absolute -top-1 -right-1 m-0 grid size-[22px] cursor-pointer place-items-center rounded-sm border border-solid border-border bg-composer p-0 text-composer-foreground", focusRing)} data-testid={TESTID.attachmentRemove} aria-label={t("composer.images.remove", { number: index + 1 })} onClick={() => setImages((current) => current.filter((_, position) => position !== index))}><IconCloseOutlineRegular size={14} /></button>
+            <button type="button" className={clsx("absolute -top-1 -right-1 m-0 grid size-[22px] cursor-pointer place-items-center rounded-sm border border-solid border-border bg-composer p-0 text-composer-foreground", focusRing)} data-testid={TESTID.attachmentRemove} aria-label={t("composer.images.remove", { number: index + 1 })} onClick={() => setImages((current) => current.filter((_, position) => position !== index))}><X className="size-3.5" aria-hidden /></button>
           </div>)}
         </div>}
         {imageNotice !== "" && <div className="px-4 text-[13px] text-muted-foreground" data-testid={TESTID.attachmentNotice} role="status">{imageNotice}</div>}
@@ -512,10 +512,10 @@ export function Composer() {
           {context.map((entry, index) => <button type="button" key={`${entry.kind}:${entry.value}`} data-testid="context-chip" className={contextChipClass}
             title={entry.value} aria-label={`${t("composer.chip.removeAttachment")}: ${entry.kind === "terminal" ? "WindowsTerminal" : basename(entry.value)}`}
             onClick={() => setContext(current => current.filter((_, position) => position !== index))}>
-            <span>{entry.kind === "terminal" ? "WindowsTerminal" : basename(entry.value)}</span><IconCloseOutlineRegular size={12} />
+            <span>{entry.kind === "terminal" ? "WindowsTerminal" : basename(entry.value)}</span><X className="size-3" aria-hidden />
           </button>)}
-          {planMode && <button type="button" className={contextChipClass} data-testid="plan-mode-chip" aria-label={t("composer.chip.removePlan")} onClick={() => setPlanMode(false)}>{t("composer.chip.planChip")}<IconCloseOutlineRegular size={12} /></button>}
-          {goalDraft !== "" && <button type="button" className={contextChipClass} data-testid="goal-draft-chip" title={goalDraft} aria-label={t("composer.chip.removeGoal")} onClick={() => setGoalDraft("")}><span>{t("composer.chip.goalChip")}: {goalDraft}</span><IconCloseOutlineRegular size={12} /></button>}
+          {planMode && <button type="button" className={contextChipClass} data-testid="plan-mode-chip" aria-label={t("composer.chip.removePlan")} onClick={() => setPlanMode(false)}>{t("composer.chip.planChip")}<X className="size-3" aria-hidden /></button>}
+          {goalDraft !== "" && <button type="button" className={contextChipClass} data-testid="goal-draft-chip" title={goalDraft} aria-label={t("composer.chip.removeGoal")} onClick={() => setGoalDraft("")}><span>{t("composer.chip.goalChip")}: {goalDraft}</span><X className="size-3" aria-hidden /></button>}
         </div>}
         <div className="relative mr-1">
           <div
@@ -606,7 +606,7 @@ export function Composer() {
                 disabled={!connected}
                 onClick={() => void pickWorkspace()}
               >
-                <IconFolderOpenOutlineRegular className="flex-none opacity-70" size={14} />
+                <FolderOpen className="size-3.5 flex-none opacity-70" aria-hidden />
                 <span className="min-w-0 truncate">{workspace === null ? t("composer.workspace.choose") : basename(workspace)}</span>
               </button>
             )}
@@ -622,34 +622,40 @@ export function Composer() {
               <ModelPicker disabled={!connected} />
               <ReasoningPicker disabled={!connected} />
             </div>
-            <button type="button" className={clsx(chipClass, "w-7 justify-center px-0")} data-testid={TESTID.attachmentPick} aria-label={t("composer.images.attach")} disabled={!connected || busy} onClick={() => void pickReferences("files")}><IconPaperclipOutlineRegular size={16} /></button>
+            <button type="button" className={clsx(chipClass, "w-7 justify-center px-0")} data-testid={TESTID.attachmentPick} aria-label={t("composer.images.attach")} disabled={!connected || busy} onClick={() => void pickReferences("files")}><Paperclip className="size-4" aria-hidden /></button>
             {turnActive && (
-              <Tooltip label={t("composer.stop")} side="top" delayMs={500}>
+              <Tooltip.Root>
+                <Tooltip.Trigger delay={500} render={
+                  <button
+                    type="button"
+                    className={clsx(roundAction, "bg-secondary text-secondary-foreground hover:bg-accent")}
+                    data-testid={TESTID.composerStop}
+                    aria-label={t("composer.stop")}
+                    onMouseDown={keepFocus}
+                    onClick={() => void actions.interrupt()}
+                  >
+                    <StopIcon />
+                  </button>
+                } />
+                <Tooltip.Content side="top">{t("composer.stop")}</Tooltip.Content>
+              </Tooltip.Root>
+            )}
+            <Tooltip.Root disabled={!canSend}>
+              <Tooltip.Trigger delay={500} render={
                 <button
                   type="button"
-                  className={clsx(roundAction, "bg-secondary text-secondary-foreground hover:bg-accent")}
-                  data-testid={TESTID.composerStop}
-                  aria-label={t("composer.stop")}
+                  className={clsx(roundAction, canSend ? "bg-composer-send text-composer-send-foreground hover:bg-composer-send/90" : "bg-muted text-muted-foreground")}
+                  data-testid={TESTID.composerSend}
+                  aria-label={sendLabel}
+                  disabled={!canSend}
                   onMouseDown={keepFocus}
-                  onClick={() => void actions.interrupt()}
+                  onClick={() => void submit()}
                 >
-                  <StopIcon />
+                  <ArrowUpGlyph size={16} />
                 </button>
-              </Tooltip>
-            )}
-            <Tooltip label={sendLabel} side="top" delayMs={500} disabled={!canSend}>
-              <button
-                type="button"
-                className={clsx(roundAction, canSend ? "bg-composer-send text-composer-send-foreground hover:bg-composer-send/90" : "bg-muted text-muted-foreground")}
-                data-testid={TESTID.composerSend}
-                aria-label={sendLabel}
-                disabled={!canSend}
-                onMouseDown={keepFocus}
-                onClick={() => void submit()}
-              >
-                <ArrowUpGlyph size={16} />
-              </button>
-            </Tooltip>
+              } />
+              <Tooltip.Content side="top">{sendLabel}</Tooltip.Content>
+            </Tooltip.Root>
           </div>
         </div>
       </div>
