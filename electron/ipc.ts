@@ -487,7 +487,11 @@ export function registerIpc(deps: IpcDeps): () => void {
       userDataPath: app.getPath("userData"),
     }),
     [IPC.getPreferences]: () => prefs.get(),
-    [IPC.setPreferences]: (_event, patch) => prefs.set(patch),
+    [IPC.setPreferences]: (_event, patch) => {
+      const next = prefs.set(patch);
+      send(IPC.preferencesChanged, next);
+      return next;
+    },
     [IPC.notify]: (_event, payload) => {
       if (!isRecord(payload)) throw new TypeError("payload must be an object");
       const { title, body, threadId } = payload;

@@ -561,6 +561,8 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   /** Follows one session file for writes by another omo process; null stops. Changes arrive through onHistoryChanged. */
   watchHistory(sessionPath: string | null): Promise<void>;
   onHistoryChanged(listener: (sessionPath: string) => void): () => void;
+  /** Every saved preferences change, whichever caller made it. */
+  onPreferencesChanged(listener: (preferences: Preferences) => void): () => void;
   /** Reads only tasks reachable through explicit child-session links in this workspace's native task store. */
   loadTaskWork(cwd: string, parentSessionId: string): Promise<TaskWork[]>;
   /**
@@ -661,6 +663,7 @@ export const IPC = {
   exportSession: "session:export",
   watchHistory: "history:watch",
   historyChanged: "history:changed",
+  preferencesChanged: "prefs:changed",
   loadTaskWork: "history:task-work",
   watchTaskStore: "history:task-store-watch",
   unwatchTaskStore: "history:task-store-unwatch",
