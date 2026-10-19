@@ -1,0 +1,71 @@
+/* Legacy dsw/dsh token values still referenced by component CSS: the static swatches
+   a few components name directly, elevation shadows, and the content typography scale.
+   Semantic colors live in tokens.css; dsw alias colors are mapped in dsw-bridge.css. */
+
+body {
+  --dsw-static-amber-400: rgb(247, 173, 49);
+  --dsw-static-amber-500: rgb(245, 158, 11);
+  --dsw-static-amber-600: rgb(221, 134, 41);
+  --dsw-static-blue-400: rgb(96, 165, 250);
+  --dsw-static-blue-500: rgb(59, 130, 246);
+  --dsw-static-blue-600: rgb(37, 99, 235);
+  --dsw-static-deepseek-400: rgb(122, 170, 255);
+  --dsw-static-deepseek-450: rgb(86, 134, 254);
+  --dsw-static-deepseek-500: rgb(65, 118, 230);
+  --dsw-static-green-500: rgb(34, 197, 94);
+  --dsw-static-neutral-00: rgb(255, 255, 255);
+  --dsw-static-neutral-400: rgb(162, 164, 166);
+  --dsw-static-neutral-bluish-00: rgb(255, 255, 255);
+  --dsw-static-neutral-bluish-300: rgb(207, 211, 214);
+  --dsw-static-red-600: rgb(236, 19, 19);
+
+  --dsw-shadow-lv3:
+    0 0 1px 0 rgba(0, 0, 0, 0.2), 0 0 4px 0 rgba(0, 0, 0, 0.02), 0 12px 32px 0 rgba(0, 0, 0, 0.08);
+  /* Elevation: a 0.5px hairline drawn in box-shadow (components keep border: 0) plus two
+     faint glows. Surfaces may rebind --dsw-elevation-stroke-color; the default lives on body
+     so a rebinding reaches the descendants that paint the shadow. */
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l4);
+  /* Blocking masks dim the page; menu backgrounds keep their blur. */
+  --dsw-mask-blur: none;
+  --dsw-menu-backdrop-filter: blur(40px) saturate(150%);
+}
+
+body[data-ds-dark-theme] [data-menu-material] {
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l3);
+}
+
+/* Declared per element, not inherited from body: an inherited value is substituted at body,
+   so a rebound --dsw-elevation-stroke-color would never reach var(--dsw-elevation-*). */
+body,
+body * {
+  --dsw-elevation-stroke: 0 0 0 0.5px var(--dsw-elevation-stroke-color);
+  --dsw-elevation-panel:
+    var(--dsw-elevation-stroke), 0 3px 8px 0 rgba(0, 0, 0, 0.03), 0 0 16px 0 rgba(0, 0, 0, 0.02);
+  --dsw-elevation-prominent:
+    var(--dsw-elevation-stroke), 0 3px 8px 0 rgba(0, 0, 0, 0.04), 0 0 20px 0 rgba(0, 0, 0, 0.05);
+  --dsw-elevation-soft:
+    var(--dsw-elevation-stroke), 0 4px 16px 0 rgba(0, 0, 0, 0.03), 0 0 24px 0 rgba(0, 0, 0, 0.03);
+}
+
+/* Content typography. The markdown scale is the Figma export scaled by 0.875 (body 16 -> 14)
+   and rounded to whole pixels. --dsh-content-font-size (default 14px) shifts headings and body
+   by the same delta; secondary text uses size - 1 through 14px, then size - 2. */
+body {
+  --dsh-content-font-delta: calc(var(--dsh-content-font-size, 14px) - 14px);
+  --dsh-content-font-size-secondary: min(calc(var(--dsh-content-font-size, 14px) - 1px), max(13px, calc(var(--dsh-content-font-size, 14px) - 2px)));
+  --dsh-content-font-delta-secondary: calc(var(--dsh-content-font-size-secondary) - 13px);
+
+  --dsw-font-markdown-h1: 700 calc(21px + var(--dsh-content-font-delta)) / calc(30px + var(--dsh-content-font-delta)) var(--dsw-font-family);
+  --dsw-font-markdown-h2: 700 calc(19px + var(--dsh-content-font-delta)) / calc(28px + var(--dsh-content-font-delta)) var(--dsw-font-family);
+  --dsw-font-markdown-h3: 700 calc(18px + var(--dsh-content-font-delta)) / calc(26px + var(--dsh-content-font-delta)) var(--dsw-font-family);
+  --dsw-font-markdown-h4: 600 var(--dsh-content-font-size, 14px) / calc(24px + var(--dsh-content-font-delta)) var(--dsw-font-family);
+  --dsw-font-markdown-base: var(--dsh-content-font-size, 14px) / calc(24px + var(--dsh-content-font-delta)) var(--dsw-font-family);
+  --dsw-font-markdown-base-strong: 600 var(--dsh-content-font-size, 14px) / calc(24px + var(--dsh-content-font-delta)) var(--dsw-font-family);
+  --dsw-font-markdown-table: var(--dsh-content-font-size-secondary, 13px)/calc(22px + var(--dsh-content-font-delta-secondary, 0px)) var(--dsw-font-family);
+  --dsw-font-markdown-table-head: 500 var(--dsh-content-font-size-secondary, 13px)/calc(22px + var(--dsh-content-font-delta-secondary, 0px)) var(--dsw-font-family);
+  --dsw-font-markdown-code: 12px/19px var(--ds-font-family-code);
+  --dsw-font-markdown-code-font-family: var(--ds-font-family-code);
+  --dsw-font-markdown-code-block: 11px/19px var(--ds-font-family-code);
+  --dsw-font-markdown-code-block-small: 11px/16px var(--ds-font-family-code);
+  --dsw-font-xs-13: 13px/20px var(--dsw-font-family);
+}

@@ -26,9 +26,7 @@ extraResources:
     to: NOTICE
   - from: LICENSE
     to: LICENSE
-  - from: src/dsh/theme/Montserrat-OFL.txt
-    to: Montserrat-OFL.txt
-  - from: src/dsh/theme/Geist-OFL.txt
+  - from: src/ui/theme/fonts/Geist-OFL.txt
     to: Geist-OFL.txt
 mac:
   category: public.app-category.developer-tools

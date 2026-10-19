@@ -1,5 +1,5 @@
 /* Shell-owned mount defaults, ported from DSH packages/client/web/src/base.css. The theme
-   sheets in src/dsh/theme load before this file (src/main.tsx). */
+   sheets in src/ui/theme load before this file (src/main.tsx). */
 
 html,
 body,
