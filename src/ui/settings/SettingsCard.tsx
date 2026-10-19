@@ -1,6 +1,6 @@
 // Settings page building blocks: Tailwind utilities over the semantic tokens and kit primitives.
 // Every settings section composes these, so cards, rows, type and errors stay uniform.
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import { useEffect, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import clsx from "clsx";
 import { CircleAlert } from "lucide-react";
 import { SwitchRoot, SwitchThumb, Tabs, focusRing } from "../kit";
@@ -135,5 +135,83 @@ export function Segmented<Value extends string>({ value, options, label, onChang
         <Tabs.Indicator />
       </Tabs.List>
     </Tabs.Root>
+  );
+}
+
+/**
+ * Native range input with a right-aligned value readout. It keeps a draft while dragging and calls `onCommit` when the
+ * pointer, key or focus leaves, so a setting such as the UI scale does not rescale the window under the thumb.
+ */
+export function Slider({ value, min, max, step = 1, unit, label, onCommit, disabled, testId }: {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  unit: string;
+  label: string;
+  onCommit(next: number): void;
+  disabled?: boolean;
+  testId?: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = (): void => { if (draft !== value) onCommit(draft); };
+  return (
+    <div className="flex items-center gap-3">
+      <input
+        type="range"
+        className="h-1.5 w-44 cursor-pointer accent-(--primary) disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label={label}
+        data-testid={testId}
+        min={min}
+        max={max}
+        step={step}
+        value={draft}
+        disabled={disabled}
+        onChange={(event) => setDraft(Number(event.target.value))}
+        onPointerUp={commit}
+        onKeyUp={commit}
+        onBlur={commit}
+      />
+      <output className="w-12 text-right text-sm tabular-nums text-muted-foreground" aria-hidden="true">{draft}{unit}</output>
+    </div>
+  );
+}
+
+/** Size of the first element matching `selector`, rounded and clamped; `fallback` when none is mounted. */
+function currentSize(selector: string, fallback: number, min: number, max: number): number {
+  const element = document.querySelector(selector);
+  const size = element === null ? Number.NaN : parseFloat(getComputedStyle(element).fontSize);
+  return Math.min(max, Math.max(min, Math.round(Number.isFinite(size) ? size : fallback)));
+}
+
+/** A nullable text size: "Default" toggle plus a slider that is disabled while Default is on. */
+export function FontSizeControl({ value, min, max, probe, fallback, label, defaultLabel, onChange, disabled, testId }: {
+  value: number | null;
+  min: number;
+  max: number;
+  /** Selector of an element that shows the theme size today; turning Default off starts from its size. */
+  probe: string;
+  fallback: number;
+  label: string;
+  defaultLabel: string;
+  onChange(next: number | null): void;
+  disabled?: boolean;
+  testId: string;
+}) {
+  return (
+    <>
+      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        {defaultLabel}
+        <Toggle
+          testId={`${testId}-default`}
+          checked={value === null}
+          label={`${label}: ${defaultLabel}`}
+          disabled={disabled}
+          onChange={() => onChange(value === null ? currentSize(probe, fallback, min, max) : null)}
+        />
+      </label>
+      <Slider value={value ?? currentSize(probe, fallback, min, max)} min={min} max={max} unit="px" label={label} testId={testId} disabled={disabled === true || value === null} onCommit={onChange} />
+    </>
   );
 }
