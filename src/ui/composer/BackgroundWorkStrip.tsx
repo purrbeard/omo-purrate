@@ -1,4 +1,4 @@
-import { StateDot } from "@deepseek-ai/dsh-client-ui-primitives";
+import { StateDot } from "../kit";
 import { useT } from "../../i18n";
 import { selectDagRuns, selectTasks, selectThreadLiveState } from "../../state";
 import { useAppSelector } from "../app-context";

@@ -4,7 +4,7 @@ import { useActions, useAppSelector } from "../app-context";
 import type { KeyboardEvent } from "react";
 import clsx from "clsx";
 import { Archive, ChevronDown, Ellipsis, FolderOpen, GitFork, Pencil, Pin, SquarePen, Trash2 } from "lucide-react";
-import { StateDot } from "@deepseek-ai/dsh-client-ui-primitives";
+import { StateDot } from "../kit";
 import type { ThreadSummary, WorkspaceGroup } from "../../state";
 import { selectMainThreadId } from "../../state";
 import { useLocale, useT } from "../../i18n";
