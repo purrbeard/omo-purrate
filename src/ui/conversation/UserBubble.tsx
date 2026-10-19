@@ -1,5 +1,4 @@
 import { memo, useId, useState } from "react";
-import chipCss from "@deepseek-ai/dsh-client-ui-primitives/src/user-text.module.css";
 import type { UserInput } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import { TESTID } from "../testids";
@@ -15,6 +14,9 @@ export interface UserImage {
 }
 
 export const NO_IMAGES: readonly UserImage[] = [];
+
+/** Inline reference chip: shares the bubble's baseline and white-space policy. */
+const REF_CHIP = "inline max-w-full font-medium text-ring [white-space:inherit] [overflow-wrap:anywhere] [text-align:inherit]";
 
 function fileUrl(path: string): string {
   const normalized = path.replaceAll("\\", "/");
@@ -108,7 +110,7 @@ export const UserBubble = memo(function UserBubble({
                 {skills.map((skill) => (
                   <span
                     key={skill.name}
-                    className={`${chipCss.refChip} ${chipCss.slashChip}`}
+                    className={clsx(REF_CHIP, "mx-0.5 font-mono")}
                     data-testid={TESTID.skillChip}
                     data-ref-chip="skill"
                     title={skill.location ?? `/skill:${skill.name}`}
@@ -129,7 +131,7 @@ export const UserBubble = memo(function UserBubble({
               <div className="mt-2 whitespace-normal">
                 <button
                   type="button"
-                  className={clsx(chipCss.refChip, "m-0! cursor-pointer border-0! bg-transparent! px-0! py-0.5! text-xs! [font-family:inherit]!", focusRing)}
+                  className={clsx(REF_CHIP, "m-0 cursor-pointer border-0 bg-transparent px-0 py-0.5 text-xs [font-family:inherit]", focusRing)}
                   data-testid={TESTID.omoContextToggle}
                   aria-expanded={showContext}
                   aria-controls={contextId}

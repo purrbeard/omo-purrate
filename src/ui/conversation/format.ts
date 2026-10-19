@@ -1,4 +1,4 @@
-import { relativizeToCwd, workspaceTitleOf } from "@deepseek-ai/dsh-util-workspace-path";
+import { relativizeToCwd, workspaceTitleOf } from "../content/workspace-path";
 import type { Translate } from "../../i18n";
 import type { ThreadSummary } from "../../state";
 import { projectTitleText } from "./skill-text";

@@ -1,5 +1,7 @@
 import { memo, useCallback, useMemo, useState } from "react";
-import { DisclosureRow, IconThinkOutlineRegular, MarkdownText, TextShimmer } from "@deepseek-ai/dsh-client-ui-primitives";
+import { Brain } from "lucide-react";
+import { MarkdownText } from "../content/markdown/MarkdownText";
+import { DisclosureRow, TextShimmer } from "../kit";
 import type { ReasoningItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import { TESTID } from "../testids";
@@ -7,7 +9,7 @@ import { formatWholeSeconds } from "./format";
 import { useConversationLabels } from "./labels";
 import clsx from "clsx";
 
-const THINK_ICON = <IconThinkOutlineRegular size={14} />;
+const THINK_ICON = <Brain className="size-3.5" aria-hidden />;
 const MIN_REPORTED_THINKING_MS = 1000;
 
 function latestCompletedParagraphFirstLine(text: string): string {

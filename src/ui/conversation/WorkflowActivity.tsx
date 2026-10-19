@@ -1,11 +1,10 @@
-import { StateDot } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useLocale, useT, type MessageKey } from "../../i18n";
 import { selectThreadLiveState } from "../../state";
 import { useAppSelector } from "../app-context";
 import { useUiState } from "../ui-state";
 import { knownNodeState, nodeDot, type NodeState } from "./activity-model";
 import clsx from "clsx";
-import { focusRing } from "../kit";
+import { StateDot, focusRing } from "../kit";
 
 const STATUS_LABELS = {
   pending: "activity.node.pending", blocked: "activity.node.blocked", scheduled: "activity.node.scheduled",

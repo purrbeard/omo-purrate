@@ -1,4 +1,4 @@
-import { StateDot } from "@deepseek-ai/dsh-client-ui-primitives";
+import { StateDot } from "../kit";
 import type { LiveTask } from "../../../shared/protocol";
 import { useT, type MessageKey } from "../../i18n";
 import { isSuspended, knownTaskStatus, taskDot, taskRoute, taskTitle } from "./activity-model";

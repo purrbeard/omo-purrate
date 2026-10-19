@@ -1,11 +1,4 @@
 import { useState } from "react";
-import {
-  IconChecklistOutlineRegular,
-  IconChevronDownOutlineRegular,
-  IconChevronUpOutlineRegular,
-  IconGoalOutlineRegular,
-  StateDot,
-} from "@deepseek-ai/dsh-client-ui-primitives";
 import type { TodoPhase, WireGoal } from "../../../shared/protocol";
 import { useT, type MessageKey } from "../../i18n";
 import { selectDagRuns, selectGoal, selectTasks, selectThreadLiveState, selectTodo } from "../../state";
@@ -15,8 +8,8 @@ import { TESTID } from "../testids";
 import { currentTodo, goalVisible, todoCounts, todoDot, workSummary, type TodoStatus } from "./activity-model";
 import { formatWholeSeconds } from "./format";
 import clsx from "clsx";
-import { CircleAlert } from "lucide-react";
-import { focusRing } from "../kit";
+import { ChevronDown, ChevronUp, CircleAlert, ListChecks, Target } from "lucide-react";
+import { StateDot, focusRing } from "../kit";
 import { userErrorText } from "./user-error";
 
 const goalButton = clsx("m-0 cursor-pointer rounded-sm border-0 bg-muted px-1.5 py-0.5 text-xs text-muted-foreground [font-family:inherit] hover:text-foreground disabled:cursor-default disabled:opacity-50", focusRing);
@@ -54,7 +47,7 @@ export function TodoDock({ phases, restored, live }: { phases: readonly TodoPhas
         onClick={() => setOpen((value) => !value)}
       >
         <span className={lead} aria-hidden>
-          <IconChecklistOutlineRegular size={14} />
+          <ListChecks className="size-3.5" aria-hidden />
         </span>
         <span className={title}>{t("todo.title")}</span>
         <span className="flex-none text-[13px] leading-5 whitespace-nowrap text-muted-foreground">
@@ -64,7 +57,7 @@ export function TodoDock({ phases, restored, live }: { phases: readonly TodoPhas
         {!open && current !== null && <span className="min-w-0 flex-auto truncate text-[13px] leading-5 text-muted-foreground">{current}</span>}
         {restored && <span className={clsx("flex-none rounded-sm bg-muted px-1.5 text-[11px] leading-[18px] whitespace-nowrap text-muted-foreground", (open || current === null) && "ml-auto")}>{t("todo.restored")}</span>}
         <span className={clsx(lead, !restored && "ml-auto")} aria-hidden>
-          {open ? <IconChevronDownOutlineRegular size={14} /> : <IconChevronUpOutlineRegular size={14} />}
+          {open ? <ChevronDown className="size-3.5" aria-hidden /> : <ChevronUp className="size-3.5" aria-hidden />}
         </span>
       </button>
       {open && (
@@ -121,7 +114,7 @@ export function GoalStrip({ goal, threadId }: { goal: WireGoal | null | undefine
   return (
     <section className="box-border flex min-h-9 flex-wrap items-center gap-2.5 border-0 px-3 py-1" data-testid={TESTID.goalStrip} data-status={goal.status} aria-label={t("goal.region")}>
       <span className={lead} aria-hidden>
-        <IconGoalOutlineRegular size={14} />
+        <Target className="size-3.5" aria-hidden />
       </span>
       <span className={title}>{t(GOAL_LABELS[goal.status])}</span>
       <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-foreground/80" title={goal.objective}>

@@ -1,10 +1,8 @@
-import type {
-  CodeToolbarLabels,
-  DiffBlockLabels,
-  JsonTreeLabels,
-  MarkdownLabels,
-  TerminalBlockLabels,
-} from "@deepseek-ai/dsh-client-ui-primitives";
+import type { CodeToolbarLabels } from "../content/code/CodeToolbar";
+import type { DiffBlockLabels } from "../content/DiffBlock";
+import type { JsonTreeLabels } from "../content/JsonTree";
+import type { MarkdownLabels } from "../content/markdown/MarkdownText";
+import type { TerminalBlockLabels } from "../content/TerminalBlock";
 import { useT, type Translate } from "../../i18n";
 
 export interface ConversationLabels {

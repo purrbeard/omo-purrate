@@ -1,5 +1,5 @@
-import { memo, type ReactNode } from "react";
-import { IconPanelLeftOutlineRegular, StateDot, TextShimmer, Tooltip } from "@deepseek-ai/dsh-client-ui-primitives";
+import { memo, type ReactElement, type ReactNode } from "react";
+import { PanelLeft } from "lucide-react";
 import { useT } from "../../i18n";
 import type { ThreadSummary } from "../../state";
 import { WorkspaceBadge } from "../sidebar/WorkspaceBadge";
@@ -9,16 +9,25 @@ import { threadTitle, workspaceName } from "./format";
 import { OpenButton } from "./OpenButton";
 import { CommitPushButton } from "./CommitPushButton";
 import clsx from "clsx";
-import { focusRing } from "../kit";
+import { StateDot, TextShimmer, Tooltip, focusRing } from "../kit";
 
 const headerButton = clsx("m-0 -ml-1 inline-flex size-7 flex-none cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground motion-reduce:transition-none", focusRing);
 
 const HEADER_CLASS = "box-border flex h-[52px] min-w-0 flex-none items-center gap-2.5 pr-4 pl-[calc(16px+var(--dsh-frame-leading-clearance,0px))]";
 
+function HeaderTooltip({ label, align, children }: { label: string; align: "center" | "end"; children: ReactElement }) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger delay={500} render={children} />
+      <Tooltip.Content side="bottom" align={align}>{label}</Tooltip.Content>
+    </Tooltip.Root>
+  );
+}
+
 function SidebarToggle() {
   const t = useT();
   return (
-    <Tooltip label={t("shell.showSidebar")} side="bottom" align="center" delayMs={500}>
+    <HeaderTooltip label={t("shell.showSidebar")} align="center">
       <button
         type="button"
         className={headerButton}
@@ -26,9 +35,9 @@ function SidebarToggle() {
         aria-label={t("shell.showSidebar")}
         onClick={() => uiState.toggleSidebar()}
       >
-        <IconPanelLeftOutlineRegular size={16} />
+        <PanelLeft className="size-4" aria-hidden />
       </button>
-    </Tooltip>
+    </HeaderTooltip>
   );
 }
 
@@ -93,12 +102,12 @@ export const ConversationHeader = memo(function ConversationHeader({
         {cwd !== "" && <CommitPushButton key={cwd} cwd={cwd} />}
         {cwd !== "" && <OpenButton cwd={cwd} />}
         {panels}
-        <Tooltip label={t(dockOpen ? "shell.dock.close" : "shell.dock.open")} side="bottom" align="end" delayMs={500}>
+        <HeaderTooltip label={t(dockOpen ? "shell.dock.close" : "shell.dock.open")} align="end">
           <button type="button" className={headerButton} data-testid="dock-toggle" aria-pressed={dockOpen}
             aria-label={t(dockOpen ? "shell.dock.close" : "shell.dock.open")} onClick={() => uiState.toggleDock()}>
-            <IconPanelLeftOutlineRegular size={16} className={ui.dockSide === "right" ? "-scale-x-100" : undefined} />
+            <PanelLeft className={clsx("size-4", ui.dockSide === "right" && "-scale-x-100")} aria-hidden />
           </button>
-        </Tooltip>
+        </HeaderTooltip>
       </div>
     </header>
   );

@@ -1,4 +1,4 @@
-import type { DiffHunk } from "@deepseek-ai/dsh-client-ui-primitives";
+import type { DiffHunk } from "../content/DiffBlock";
 import type { FileUpdateChange } from "../../../shared/protocol";
 import { isRecord } from "./format";
 
