@@ -3,16 +3,16 @@
   "productName": "OmO UI Windows",
   "version": "0.1.4-win.23",
   "private": true,
-  "description": "Windows desktop fork of OmO UI for the omo coding agent",
+  "description": "omo Purrate - fan-made Windows desktop UI for the omo coding agent",
   "license": "MIT",
-  "author": "sigridjineth",
+  "author": "purrbeard",
   "contributors": [
-    "purrbeard"
+    "sigridjineth (original omo-ui-macosapp, MIT)"
   ],
-  "homepage": "https://github.com/purrbeard/omo-ui-windows",
+  "homepage": "https://github.com/purrbeard/omo-purrate",
   "repository": {
     "type": "git",
-    "url": "https://github.com/purrbeard/omo-ui-windows.git"
+    "url": "https://github.com/purrbeard/omo-purrate.git"
   },
   "type": "module",
   "main": "dist-electron/main.cjs",

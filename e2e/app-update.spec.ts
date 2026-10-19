@@ -9,7 +9,7 @@ test("app update reports unpublished releases and a verified installer candidate
       globalThis.fetch = async () => new Response(JSON.stringify(++checks === 1 ? [] : [{
         tag_name: "v0.1.5-win.1", draft: false, prerelease: true,
         assets: [{ name: "OmO UI Windows Setup 0.1.5-win.1.exe", size: 5,
-          browser_download_url: "https://github.com/purrbeard/omo-ui-windows/releases/download/v0.1.5-win.1/OmO%20UI%20Windows%20Setup%200.1.5-win.1.exe",
+          browser_download_url: "https://github.com/purrbeard/omo-purrate/releases/download/v0.1.5-win.1/OmO%20UI%20Windows%20Setup%200.1.5-win.1.exe",
           digest: `sha256:${"a".repeat(64)}` }],
       }]), { status: 200 });
     });

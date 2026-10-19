@@ -15,8 +15,8 @@ export interface AppUpdaterOptions {
   fetch?: typeof fetch;
 }
 
-const RELEASES_URL = "https://api.github.com/repos/purrbeard/omo-ui-windows/releases?per_page=100";
-const DOWNLOAD_PREFIX = "/purrbeard/omo-ui-windows/releases/download/";
+const RELEASES_URL = "https://api.github.com/repos/purrbeard/omo-purrate/releases?per_page=100";
+const DOWNLOAD_PREFIX = "/purrbeard/omo-purrate/releases/download/";
 const CDN_HOSTS = new Set(["github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com", "github-releases.githubusercontent.com"]);
 const METADATA_LIMIT = 2 * 1024 * 1024;
 const CHECKSUM_LIMIT = 256 * 1024;

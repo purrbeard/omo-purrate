@@ -29,12 +29,12 @@
   <img alt="OmO UI running a ulw-loop session: tool cards, a table of two running agent lanes, the todo list and goal above the composer, and a /btw side chat answering in the right panel" src="docs/media/hero-light.png">
 </picture>
 
-Maintained by [purrbeard](https://github.com/purrbeard), this Windows fork is based on [realsigridjin/omo-ui-macosapp](https://github.com/realsigridjin/omo-ui-macosapp), copyright sigridjineth. The original MIT license, DeepSeek notices and font licenses are preserved. This is an independent Windows distribution, not an official upstream release. macOS and iOS source is retained from upstream but is not a supported or device-tested target of this fork. The tour images below are captured from this Windows app.
+omo Purrate is a fan-made Windows desktop UI for omo, maintained by [purrbeard](https://github.com/purrbeard) as an independent project. It started from [realsigridjin/omo-ui-macosapp](https://github.com/realsigridjin/omo-ui-macosapp) 0.1.3 (MIT, copyright sigridjineth), imported as this repository's first commit, and is developed separately from it; it is not an official omo or omo-ui-macosapp release. The original MIT license, DeepSeek notices and font licenses are preserved. The macOS and iOS source that came with that import is not a supported or device-tested target. The tour images below are captured from this Windows app.
 
 Install omo and the app in one step from a normal (not Administrator) PowerShell window:
 
 ```powershell
-irm https://raw.githubusercontent.com/purrbeard/omo-ui-windows/windows-support/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/purrbeard/omo-purrate/main/scripts/install.ps1 | iex
 ```
 
 See [Install](#install) for what the script does. OmO UI Windows runs the omo installed with `irm https://get.omo.dev/install.ps1 | iex` or an existing `omo.exe`. It starts `omo app-server` with the inherited Windows environment, using the same sessions, skills, models and credentials as omo in your terminal. The interface comes from the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web GUI (MIT).
@@ -196,13 +196,13 @@ Requirements: Windows 10 or 11, x64. Run the commands from a normal PowerShell w
 ### One-line install (omo + app)
 
 ```powershell
-irm https://raw.githubusercontent.com/purrbeard/omo-ui-windows/windows-support/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/purrbeard/omo-purrate/main/scripts/install.ps1 | iex
 ```
 
 The script, [scripts/install.ps1](scripts/install.ps1):
 
 1. Looks for omo the way the app does (`~/.omo/install.json`, `~/.local/bin/omo.exe`, then PATH). If omo is missing, it runs the official installer (`irm https://get.omo.dev/install.ps1 | iex`), which puts `omo.exe` in `~/.local/bin` and adds it to your User PATH.
-2. Finds the newest release of [purrbeard/omo-ui-windows](https://github.com/purrbeard/omo-ui-windows/releases) that has a Windows installer (prereleases included).
+2. Finds the newest release of [purrbeard/omo-purrate](https://github.com/purrbeard/omo-purrate/releases) that has a Windows installer (prereleases included).
 3. Downloads `OmO UI Windows Setup <version>.exe` and checks its SHA-256 against GitHub's asset digest, or the release's `SHA256SUMS` file.
 4. Installs it silently for the current user into `%LOCALAPPDATA%\Programs\OmO UI Windows` (no administrator rights; Start menu and desktop shortcuts are created) and opens the app.
 
@@ -216,7 +216,7 @@ It stops without changing the app if OmO UI Windows is running; quit it first. R
 
 ### From the release page
 
-Download `OmO.UI.Windows.Setup.<version>.exe` from [Releases](https://github.com/purrbeard/omo-ui-windows/releases) and run it. The installer is not signed with a publisher certificate, so SmartScreen may show "Windows protected your PC"; choose **More info** > **Run anyway**. If omo is missing, the app's first screen offers to run the official installer.
+Download `OmO.UI.Windows.Setup.<version>.exe` from [Releases](https://github.com/purrbeard/omo-purrate/releases) and run it. The installer is not signed with a publisher certificate, so SmartScreen may show "Windows protected your PC"; choose **More info** > **Run anyway**. If omo is missing, the app's first screen offers to run the official installer.
 
 ### From source
 

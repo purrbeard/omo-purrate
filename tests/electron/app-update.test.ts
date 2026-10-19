@@ -12,7 +12,7 @@ const currentVersion = "0.1.4-win.2";
 const version = "0.1.4-win.10";
 const bytes = Buffer.from("local Windows installer fixture");
 const digest = createHash("sha256").update(bytes).digest("hex");
-const apiUrl = "https://api.github.com/repos/purrbeard/omo-ui-windows/releases?per_page=100";
+const apiUrl = "https://api.github.com/repos/purrbeard/omo-purrate/releases?per_page=100";
 const dirs: string[] = [];
 
 afterEach(async () => {
@@ -31,7 +31,7 @@ function release(value = version, overrides: Record<string, unknown> = {}) {
 }
 
 function assetUrl(tag: string, name: string): string {
-  return `https://github.com/purrbeard/omo-ui-windows/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(name)}`;
+  return `https://github.com/purrbeard/omo-purrate/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(name)}`;
 }
 
 function json(value: unknown, status = 200): Response {
@@ -123,7 +123,7 @@ describe("AppUpdater release checks", () => {
   });
 
   it.each([
-    "http://github.com/purrbeard/omo-ui-windows/releases/download/v0.1.4-win.10/installer.exe",
+    "http://github.com/purrbeard/omo-purrate/releases/download/v0.1.4-win.10/installer.exe",
     "https://github.com/other/repo/releases/download/v0.1.4-win.10/installer.exe",
     "https://evil.example/installer.exe",
     assetUrl(`v${version}`, `OmO UI Windows Setup ${version}.exe`) + "?token=secret",

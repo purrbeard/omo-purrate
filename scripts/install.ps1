@@ -1,5 +1,5 @@
 # One-line install of OmO UI Windows together with omo (Windows PowerShell 5.1 and PowerShell 7+):
-#   irm https://raw.githubusercontent.com/purrbeard/omo-ui-windows/windows-support/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/purrbeard/omo-purrate/main/scripts/install.ps1 | iex
 # Installs omo with the official installer when omo.exe is missing, then downloads the newest OmO UI Windows
 # release (prereleases included) from this repository, verifies its SHA-256 and runs the per-user installer silently.
 #   OMO_UI_VERSION=0.1.4-win.18  install that release instead of the newest one
@@ -11,9 +11,9 @@ function Install-OmoUi {
   $ErrorActionPreference = 'Stop'
   $ProgressPreference = 'SilentlyContinue'
   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-  $Repo = 'purrbeard/omo-ui-windows'
+  $Repo = 'purrbeard/omo-purrate'
   $OmoInstaller = 'https://get.omo.dev/install.ps1'
-  $UserAgent = 'omo-ui-windows-install.ps1/1'
+  $UserAgent = 'omo-purrate-install.ps1/1'
   $AppDir = Join-Path $env:LOCALAPPDATA 'Programs\OmO UI Windows'
   $AppExe = Join-Path $AppDir 'OmO UI Windows.exe'
 

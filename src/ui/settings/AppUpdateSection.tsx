@@ -39,7 +39,7 @@ export function AppUpdateSection() {
         <Button variant="primary" icon={<Download aria-hidden="true" />} disabled={turnActive || busy} data-testid="app-update-install" onClick={() => void run(() => window.omo.installAppUpdate())}>{t("shell.settings.appUpdate.install")}</Button>
       </>}
       {(error || status?.message) && <ErrorText>{error || status?.message}</ErrorText>}
-      <Button variant="ghost" size="sm" icon={<ExternalLink aria-hidden="true" />} onClick={() => void window.omo.openExternal("https://github.com/purrbeard/omo-ui-windows/releases")}>{t("shell.settings.appUpdate.releases")}</Button>
+      <Button variant="ghost" size="sm" icon={<ExternalLink aria-hidden="true" />} onClick={() => void window.omo.openExternal("https://github.com/purrbeard/omo-purrate/releases")}>{t("shell.settings.appUpdate.releases")}</Button>
     </div>
   </div>;
 }

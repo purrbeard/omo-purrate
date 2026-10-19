@@ -2,9 +2,9 @@ name: Windows checks and release
 
 on:
   pull_request:
-    branches: [windows-support]
+    branches: [main]
   push:
-    branches: [windows-support]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   windows:
-    if: github.repository == 'purrbeard/omo-ui-windows'
+    if: github.repository == 'purrbeard/omo-purrate'
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -49,7 +49,7 @@ jobs:
 
   release:
     needs: windows
-    if: github.repository == 'purrbeard/omo-ui-windows' && github.ref == 'refs/heads/windows-support' && github.event_name != 'pull_request'
+    if: github.repository == 'purrbeard/omo-purrate' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
