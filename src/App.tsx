@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalSt
 import type { JSX } from "react";
 import { observeComposition } from "./ui/lib/keyboard-composition";
 import { modalSelector } from "./ui/lib/modal-layer";
-import type { MenuCommand } from "../shared/ipc";
+import { DEFAULT_PREFERENCES, type MenuCommand } from "../shared/ipc";
 import { createActions, createAppStore, localSideStorage, selectAgentChildren, selectMainThreadId, selectTasks, selectManagedThreadsByWorkspace, useAppStore } from "./state";
 import { I18nProvider, resolveLocale, useT } from "./i18n";
 import { ActionsContext, StoreContext, useActions, useAppSelector } from "./ui/app-context";
@@ -20,6 +20,8 @@ import { AppFrame } from "./ui/shell/AppFrame";
 import { DockLauncher, RightDock, useTerminalShortcut } from "./ui/shell/RightDock";
 import { Sidebar } from "./ui/sidebar/Sidebar";
 import { applyThemePreference } from "./ui/theme";
+import { applyAppearance } from "./ui/appearance";
+import { useOpenWorkflowOnRun } from "./ui/shell/use-open-workflow-on-run";
 import { shownTab, uiState, useUiState, WORKFLOW_PANEL_WIDTHS } from "./ui/ui-state";
 import type { RightTab, WorkView } from "./ui/ui-state";
 import { WorkflowPanel } from "./ui/conversation/WorkflowPanel";
@@ -84,6 +86,7 @@ const LAUNCHER_WIDTH = 400;
 function Shell() {
   const bridgeState = useAppSelector((state) => state.bridge?.state ?? null);
   useSidePanelShortcut();
+  useOpenWorkflowOnRun();
   const actions = useActions();
   const store = useAppStore();
   const t = useT();
@@ -273,6 +276,15 @@ export function App() {
     } catch { /* A disabled storage area must not prevent theme application. */ }
   }, [palette, theme, preferences !== null]);
 
+
+  const { contrast, promptFontSize, codeFontSize, diffColors, compactSidebar, reduceMotion, uiScale } = preferences ?? DEFAULT_PREFERENCES;
+  useEffect(() => {
+    if (preferences) applyAppearance({ contrast, promptFontSize, codeFontSize, diffColors, compactSidebar, reduceMotion });
+  }, [contrast, promptFontSize, codeFontSize, diffColors, compactSidebar, reduceMotion, preferences !== null]);
+  useEffect(() => {
+    if (!preferences) return;
+    window.omo.setZoomFactor(uiScale / 100).catch((error: unknown) => console.error("setZoomFactor failed", error));
+  }, [uiScale, preferences !== null]);
 
   const locale = resolveLocale(preferences?.locale ?? "system", navigator.language);
   useEffect(() => {

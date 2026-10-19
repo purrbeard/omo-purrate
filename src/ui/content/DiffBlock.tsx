@@ -63,8 +63,8 @@ const LINE_CLASS = clsx(
 /** The class per row kind (path/gap chrome vs the diff's own +/- colors). */
 const ROW_CLASS: Record<DiffRow['kind'], string> = {
   path: 'font-medium text-muted-foreground',
-  del: "bg-destructive text-destructive-foreground shadow-[inset_3px_0_0_var(--destructive-foreground)] before:content-['-_']",
-  add: "bg-[color-mix(in_oklch,var(--success)_12%,var(--background))] text-success shadow-[inset_3px_0_0_var(--success)] before:content-['+_']",
+  del: "bg-(--diff-remove-bg) text-(--diff-remove) shadow-[inset_3px_0_0_var(--diff-remove)] before:content-['-_']",
+  add: "bg-(--diff-add-bg) text-(--diff-add) shadow-[inset_3px_0_0_var(--diff-add)] before:content-['+_']",
   context: "text-muted-foreground before:content-['__']",
   gap: 'text-muted-foreground',
 }
@@ -209,7 +209,7 @@ export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, cl
     >
       <CodeToolbar lang={language} labels={labels} copyLabel={labels.copy} copiedLabel={labels.copied}
         copied={copied} wrapped={wrapped} onCopy={onCopy} onWrap={() => { setWrapped(value => !value) }} />
-      <div className="grid grid-cols-[minmax(max-content,1fr)] overflow-x-auto pt-1.5 pb-5 [font:var(--dsw-font-markdown-code-block)] group-data-[code-wrap=true]/diff:grid-cols-[minmax(0,1fr)]">
+      <div data-diff-body="" className="grid grid-cols-[minmax(max-content,1fr)] overflow-x-auto pt-1.5 pb-5 [font:var(--dsw-font-markdown-code-block)] group-data-[code-wrap=true]/diff:grid-cols-[minmax(0,1fr)]">
         {head.map((row, index) => (
           <div key={index} className={clsx(LINE_CLASS, ROW_CLASS[row.kind])}>{row.text}</div>
         ))}

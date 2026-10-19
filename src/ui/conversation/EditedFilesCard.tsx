@@ -12,7 +12,7 @@ function Counts({ added, removed, className }: { added: number | null; removed: 
   if (added === null || removed === null) return null;
   return (
     <span className={clsx("shrink-0 whitespace-nowrap font-mono text-xs leading-5 tabular-nums", className)}>
-      <span className="text-success">{`+${added}`}</span> <span className="text-destructive-foreground">{`-${removed}`}</span>
+      <span className="text-(--diff-add)">{`+${added}`}</span> <span className="text-(--diff-remove)">{`-${removed}`}</span>
     </span>
   );
 }

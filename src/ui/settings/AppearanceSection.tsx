@@ -1,7 +1,8 @@
 import { useState, type CSSProperties } from "react";
 import clsx from "clsx";
 import { Check, RotateCcw } from "lucide-react";
-import type { LocalePreference, PalettePreference, Preferences, ThemePreference } from "../../../shared/ipc";
+import { DEFAULT_PREFERENCES } from "../../../shared/ipc";
+import type { DiffColorPreference, LocalePreference, PalettePreference, Preferences, ThemePreference } from "../../../shared/ipc";
 import { useT } from "../../i18n";
 import { Button, focusRing } from "../kit";
 import { revealThemePreference } from "../theme";
@@ -9,7 +10,20 @@ import { TESTID } from "../testids";
 import { updatePreferences, useUiState } from "../ui-state";
 import { errorMessage } from "./diagnostics";
 import { SectionHeading, SettingRow } from "./SectionHeading";
-import { ErrorText, Segmented, SettingsCard, ui } from "./SettingsCard";
+import { ErrorText, FontSizeControl, Segmented, SettingsCard, SettingsGroup, SettingsRow, Slider, Toggle, ui } from "./SettingsCard";
+
+/** The fine appearance controls' defaults; "Reset appearance" restores them with the scheme, palette and language. */
+const APPEARANCE_DEFAULTS = {
+  uiScale: DEFAULT_PREFERENCES.uiScale,
+  contrast: DEFAULT_PREFERENCES.contrast,
+  promptFontSize: DEFAULT_PREFERENCES.promptFontSize,
+  codeFontSize: DEFAULT_PREFERENCES.codeFontSize,
+  terminalFontSize: DEFAULT_PREFERENCES.terminalFontSize,
+  terminalCursorBlink: DEFAULT_PREFERENCES.terminalCursorBlink,
+  diffColors: DEFAULT_PREFERENCES.diffColors,
+  compactSidebar: DEFAULT_PREFERENCES.compactSidebar,
+  reduceMotion: DEFAULT_PREFERENCES.reduceMotion,
+} satisfies Partial<Preferences>;
 
 const schemes = ["system", "light", "dark"] as const;
 /** Static swatches that picture each palette; Noir, the default, leads the list. */
@@ -64,6 +78,7 @@ export function AppearanceSection() {
   const save = (patch: Partial<Preferences>): void => {
     void updatePreferences(patch).then(() => setError(null), (reason: unknown) => setError(errorMessage(reason)));
   };
+  const prefs = preferences ?? DEFAULT_PREFERENCES;
   const theme = preferences?.theme ?? "system";
   const palette = preferences?.palette ?? "noir";
   const swatch = palettes.find((item) => item.id === palette) ?? palettes[0]!;
@@ -71,7 +86,7 @@ export function AppearanceSection() {
   return (
     <section className={clsx(ui.section, "gap-4")}>
       <SectionHeading title={t("shell.settings.nav.appearance")} intro={t("shell.settings.appearance.intro")}>
-        <Button variant="outline" size="sm" icon={<RotateCcw aria-hidden="true" />} data-testid="appearance-reset" onClick={() => save({ theme: "system", palette: "noir", locale: "system" })}>
+        <Button variant="outline" size="sm" icon={<RotateCcw aria-hidden="true" />} data-testid="appearance-reset" onClick={() => save({ theme: "system", palette: "noir", locale: "system", ...APPEARANCE_DEFAULTS })}>
           {t("shell.settings.appearance.reset")}
         </Button>
       </SectionHeading>
@@ -112,6 +127,52 @@ export function AppearanceSection() {
             />
           </div>
         </SettingRow>
+      </SettingsCard>
+      <SettingsGroup title={t("shell.settings.group.interface")} />
+      <SettingsCard>
+        <SettingsRow title={t("shell.settings.uiScale")} description={t("shell.settings.uiScale.hint")}>
+          <Slider testId={TESTID.settingsUiScale} label={t("shell.settings.uiScale")} value={prefs.uiScale} min={80} max={150} step={5} unit="%" disabled={preferences === null} onCommit={(uiScale) => save({ uiScale })} />
+        </SettingsRow>
+        <SettingsRow title={t("shell.settings.contrast")} description={t("shell.settings.contrast.hint")}>
+          <Slider testId={TESTID.settingsContrast} label={t("shell.settings.contrast")} value={prefs.contrast} min={80} max={150} step={5} unit="%" disabled={preferences === null} onCommit={(contrast) => save({ contrast })} />
+        </SettingsRow>
+        <SettingsRow title={t("shell.settings.diffColors")} description={t("shell.settings.diffColors.hint")}>
+          <div data-testid={TESTID.settingsDiffColors}>
+            <Segmented<DiffColorPreference>
+              label={t("shell.settings.diffColors")}
+              value={prefs.diffColors}
+              options={[
+                { value: "red-green", label: t("shell.settings.diffColors.redGreen") },
+                { value: "blue-orange", label: t("shell.settings.diffColors.blueOrange") },
+              ]}
+              onChange={(diffColors) => save({ diffColors })}
+            />
+          </div>
+        </SettingsRow>
+        <SettingsRow title={t("shell.settings.compactSidebar")} description={t("shell.settings.compactSidebar.hint")}>
+          <Toggle testId={TESTID.settingsCompactSidebar} checked={prefs.compactSidebar} label={t("shell.settings.compactSidebar")} disabled={preferences === null} onChange={() => save({ compactSidebar: !prefs.compactSidebar })} />
+        </SettingsRow>
+      </SettingsCard>
+      <SettingsGroup title={t("shell.settings.group.fonts")} />
+      <SettingsCard>
+        <SettingsRow title={t("shell.settings.promptFontSize")} description={t("shell.settings.promptFontSize.hint")}>
+          <FontSizeControl testId={TESTID.settingsPromptFontSize} label={t("shell.settings.promptFontSize")} defaultLabel={t("shell.settings.font.default")} value={prefs.promptFontSize} min={12} max={20} probe='[data-testid="composer-input"]' fallback={14} disabled={preferences === null} onChange={(promptFontSize) => save({ promptFontSize })} />
+        </SettingsRow>
+        <SettingsRow title={t("shell.settings.codeFontSize")} description={t("shell.settings.codeFontSize.hint")}>
+          <FontSizeControl testId={TESTID.settingsCodeFontSize} label={t("shell.settings.codeFontSize")} defaultLabel={t("shell.settings.font.default")} value={prefs.codeFontSize} min={11} max={18} probe="[data-code-block] pre, [data-diff-body]" fallback={12} disabled={preferences === null} onChange={(codeFontSize) => save({ codeFontSize })} />
+        </SettingsRow>
+        <SettingsRow title={t("shell.settings.terminalFontSize")} description={t("shell.settings.terminalFontSize.hint")}>
+          <FontSizeControl testId={TESTID.settingsTerminalFontSize} label={t("shell.settings.terminalFontSize")} defaultLabel={t("shell.settings.font.default")} value={prefs.terminalFontSize} min={10} max={24} probe=".xterm-rows" fallback={13} disabled={preferences === null} onChange={(terminalFontSize) => save({ terminalFontSize })} />
+        </SettingsRow>
+        <SettingsRow title={t("shell.settings.terminalCursorBlink")} description={t("shell.settings.terminalCursorBlink.hint")}>
+          <Toggle testId={TESTID.settingsTerminalCursorBlink} checked={prefs.terminalCursorBlink} label={t("shell.settings.terminalCursorBlink")} disabled={preferences === null} onChange={() => save({ terminalCursorBlink: !prefs.terminalCursorBlink })} />
+        </SettingsRow>
+      </SettingsCard>
+      <SettingsGroup title={t("shell.settings.group.motion")} />
+      <SettingsCard>
+        <SettingsRow title={t("shell.settings.reduceMotion")} description={t("shell.settings.reduceMotion.hint")}>
+          <Toggle testId={TESTID.settingsReduceMotion} checked={prefs.reduceMotion} label={t("shell.settings.reduceMotion")} disabled={preferences === null} onChange={() => save({ reduceMotion: !prefs.reduceMotion })} />
+        </SettingsRow>
       </SettingsCard>
       {error && <ErrorText>{t("shell.settings.saveFailed", { message: error })}</ErrorText>}
     </section>

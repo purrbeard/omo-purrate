@@ -590,6 +590,8 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   getDiagnostics(): Promise<Diagnostics>;
   getPreferences(): Promise<Preferences>;
   setPreferences(patch: Partial<Preferences>): Promise<Preferences>;
+  /** Sets the main window zoom factor (0.8..1.5). */
+  setZoomFactor(factor: number): Promise<void>;
   /** Shows a macOS notification for a thread outcome; a click focuses the window and opens the thread. */
   notify(payload: NotifyPayload): Promise<void>;
   /** The thread the user clicked in a macOS notification. */
@@ -679,6 +681,7 @@ export const IPC = {
   diagnostics: "app:diagnostics",
   getPreferences: "prefs:get",
   setPreferences: "prefs:set",
+  setZoomFactor: "ui:set-zoom",
   notify: "app:notify",
   notifyClick: "app:notify-click",
   menuCommand: "menu:command",

@@ -1,0 +1,60 @@
+/* Appearance preferences (src/ui/appearance.ts sets the html attributes and variables used here). */
+
+/* Contrast. tokens.css is @theme inline, so utilities read the raw tokens on each element. A token cannot be redefined
+   from itself (a custom-property cycle), so body snapshots the palette values under --contrast-base-* and every app
+   root and portal (body > *) rebuilds the token from that snapshot, mixed toward --contrast-target. */
+html[data-contrast] body {
+  --contrast-base-border: var(--border);
+  --contrast-base-muted: var(--muted-foreground);
+  --contrast-base-sidebar-border: var(--sidebar-border);
+  --contrast-base-message-border: var(--message-border);
+  --contrast-base-composer-border: var(--composer-border);
+  --contrast-base-toolbar-border: var(--toolbar-border);
+}
+
+html[data-contrast] body > * {
+  --border: color-mix(in oklab, var(--contrast-base-border) calc(100% - var(--contrast-mix)), var(--contrast-target));
+  --muted-foreground: color-mix(in oklab, var(--contrast-base-muted) calc(100% - var(--contrast-mix)), var(--contrast-target));
+  --sidebar-border: color-mix(in oklab, var(--contrast-base-sidebar-border) calc(100% - var(--contrast-mix)), var(--contrast-target));
+  --message-border: color-mix(in oklab, var(--contrast-base-message-border) calc(100% - var(--contrast-mix)), var(--contrast-target));
+  --composer-border: color-mix(in oklab, var(--contrast-base-composer-border) calc(100% - var(--contrast-mix)), var(--contrast-target));
+  --toolbar-border: color-mix(in oklab, var(--contrast-base-toolbar-border) calc(100% - var(--contrast-mix)), var(--contrast-target));
+}
+
+/* Diff colors: added/removed lines and counts read these, never --success/--destructive directly. */
+body {
+  --diff-add: var(--success);
+  --diff-remove: var(--destructive-foreground);
+  --diff-add-bg: color-mix(in oklch, var(--diff-add) 12%, var(--background));
+  --diff-remove-bg: var(--destructive);
+}
+
+html[data-diff-colors='blue-orange'] body {
+  --diff-add: #2563eb;
+  --diff-remove: #ea580c;
+  --diff-remove-bg: color-mix(in oklch, var(--diff-remove) 12%, var(--background));
+}
+
+html[data-diff-colors='blue-orange'] body[data-ds-dark-theme] {
+  --diff-add: #60a5fa;
+  --diff-remove: #fb923c;
+}
+
+/* Compact sidebar: denser thread rows. */
+html[data-compact-sidebar] [data-testid='thread-row'] {
+  min-height: 1.75rem;
+}
+
+html[data-compact-sidebar] [data-testid='thread-row'] > button span.truncate {
+  padding-block: 0;
+}
+
+/* Reduce motion, in addition to the OS setting. */
+html[data-reduce-motion] *,
+html[data-reduce-motion] *::before,
+html[data-reduce-motion] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}

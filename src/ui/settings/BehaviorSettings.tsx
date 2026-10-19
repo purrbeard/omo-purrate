@@ -1,6 +1,6 @@
 import { useState } from "react";
 import clsx from "clsx";
-import type { Preferences, SendKeyPreference, ThreadNotificationPreference, TimeFormatPreference } from "../../../shared/ipc";
+import type { FollowUpPreference, Preferences, SendKeyPreference, ThreadNotificationPreference, TimeFormatPreference } from "../../../shared/ipc";
 import { useT } from "../../i18n";
 import { TESTID } from "../testids";
 import { uiState, updatePreferences, useUiState } from "../ui-state";
@@ -41,6 +41,10 @@ export function BehaviorSettings() {
   const inAppNotifications = preferences?.inAppNotifications ?? true;
   const timeFormat = preferences?.timeFormat ?? "system";
   const sendKey = preferences?.sendKey ?? "enter";
+  const followUpBehavior = preferences?.followUpBehavior ?? "steer";
+  const keywordEffects = preferences?.keywordEffects ?? true;
+  const showContextUsage = preferences?.showContextUsage ?? true;
+  const openWorkflowOnRun = preferences?.openWorkflowOnRun ?? false;
 
   return (
     <>
@@ -103,6 +107,12 @@ export function BehaviorSettings() {
             />
           </div>
         </SettingsRow>
+        {error !== null && (
+          <ErrorText className="pb-4">{t("shell.settings.saveFailed", { message: error })}</ErrorText>
+        )}
+      </SettingsCard>
+      <SettingsGroup title={t("shell.settings.group.composer")} />
+      <SettingsCard>
         <SettingsRow title={t("shell.settings.sendKey")} description={t("shell.settings.sendKey.hint")}>
           <div data-testid={TESTID.settingsSendKey}>
             <Segmented<SendKeyPreference>
@@ -116,9 +126,31 @@ export function BehaviorSettings() {
             />
           </div>
         </SettingsRow>
-        {error !== null && (
-          <ErrorText className="pb-4">{t("shell.settings.saveFailed", { message: error })}</ErrorText>
-        )}
+        <SettingsRow title={t("shell.settings.followUp")} description={t("shell.settings.followUp.hint")}>
+          <div data-testid={TESTID.settingsFollowUp}>
+            <Segmented<FollowUpPreference>
+              label={t("shell.settings.followUp")}
+              value={followUpBehavior}
+              options={[
+                { value: "steer", label: t("shell.settings.followUp.steer") },
+                { value: "queue", label: t("shell.settings.followUp.queue") },
+              ]}
+              onChange={(next) => save({ followUpBehavior: next })}
+            />
+          </div>
+        </SettingsRow>
+        <SettingsRow title={t("shell.settings.keywordEffects")} description={t("shell.settings.keywordEffects.hint")}>
+          <Toggle testId={TESTID.settingsKeywordEffects} checked={keywordEffects} label={t("shell.settings.keywordEffects")} disabled={preferences === null} onChange={() => save({ keywordEffects: !keywordEffects })} />
+        </SettingsRow>
+        <SettingsRow title={t("shell.settings.showContextUsage")} description={t("shell.settings.showContextUsage.hint")}>
+          <Toggle testId={TESTID.settingsShowContextUsage} checked={showContextUsage} label={t("shell.settings.showContextUsage")} disabled={preferences === null} onChange={() => save({ showContextUsage: !showContextUsage })} />
+        </SettingsRow>
+      </SettingsCard>
+      <SettingsGroup title={t("shell.settings.group.workflow")} />
+      <SettingsCard>
+        <SettingsRow title={t("shell.settings.openWorkflowOnRun")} description={t("shell.settings.openWorkflowOnRun.hint")}>
+          <Toggle testId={TESTID.settingsOpenWorkflowOnRun} checked={openWorkflowOnRun} label={t("shell.settings.openWorkflowOnRun")} disabled={preferences === null} onChange={() => save({ openWorkflowOnRun: !openWorkflowOnRun })} />
+        </SettingsRow>
       </SettingsCard>
     </>
   );

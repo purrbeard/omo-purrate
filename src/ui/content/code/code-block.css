@@ -48,6 +48,13 @@ body[data-ds-dark-theme] {
   border-bottom-right-radius: var(--dsw-radius-lg);
 }
 
+/* The code size preference (appearance.ts sets data-code-font with --code-font-size) overrides the shorthand's size. */
+html[data-code-font] [data-code-block] pre,
+html[data-code-font] [data-diff-body] {
+  font-size: var(--code-font-size);
+  line-height: calc(var(--code-font-size) * 1.7);
+}
+
 [data-code-block][data-code-wrap='false'] pre {
   white-space: pre;
   overflow-wrap: normal;
