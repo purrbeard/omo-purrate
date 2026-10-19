@@ -4,6 +4,6 @@ import viteConfig from "./vite.config";
 export default mergeConfig(
   viteConfig,
   defineConfig({
-    test: { include: ["tests/**/*.test.ts"], environment: "node", testTimeout: 30000 },
+    test: { include: ["tests/**/*.test.ts"], environment: "node", testTimeout: 30000, globalSetup: ["scripts/test-temp-root.mjs"] },
   }),
 );

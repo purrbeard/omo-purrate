@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "e2e",
+  globalSetup: "./scripts/test-temp-root.mjs",
   workers: 1,
   fullyParallel: false,
   timeout: 240_000,
