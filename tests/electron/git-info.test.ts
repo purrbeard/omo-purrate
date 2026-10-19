@@ -39,15 +39,16 @@ describe("createGit", () => {
     await expect(git.info("/repo/app")).resolves.toBeNull();
   });
 
-  it("reads branch, root, and upstream ahead/behind", async () => {
+  it("reads branch, root, linked worktree, and upstream ahead/behind", async () => {
     const { git } = harness(
       gitRun({
         "rev-parse --show-toplevel": "/repo/app\n",
         "branch --show-current": "feature/branch\n",
         "rev-list --left-right --count @{upstream}...HEAD": "2\t5\n",
+        "rev-parse --path-format=absolute --git-dir --git-common-dir": "/repo/.git/worktrees/app\n/repo/.git\n",
       }),
     );
-    await expect(git.info("/repo/app")).resolves.toEqual({ branch: "feature/branch", root: "/repo/app", ahead: 5, behind: 2 });
+    await expect(git.info("/repo/app")).resolves.toEqual({ branch: "feature/branch", root: "/repo/app", ahead: 5, behind: 2, worktree: true });
   });
 
   it("reports the short sha for a detached HEAD", async () => {
@@ -58,7 +59,7 @@ describe("createGit", () => {
         "rev-parse --short HEAD": "9f8e7d6\n",
       }),
     );
-    await expect(git.info("/repo/app")).resolves.toEqual({ branch: "9f8e7d6", root: "/repo/app", ahead: null, behind: null });
+    await expect(git.info("/repo/app")).resolves.toEqual({ branch: "9f8e7d6", root: "/repo/app", ahead: null, behind: null, worktree: false });
   });
 
   it("leaves ahead/behind null without an upstream", async () => {
@@ -69,7 +70,7 @@ describe("createGit", () => {
         "rev-list --left-right --count @{upstream}...HEAD": new Error("fatal: no upstream configured"),
       }),
     );
-    await expect(git.info("/repo/app")).resolves.toEqual({ branch: "main", root: "/repo/app", ahead: null, behind: null });
+    await expect(git.info("/repo/app")).resolves.toEqual({ branch: "main", root: "/repo/app", ahead: null, behind: null, worktree: false });
   });
 
   it("rejects relative or missing directories", async () => {
@@ -90,7 +91,7 @@ describe("createGit", () => {
       if (args[2] === "branch") return "feature/windows/path\r\n";
       return "0\t1\r\n";
     }, { directories: [cwd] });
-    await expect(git.info(cwd)).resolves.toEqual({ branch: "feature/windows/path", root: cwd, ahead: 1, behind: 0 });
+    await expect(git.info(cwd)).resolves.toEqual({ branch: "feature/windows/path", root: cwd, ahead: 1, behind: 0, worktree: false });
     expect(calls.every((call) => call.file === "git" && call.args[0] === "-C" && call.args[1] === cwd)).toBe(true);
   });
 
