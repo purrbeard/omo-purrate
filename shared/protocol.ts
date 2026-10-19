@@ -141,6 +141,8 @@ export interface DynamicToolCallItem {
   contentItems: DynamicToolCallContentItem[] | null;
   success: boolean | null;
   durationMs: number | null;
+  /** Files the call changed, from its recorded result (edit/write/multiedit `details.patch`, apply_patch preview); absent when none. */
+  changes?: FileUpdateChange[];
 }
 
 export interface WebSearchItem {

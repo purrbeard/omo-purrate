@@ -17,7 +17,10 @@ import { runSessionTree, readSessionTree } from "./omo/session-tree";
 import type { ModelRung } from "../shared/ipc";
 import { parseSessionJsonl } from "./history/session-jsonl";
 import { createSessionWatcher } from "./history/session-watch";
-import { loadTaskWork, readTaskLinks } from "./history/task-work";
+import { loadTaskWork, readTaskLinks, taskStore } from "./history/task-work";
+import { watchTaskStore, type TaskStoreWatcher } from "./history/task-store-watch";
+import { loadPersistedDagRuns } from "./workbench/dag-runs";
+import { threadId as validThreadId, workspace as validWorkspace } from "./workbench/validation";
 import { loadHeaderLinks } from "./history/thread-links";
 import { loadThreadOrigins } from "./history/thread-origins";
 import { importPage, toCandidate } from "./history/session-catalog";
@@ -147,6 +150,19 @@ export function registerIpc(deps: IpcDeps): () => void {
     return catalog;
   };
   const sessionWatcher = createSessionWatcher((sessionPath) => send(IPC.historyChanged, sessionPath));
+  /** Task stores a view follows, per parent session, with the number of views following it. */
+  const taskStoreWatches = new Map<string, { cwd: string; refs: number; watcher: TaskStoreWatcher }>();
+  const taskAgentDir = (): string => supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent");
+  const pushTaskStore = async (cwd: string, parentSessionId: string): Promise<void> => {
+    try {
+      const [work, runs] = await Promise.all([
+        loadTaskWork(taskAgentDir(), cwd, parentSessionId), loadPersistedDagRuns(taskAgentDir(), cwd, parentSessionId),
+      ]);
+      if (taskStoreWatches.has(parentSessionId)) send(IPC.taskWorkChanged, { parentSessionId, work, runs });
+    } catch (error) {
+      console.warn(`[omo-ui] could not reload the task store of ${parentSessionId}`, error);
+    }
+  };
 
   // omo 5.1.30 thread/unarchive misses sidecars in per-project session folders; restore the one thread/list reports.
   const unarchiveArchivedThread = async (params: unknown): Promise<{ status: { type: "notLoaded" } } | null> => {
@@ -329,6 +345,28 @@ export function registerIpc(deps: IpcDeps): () => void {
       supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent"),
       requireString(cwd, "cwd"), requireString(parentSessionId, "parentSessionId"),
     ),
+    [IPC.watchTaskStore]: async (_event, cwd, parentSessionId): Promise<void> => {
+      const parent = validThreadId(parentSessionId);
+      const root = await validWorkspace(cwd);
+      const current = taskStoreWatches.get(parent);
+      if (current !== undefined) {
+        current.refs += 1;
+      } else {
+        const store = await taskStore(taskAgentDir(), root);
+        if (taskStoreWatches.has(parent)) taskStoreWatches.get(parent)!.refs += 1;
+        else taskStoreWatches.set(parent, { cwd: root, refs: 1, watcher: watchTaskStore(store, () => void pushTaskStore(root, parent)) });
+      }
+      void pushTaskStore(root, parent);
+    },
+    [IPC.unwatchTaskStore]: (_event, parentSessionId): void => {
+      const parent = validThreadId(parentSessionId);
+      const current = taskStoreWatches.get(parent);
+      if (current === undefined) return;
+      current.refs -= 1;
+      if (current.refs > 0) return;
+      current.watcher.close();
+      taskStoreWatches.delete(parent);
+    },
     [IPC.sendTaskMessage]: async (_event, parentSessionId, taskId, message): Promise<void> => {
       const parent = requireString(parentSessionId, "parentSessionId");
       const target = requireString(taskId, "taskId");
@@ -469,5 +507,7 @@ export function registerIpc(deps: IpcDeps): () => void {
     for (const channel of Object.keys(handlers)) ipcMain.removeHandler(channel);
     for (const unsubscribe of unsubscribers) unsubscribe();
     sessionWatcher.close();
+    for (const { watcher } of taskStoreWatches.values()) watcher.close();
+    taskStoreWatches.clear();
   };
 }

@@ -58,6 +58,28 @@ test("child agents have independent tabs and native task messages without switch
     await expect(input).toHaveValue("draft stays with this agent");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await shot(page, "agent-workspace-narrow");
+    // Many agents in a narrow strip: a browser-like rail with wheel scrolling, edge arrows and an all-agents menu.
+    const rail = workspace.getByTestId("agent-tab-rail");
+    expect(await rail.evaluate(element => element.scrollWidth > element.clientWidth + 1)).toBe(true);
+    await expect(workspace.getByTestId("agent-tabs-left")).toHaveCount(0);
+    await expect(workspace.getByTestId("agent-tabs-right")).toBeVisible();
+    await rail.hover();
+    await page.mouse.wheel(0, 240);
+    await expect.poll(() => rail.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+    await expect(workspace.getByTestId("agent-tabs-left")).toBeVisible();
+    await first.hover();
+    await expect(page.getByTestId("agent-tab-tooltip")).toContainText("Read protocol");
+    await workspace.getByTestId("agent-tabs-all").click();
+    const last = page.getByTestId("agent-tabs-menu-item").last();
+    const lastId = await last.getAttribute("data-task-id");
+    await last.click();
+    const lastTab = workspace.locator(`[data-testid="agent-chat-tab"][data-task-id="${lastId}"]`);
+    await expect(lastTab).toHaveAttribute("aria-selected", "true");
+    await expect(lastTab).toBeInViewport({ ratio: 0.9 });
+    await expect(workspace.getByTestId("agent-tabs-right")).toHaveCount(0);
+    await workspace.getByTestId("agent-tabs-left").click();
+    await expect.poll(() => lastTab.evaluate(element => element.getBoundingClientRect().right <= (element.closest('[data-testid="agent-tab-rail"]')?.getBoundingClientRect().right ?? 0))).toBe(false);
+    await shot(page, "agent-workspace-tab-overflow");
     await page.getByTestId("right-dock-close").click();
     await expect(workspace).toBeHidden();
     await expect(mainInput).toBeVisible();

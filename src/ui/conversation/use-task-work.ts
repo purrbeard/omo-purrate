@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { useAppSelector, useAppStore } from "../../state";
 
-/** Disk-only child todos and nested records refresh while inspected; never resumes a child or starts a turn. */
+/**
+ * Disk-only child todos and nested records refresh while inspected, and the task store is watched for another omo
+ * process's writes meanwhile; never resumes a child or starts a turn.
+ */
 export function useTaskWork(threadId: string): string | null {
   const store = useAppStore();
   const cwd = useAppSelector((state) => state.threads[threadId]?.cwd);
@@ -48,5 +51,22 @@ export function useTaskWork(threadId: string): string | null {
       unsubscribe();
     };
   }, [cwd, threadId, live?.generation, ticking, store]);
+  const known = live !== undefined;
+  // Another omo process (a terminal) may run this session: follow its task store while the view is open.
+  useEffect(() => {
+    if (cwd === undefined || !known) return;
+    const unsubscribe = window.omo.onTaskWorkChanged((update) => {
+      if (update.parentSessionId === threadId) store.dispatch({ type: "taskStore/updated", threadId, work: update.work, runs: update.runs });
+    });
+    const watching = window.omo.watchTaskStore(cwd, threadId).then(() => true, (cause: unknown) => {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      return false;
+    });
+    return () => {
+      unsubscribe();
+      void watching.then((watched) => { if (watched) void window.omo.unwatchTaskStore(threadId); });
+      store.dispatch({ type: "taskStore/unwatched", threadId });
+    };
+  }, [cwd, threadId, known, store]);
   return error;
 }

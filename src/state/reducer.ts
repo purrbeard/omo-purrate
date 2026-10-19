@@ -118,6 +118,19 @@ export function reduce(state: AppState, event: AppEvent): AppState {
         return { ...conversation, live: { ...live, freshness: "unattached", runsSource: "history",
           runs: Object.fromEntries(event.runs.map(run => [run.run_id, run])), runOrder: event.runs.map(run => run.run_id) } };
       });
+    case "taskStore/updated":
+      return updateExistingConversation(state, event.threadId, (conversation) => {
+        const live = conversation.live;
+        // The RPC stream owns the runs of an attached session; the disk only fills in a session another process runs.
+        const runs = live.runsSource === "live" || (event.runs.length === 0 && live.runsSource !== "store") ? {}
+          : { runs: Object.fromEntries(event.runs.map(run => [run.run_id, run])), runOrder: event.runs.map(run => run.run_id), runsSource: "store" as const };
+        const watched = live.freshness === "live" && live.storeWatched !== true ? {} : { freshness: "live" as const, storeWatched: true };
+        return { ...conversation, live: { ...live, taskWork: event.work, ...runs, ...watched } };
+      });
+    case "taskStore/unwatched":
+      return updateExistingConversation(state, event.threadId, (conversation) => conversation.live.storeWatched !== true ? conversation : {
+        ...conversation, live: { ...conversation.live, storeWatched: false, ...(conversation.resumed ? {} : { freshness: "unattached" as const }) },
+      });
     case "taskWork/loaded":
       return updateExistingConversation(state, event.threadId, (conversation) =>
         conversation.live.generation !== event.generation ? conversation :

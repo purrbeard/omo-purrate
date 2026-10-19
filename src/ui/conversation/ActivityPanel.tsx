@@ -1,19 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { GitBranch } from "lucide-react";
 import type { DagActivity, DagNode, DagRun } from "../../../shared/protocol";
 import { useT, type MessageKey, type Translate } from "../../i18n";
-import { selectDagRuns, selectTasks, selectThreadLiveState, type ConversationTurn } from "../../state";
+import { selectDagRuns, selectMainThreadId, selectTasks, selectThreadLiveState, type ConversationTurn } from "../../state";
 import { useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
 import {
   currentTodo, groupNodesByDependency, isHistoricalTask, isSuspended, knownNodeState, knownRunStatus, knownTaskStatus,
   nodeActivityLine, nodeDot, nodeElapsedMs, runDot, taskActivityLine, taskDot, taskElapsedMs, taskExcerpt,
   taskForest, taskRoute, taskTitle, todoCounts, todoDot, waitingWork, workSummary,
-  type NodeState, type RunStatus, type TaskStatus, type TaskTree,
+  type ActivityTask, type NodeState, type RunStatus, type TaskStatus, type TaskTree,
 } from "./activity-model";
-import { formatDuration } from "./format";
+import { openAgentTab } from "./AgentWorkspace";
+import { formatDuration, threadTitle } from "./format";
+import { uiState } from "../ui-state";
+import type { AgentTreeNode } from "./workflow-graph";
 import { useTaskWork } from "./use-task-work";
-import { WorkflowGraph } from "./WorkflowGraph";
+import { AgentGraph, WorkflowGraph } from "./WorkflowGraph";
 import { turnSubagents } from "./work-log";
 import { StateDot } from "../kit";
 
@@ -227,8 +230,13 @@ function WorkRow({ tree, node, activity, dependencies = [], live, now, depth = 0
   );
 }
 
-function RunCard({ run, live, restored = false, activity, trees, now, view }: {
-  run: DagRun; live: boolean; restored?: boolean; activity: Record<string, DagActivity> | undefined; trees: TaskTree[]; now: number; view: "list" | "graph";
+function agentNode(tree: TaskTree): AgentTreeNode<ActivityTask> {
+  return { id: tree.task.task_id, item: tree.task, children: tree.children.map(agentNode) };
+}
+
+function RunCard({ run, live, restored = false, activity, trees, tasks, onOpenTask, now, view }: {
+  run: DagRun; live: boolean; restored?: boolean; activity: Record<string, DagActivity> | undefined; trees: TaskTree[];
+  tasks: ReadonlyMap<string, ActivityTask>; onOpenTask: (taskId: string) => void; now: number; view: "list" | "graph";
 }) {
   const t = useT();
   const groups = useMemo(() => groupNodesByDependency(run), [run]);
@@ -256,7 +264,12 @@ function RunCard({ run, live, restored = false, activity, trees, now, view }: {
         {elapsed !== null && <span>{formatDuration(elapsed, t)}</span>}
       </div>
       {view === "graph" ? <>
-        <WorkflowGraph run={run} live={live} now={now} onSelect={setSelected} />
+        <WorkflowGraph run={run} live={live} now={now} tasks={tasks} onSelect={(nodeId) => {
+          // A node an agent ran opens that agent's chat; a node no agent has taken yet shows its detail here.
+          const taskId = run.nodes.find(node => node.id === nodeId)?.task_id;
+          if (taskId !== undefined && tasks.has(taskId)) onOpenTask(taskId);
+          else setSelected(nodeId);
+        }} />
         {selectedNode !== undefined && <div className={C.entityBody} data-testid="workflow-node-detail">
           <strong>{selectedNode.label?.trim() || selectedNode.id}</strong>
           <p className={C.meta}>{nodeLabel(selectedNode.state, t)}</p>
@@ -288,6 +301,20 @@ export function ActivityPanel({ threadId, id, view = "list", docked = false }: {
   const turns = useAppSelector(state => state.conversations[threadId]?.turns ?? EMPTY_TURNS);
   const isLive = live?.freshness === "live";
   const trees = useMemo(() => taskForest(tasks, live?.taskWork ?? []), [tasks, live?.taskWork]);
+  const mainId = useAppSelector(selectMainThreadId);
+  const thread = useAppSelector(state => state.threads[threadId]);
+  const turnActive = useAppSelector(state => (state.conversations[threadId]?.activeTurnId ?? null) !== null);
+  const taskById = useMemo(() => {
+    const byId = new Map<string, ActivityTask>();
+    for (const work of live?.taskWork ?? []) byId.set(work.task.task_id, work.task);
+    for (const task of tasks) byId.set(task.task_id, task);
+    return byId;
+  }, [tasks, live?.taskWork]);
+  const agentTrees = useMemo(() => trees.map(agentNode), [trees]);
+  const openTask = useCallback((taskId: string) => {
+    openAgentTab(mainId ?? threadId, taskId);
+    uiState.setWorkView("agents");
+  }, [mainId, threadId]);
   const linked = new Set(runs.flatMap((run) => run.nodes.map((node) => node.task_id)));
   const standalone = trees.filter((tree) => !linked.has(tree.task.task_id));
   const taskGroups = useMemo(() => {
@@ -311,7 +338,7 @@ export function ActivityPanel({ threadId, id, view = "list", docked = false }: {
   const now = useNow(isLive && (tasks.some((task) => task.status === "running" && !isHistoricalTask(task) && !isSuspended(task)) ||
     runs.some((run) => run.status === "running") || live.taskWork.some((work) => work.task.status === "running" && !isSuspended(work.task))));
   if (live === null) return null;
-  const summary = workSummary(runs, view === "graph" ? [] : tasks, isLive);
+  const summary = workSummary(runs, view === "graph" && runs.length > 0 ? [] : tasks, isLive);
   return (
     <section id={id} className={C.panel} data-docked={docked || undefined} data-testid={TESTID.omoActivity} data-freshness={live.freshness} aria-label={t("activity.region")}>
       <div className={C.inner}>
@@ -320,7 +347,9 @@ export function ActivityPanel({ threadId, id, view = "list", docked = false }: {
         {error !== null && <p className={C.error} role="status">{t("activity.children.error")} <span title={error}>{error}</span></p>}
         {summary.total === 0 && <p className={C.empty}>{t(view === "graph" ? "activity.graph.empty" : "activity.empty")}</p>}
         {view === "list" && <div className={C.legend} aria-hidden><span>{t("activity.column.work")}</span><span>{t("activity.column.agent")}</span><span>{t("activity.column.time")}</span><span>{t("activity.column.step")}</span></div>}
-        {runs.map((run) => <RunCard key={run.run_id} run={run} live={isLive && live.runsSource === "live"} restored={live.runsSource === "history"} activity={live.dagActivity[run.run_id]} trees={trees} now={now} view={view} />)}
+        {runs.map((run) => <RunCard key={run.run_id} run={run} live={isLive && live.runsSource !== "history"} restored={live.runsSource === "history"} activity={live.dagActivity[run.run_id]} trees={trees} tasks={taskById} onOpenTask={openTask} now={now} view={view} />)}
+        {view === "graph" && runs.length === 0 && agentTrees.length > 0 && <AgentGraph root={{ id: threadId, title: threadTitle(thread ?? null, t("shell.newSession")), running: turnActive }}
+          trees={agentTrees} live={isLive} now={now} onOpen={openTask} />}
         {view === "list" && standalone.length > 0 && <section className={C.section}>
           <h2 className={C.sectionTitle}>{t("activity.tasks")}</h2>
           {taskGroups.map(group => <details key={group.id} data-testid="workflow-task-group" data-turn-id={group.id} open={group === taskGroups[0]}>

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { RpcNotification, ThreadItem, Turn, TurnStatus, UserInput } from "../../../shared/protocol";
+import { toolFileChanges } from "./file-changes";
 
 type JsonObject = Record<string, unknown>;
 type ItemType = "commandExecution" | "fileChange" | "mcpToolCall" | "dynamicToolCall";
@@ -88,40 +89,6 @@ function exitCodeOf(result: unknown): number | null {
   if (!isRecord(result) || !isRecord(result["details"])) return null;
   const value = result["details"]["exitCode"] ?? result["details"]["code"];
   return typeof value === "number" ? value : null;
-}
-
-function normalizedPatch(value: unknown): string | undefined {
-  if (typeof value !== "string" || value === "") return undefined;
-  return value.endsWith("\n") ? value : `${value}\n`;
-}
-
-function changeKind(operation: unknown, movePath: unknown): unknown {
-  if (operation === "add") return { type: "add" };
-  if (operation === "delete") return { type: "delete" };
-  if (operation === "update") return { type: "update", move_path: typeof movePath === "string" && movePath !== "" ? movePath : null };
-  return undefined;
-}
-
-function fileChanges(name: string, args: unknown, result: unknown): Array<{ path: string; kind: unknown; diff: string }> {
-  if (!isRecord(result) || !isRecord(result["details"])) return [];
-  const details = result["details"];
-  const preview = details["preview"];
-  if (isRecord(preview) && Array.isArray(preview["files"])) {
-    const changes = preview["files"].flatMap((file) => {
-      if (!isRecord(file)) return [];
-      const filePath = readString(file, "filePath");
-      const kind = changeKind(file["operation"], file["movePath"]);
-      const diff = normalizedPatch(file["patch"]);
-      return filePath && kind && diff ? [{ path: filePath, kind, diff }] : [];
-    });
-    if (changes.length > 0) return changes;
-  }
-  const patch = normalizedPatch(details["patch"]);
-  const filePath = isRecord(args) ? readString(args, "path") ?? readString(args, "file_path") : undefined;
-  if ((name !== "edit" && name !== "write") || !filePath || !patch) return [];
-  const operation = details["operation"] === "add" || details["operation"] === "delete" || details["operation"] === "update"
-    ? details["operation"] : patch.startsWith("--- /dev/null\n") ? "add" : "update";
-  return [{ path: filePath, kind: changeKind(operation, null), diff: patch }];
 }
 
 function userInputFrom(content: unknown): UserInput[] {
@@ -397,7 +364,7 @@ export class TurnProjector {
           aggregatedOutput: tool.output === "" ? null : tool.output, exitCode: status === "inProgress" ? null : exitCodeOf(result), durationMs: null,
         };
       case "fileChange":
-        return { type: "fileChange", id: tool.id, changes: status === "inProgress" ? [] : fileChanges(tool.name, tool.args, result), status };
+        return { type: "fileChange", id: tool.id, changes: status === "inProgress" ? [] : toolFileChanges(tool.name, tool.args, isRecord(result) ? result["details"] : undefined), status };
       case "mcpToolCall": {
         const marker = tool.name.indexOf("__");
         return {
@@ -407,12 +374,14 @@ export class TurnProjector {
           error: status === "failed" ? { message: toolText(result) || "Tool execution failed" } : null, durationMs: null,
         };
       }
-      case "dynamicToolCall":
+      case "dynamicToolCall": {
+        const changes = status === "completed" ? toolFileChanges(tool.name, tool.args, isRecord(result) ? result["details"] : undefined) : [];
         return {
           type: "dynamicToolCall", id: tool.id, namespace: null, tool: tool.name, arguments: tool.args ?? null, status,
           contentItems: status === "inProgress" ? null : [{ type: "inputText", text: toolText(result) }],
-          success: status === "inProgress" ? null : !isError, durationMs: null,
+          success: status === "inProgress" ? null : !isError, durationMs: null, ...(changes.length === 0 ? {} : { changes }),
         };
+      }
     }
   }
 

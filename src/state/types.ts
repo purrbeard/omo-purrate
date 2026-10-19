@@ -91,7 +91,10 @@ export interface ThreadLiveState {
   freshness: "unattached" | "live" | "stale";
   runs: Record<string, DagRun>;
   runOrder: string[];
-  runsSource: "history" | "live" | null;
+  /** Where the runs came from: the session file's history, the RPC stream, or a watched task store on disk. */
+  runsSource: "history" | "live" | "store" | null;
+  /** True while a watched task store, not an attached omo, keeps this thread's agents live (a terminal-run session). */
+  storeWatched?: boolean;
   dagRevision: number;
   activityLog: WorkflowTransition[];
   activityBaseline: ReadonlyMap<string, string>;
@@ -207,6 +210,8 @@ export type AppEvent =
   | { type: "threads/links"; links: import("../../shared/ipc").ThreadLink[] }
   | { type: "taskWork/loaded"; threadId: string; work: TaskWork[]; generation: number }
   | { type: "dagRuns/loaded"; threadId: string; runs: DagRun[]; generation: number; revision: number }
+  | { type: "taskStore/updated"; threadId: string; work: TaskWork[]; runs: DagRun[] }
+  | { type: "taskStore/unwatched"; threadId: string }
   | { type: "mcp/updated"; mcp: AppState["mcp"] }
   | { type: "bridge/status"; status: BridgeStatus }
   | { type: "rpc/notification"; notification: RpcNotification; receivedAtMs: number }

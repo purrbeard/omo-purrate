@@ -109,7 +109,8 @@ const ITEM_FIELD_CHECKS: Record<ThreadItem["type"], (value: JsonObject) => boole
     (value["error"] === undefined || value["error"] === null || isTurnError(value["error"])),
   dynamicToolCall: (value) =>
     isString(value["tool"]) &&
-    (value["contentItems"] === undefined || value["contentItems"] === null || isArrayOf(value["contentItems"], isTypedPart("inputText"))),
+    (value["contentItems"] === undefined || value["contentItems"] === null || isArrayOf(value["contentItems"], isTypedPart("inputText"))) &&
+    (value["changes"] === undefined || isArrayOf(value["changes"], isFileUpdateChange)),
   webSearch: (value) => isString(value["query"]),
   contextCompaction: () => true,
 };

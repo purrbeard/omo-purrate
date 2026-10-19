@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DagNode, DagRun } from "../../shared/protocol";
 import {
   CANVAS_ORIGIN_Y, CANVAS_PADDING, CARD_HEIGHT, CARD_WIDTH, COLUMN_GAP, COLUMN_PITCH, EDGE_ARROW, MAX_SCALE, MIN_SCALE, ROW_PITCH,
-  dependencyEdges, fitScale, layoutWorkflowGraph, neighborNode, zoomIn, zoomOut,
+  dependencyEdges, fitScale, layoutAgentTree, layoutWorkflowGraph, neighborNode, zoomIn, zoomOut,
 } from "../../src/ui/conversation/workflow-graph";
 
 const AT = "2026-10-05T00:00:00.000Z";
@@ -81,6 +81,31 @@ describe("workflow graph geometry", () => {
     expect(zoomOut(1.25)).toBe(1);
     expect(zoomIn(MAX_SCALE)).toBe(MAX_SCALE);
     expect(zoomOut(MIN_SCALE)).toBe(MIN_SCALE);
+  });
+  it("uses the run's waves as lanes and falls back to dependency levels when they disagree", () => {
+    const waved = { ...diamond, waves: [{ index: 0, node_ids: ["A"] }, { index: 1, node_ids: ["B"] }, { index: 2, node_ids: ["C"] }, { index: 3, node_ids: ["D"] }] };
+    const layout = layoutWorkflowGraph(waved);
+    expect(layout.lanes).toBe("waves");
+    expect(layout.columns.map((column) => [column.index, column.nodeIds])).toEqual([[0, ["A"]], [1, ["B"]], [2, ["C"]], [3, ["D"]]]);
+    const sameWave = layoutWorkflowGraph({ ...diamond, waves: [{ index: 0, node_ids: ["A", "B"] }, { index: 1, node_ids: ["C", "D"] }] });
+    expect(sameWave.lanes).toBe("dependencies");
+    const inconsistent = layoutWorkflowGraph({ ...diamond, waves: [{ index: 0, node_ids: ["A", "D"] }, { index: 1, node_ids: ["B", "C"] }] });
+    expect(inconsistent.lanes).toBe("dependencies");
+    expect(inconsistent.columns.map((column) => column.nodeIds)).toEqual([["A"], ["B", "C"], ["D"]]);
+    expect(layoutWorkflowGraph({ ...diamond, waves: [{ index: 0, node_ids: ["A"] }] }).lanes).toBe("dependencies");
+  });
+  it("lays the agent tree out one depth per column with each parent level with the middle of its children", () => {
+    const leaf = (id: string) => ({ id, item: id, children: [] });
+    const layout = layoutAgentTree([{ id: "main", item: "main", children: [leaf("a"), { id: "b", item: "b", children: [leaf("b1"), leaf("b2")] }, leaf("c")] }]);
+    expect(layout.lanes).toBe("depth");
+    expect(layout.columns.map((column) => column.nodeIds)).toEqual([["main"], ["a", "b", "c"], ["b1", "b2"]]);
+    const y = (id: string) => layout.byId.get(id)?.y ?? Number.NaN;
+    expect(y("b")).toBe((y("b1") + y("b2")) / 2);
+    expect(y("main")).toBe((y("a") + y("c")) / 2);
+    expect(layout.edges.map((edge) => edge.id)).toEqual(["main->a", "b->b1", "b->b2", "main->b", "main->c"]);
+    expect(neighborNode(layout, "b", "right")).toBe("b1");
+    expect(neighborNode(layout, "b1", "left")).toBe("b");
+    expect(layout.height).toBe(CANVAS_ORIGIN_Y + 3 * ROW_PITCH + CARD_HEIGHT + CANVAS_PADDING);
   });
   it("sizes an empty run to its padding alone", () => {
     const layout = layoutWorkflowGraph(run([]));

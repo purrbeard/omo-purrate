@@ -1,5 +1,6 @@
 import type { HistoricalTask, HistoryResult, HistoryTurn, MemoryWriteNotice, SessionNotice } from "../../shared/ipc";
 import { parseTodo } from "../../src/state/live-wire";
+import { toolFileChanges } from "../omo/native/file-changes";
 import type { DynamicToolCallContentItem, DynamicToolCallItem, ThreadItem, TurnError, UserInput } from "../../shared/protocol";
 
 type JsonObject = Record<string, unknown>;
@@ -152,6 +153,8 @@ function completeTool(turn: TurnBuilder, message: JsonObject): void {
   call.success = !failed;
   call.contentItems = resultContent(message["content"]);
   if (isRecord(details) && typeof details["durationMs"] === "number") call.durationMs = details["durationMs"];
+  const changes = failed ? [] : toolFileChanges(call.tool, call.arguments, details);
+  if (changes.length > 0) call.changes = changes;
 }
 
 const NOTICE_TEXT_LIMIT = 8_000;

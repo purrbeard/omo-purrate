@@ -289,6 +289,13 @@ export interface TaskWork {
   history?: HistoryResult;
 }
 
+/** A watched task store changed: the parent's child work and persisted workflow runs as now on disk. */
+export interface TaskStoreUpdate {
+  parentSessionId: string;
+  work: TaskWork[];
+  runs: import("./protocol").DagRun[];
+}
+
 export interface InstallLogLine {
   stream: "stdout" | "stderr";
   text: string;
@@ -505,6 +512,14 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   onHistoryChanged(listener: (sessionPath: string) => void): () => void;
   /** Reads only tasks reachable through explicit child-session links in this workspace's native task store. */
   loadTaskWork(cwd: string, parentSessionId: string): Promise<TaskWork[]>;
+  /**
+   * Watches the parent's native task store (task records, workflow runs, child session files) for another omo process's
+   * writes, pushing each change through onTaskWorkChanged; one push follows right away. Calls are counted per parent:
+   * each watchTaskStore needs one unwatchTaskStore.
+   */
+  watchTaskStore(cwd: string, parentSessionId: string): Promise<void>;
+  unwatchTaskStore(parentSessionId: string): Promise<void>;
+  onTaskWorkChanged(listener: (update: TaskStoreUpdate) => void): () => void;
   sendTaskMessage(parentSessionId: string, taskId: string, message: string): Promise<void>;
   /**
    * Writes a new session beside `sessionPath` (which must resolve inside the omo sessions directory) holding that
@@ -594,6 +609,9 @@ export const IPC = {
   watchHistory: "history:watch",
   historyChanged: "history:changed",
   loadTaskWork: "history:task-work",
+  watchTaskStore: "history:task-store-watch",
+  unwatchTaskStore: "history:task-store-unwatch",
+  taskWorkChanged: "history:task-work-changed",
   sendTaskMessage: "history:task-message",
   branchSession: "history:branch",
   sessionTree: "history:tree",

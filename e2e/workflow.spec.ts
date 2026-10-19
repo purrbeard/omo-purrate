@@ -36,17 +36,21 @@ test("workflow graph and background work stay in the same conversation after mai
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900));
     await page.getByTestId("workflow-graph-view").click();
     await expect(page.getByTestId("workflow-graph-node")).toHaveCount(7);
-    await page.getByTestId("workflow-graph-node").filter({ hasText: "Build compact panel" }).click();
-    await expect(panel.getByTestId("workflow-node-detail")).toContainText("Build compact panel");
+    // A node no agent has taken yet shows its detail; a node an agent ran opens that agent's chat (below).
+    await page.getByTestId("workflow-graph-node").filter({ hasText: "Review UI" }).click();
+    await expect(panel.getByTestId("workflow-node-detail")).toContainText("Review UI");
+    await expect(page.getByTestId("workflow-graph")).toHaveAttribute("data-lanes", "waves");
+    await expect(page.getByTestId("workflow-graph-lane-label")).toHaveText(["Wave 1", "Wave 2", "Wave 3", "Wave 4", "Wave 5", "Wave 6"]);
     await expect(panel.getByTestId(TESTID.omoTask)).toHaveCount(0);
     await expect(panel.getByTestId("workflow-activity-log")).not.toBeVisible();
     const graph = page.getByTestId("workflow-graph");
     const zoom = graph.getByRole("status");
-    const fitZoom = await zoom.textContent();
+    // The default zoom stays readable and scrolls; Fit shows the whole run.
+    const readableZoom = await zoom.textContent();
     await graph.getByRole("button", { name: "Zoom in", exact: true }).click();
-    await expect(zoom).not.toHaveText(fitZoom ?? "");
+    await expect(zoom).not.toHaveText(readableZoom ?? "");
     await graph.getByRole("button", { name: "Fit", exact: true }).click();
-    await expect(zoom).toHaveText(fitZoom ?? "");
+    await expect(graph.getByRole("button", { name: "Fit", exact: true })).toHaveAttribute("aria-pressed", "true");
     expect(await graph.evaluate(element => {
       const stage = element.querySelector("[data-graph-stage]");
       return stage === null || stage.getBoundingClientRect().width <= (stage.parentElement?.clientWidth ?? 0) + 1;
@@ -55,6 +59,15 @@ test("workflow graph and background work stay in the same conversation after mai
     await firstNode.focus();
     await page.keyboard.press("ArrowRight");
     await expect(page.getByTestId("workflow-graph-node").filter({ hasText: "Validate events" })).toBeFocused();
+    const layoutNode = page.getByTestId("workflow-graph-node").filter({ hasText: "Build compact panel" });
+    await layoutNode.focus();
+    await expect(page.locator('[data-testid="workflow-graph-node"][data-node-id="fixtures"]')).toHaveAttribute("data-dimmed", "");
+    await expect(page.locator('[data-testid="workflow-graph-node"][data-node-id="review"]')).not.toHaveAttribute("data-dimmed", "");
+    await expect(layoutNode).toContainText("visual-engineering");
+    await layoutNode.click();
+    await expect(page.getByTestId("workflow-agents-view")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator('[data-testid="agent-chat-tab"][data-task-id="st_dag_layout"]')).toHaveAttribute("aria-selected", "true");
+    await page.getByTestId("workflow-graph-view").click();
     for (const theme of ["light", "dark"] as const) {
       await setTheme(page, theme);
       await shot(page, `workflow-${theme}-desktop-graph`);
@@ -138,6 +151,13 @@ test("ordinary tasks never become graph nodes and stay in their request groups",
     await byTestId(page, TESTID.omoActivityToggle).click();
     const panel = page.getByTestId("workflow-panel");
     await expect(panel.getByTestId(TESTID.omoTask)).toHaveCount(0);
+    // Without a workflow run the graph draws who started which agent, never dependency nodes.
+    await page.getByTestId("workflow-graph-view").click();
+    await expect(panel.getByTestId("workflow-graph-node")).toHaveCount(0);
+    await expect(panel.getByTestId("agent-graph")).toHaveAttribute("data-lanes", "depth");
+    await expect(panel.getByTestId("agent-graph-node")).toHaveCount(2);
+    await panel.getByTestId("agent-graph-node").filter({ hasText: "Ordinary agent" }).click();
+    await expect(page.locator('[data-testid="agent-chat-tab"][data-task-id="ordinary-task"]')).toHaveAttribute("aria-selected", "true");
     await page.getByTestId("workflow-list").click();
     await expect(panel.getByTestId(TESTID.omoTask)).not.toHaveCount(0);
     await expect(panel.getByTestId("workflow-task-group")).not.toHaveCount(0);

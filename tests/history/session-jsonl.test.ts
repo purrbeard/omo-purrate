@@ -170,6 +170,30 @@ describe("parseSessionJsonl", () => {
     expect(turns[0]?.status).toBe("completed");
   });
 
+  it("keeps the file changes edit, write and apply_patch results record", () => {
+    const editPatch = "--- C:/work/app/src/a.ts\n+++ C:/work/app/src/a.ts\n@@ -1,2 +1,2 @@\n keep\n-old\n+new\n";
+    const writePatch = "--- /dev/null\n+++ C:/work/app/notes.md\n@@ -0,0 +1,2 @@\n+one\n+two\n";
+    const text = jsonl([
+      user("u1", null, 0, "change files"),
+      assistant("a1", "u1", 1, [
+        { type: "toolCall", id: "e1", name: "edit", arguments: { path: "C:/work/app/src/a.ts", edits: [{ oldText: "old", newText: "new" }] } },
+        { type: "toolCall", id: "w1", name: "write", arguments: { path: "C:/work/app/notes.md", content: "one\ntwo\n" } },
+        { type: "toolCall", id: "p1", name: "apply_patch", arguments: { input: "*** Begin Patch\n*** Add File: b.ts\n+x\n*** End Patch" } },
+        { type: "toolCall", id: "f1", name: "edit", arguments: { path: "C:/work/app/src/c.ts", edits: [] } },
+      ], "toolUse"),
+      message("r1", "a1", 2, { role: "toolResult", toolCallId: "e1", toolName: "edit", content: [], details: { diff: "-old", patch: editPatch, firstChangedLine: 2 } }),
+      message("r2", "r1", 3, { role: "toolResult", toolCallId: "w1", toolName: "write", content: [], details: { operation: "add", patch: writePatch } }),
+      message("r3", "r2", 4, { role: "toolResult", toolCallId: "p1", toolName: "apply_patch", content: [],
+        details: { preview: { files: [{ filePath: "b.ts", operation: "add", added: 1, removed: 0, diff: "+ 1 x", patch: "--- /dev/null\n+++ b.ts\n@@ -0,0 +1 @@\n+x" }] } } }),
+      message("r4", "r3", 5, { role: "toolResult", toolCallId: "f1", toolName: "edit", isError: true, content: [], details: { patch: editPatch } }),
+    ]);
+    const items = parseSessionJsonl(text).turns[0]?.items ?? [];
+    expect(items.find((item) => item.id === "e1")).toMatchObject({ changes: [{ path: "C:/work/app/src/a.ts", kind: { type: "update" }, diff: editPatch }] });
+    expect(items.find((item) => item.id === "w1")).toMatchObject({ changes: [{ path: "C:/work/app/notes.md", kind: { type: "add" }, diff: writePatch }] });
+    expect(items.find((item) => item.id === "p1")).toMatchObject({ changes: [{ path: "b.ts", kind: { type: "add" } }] });
+    expect(items.find((item) => item.id === "f1")).not.toHaveProperty("changes");
+  });
+
   it("skips malformed lines and unrendered entry types", () => {
     const lines = [
       JSON.stringify(HEADER),
