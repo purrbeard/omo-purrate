@@ -148,7 +148,7 @@ export function Sidebar() {
   const t = useT();
   const actions = useActions();
   const store = useContext(StoreContext);
-  const newSession = useNewSessionFlow();
+  const newProject = useNewSessionFlow({ chooseFolder: true });
   const { preferences } = useUiState();
   const state = useAppSelector(s => s);
   const groups = useMemo(() => selectManagedThreadsByWorkspace(state, preferences?.managedThreadIds ?? []), [state.threads, state.threadOrder, state.threadLinks, preferences?.managedThreadIds]);
@@ -429,7 +429,7 @@ export function Sidebar() {
             data-testid={TESTID.newSession}
             disabled={!connected}
             title={disconnectedHint}
-            onClick={() => void newSession()}
+            onClick={() => void newProject()}
           >
             <FolderPlus aria-hidden className="size-4 shrink-0" />
             <span className="truncate">{t("shell.newProject")}</span>

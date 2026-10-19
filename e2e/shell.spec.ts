@@ -93,7 +93,8 @@ test("the collapse toggle hides the sidebar and the header toggle restores it", 
 
 test("New project picks a folder and starts a thread there", async () => {
   const { page, readFakeLog } = current();
-  await page.evaluate(() => window.omo.setPreferences({ locale: "en" }));
+  // A different last workspace must not short-circuit the folder choice: the picked folder is the new project.
+  await page.evaluate((last) => window.omo.setPreferences({ locale: "en", lastWorkspace: last }), fakeHome);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(byTestId(page, TESTID.newSession)).toHaveText(/New project/);

@@ -101,6 +101,7 @@ function Shell() {
   const activeTab: RightTab | null = shownTab({ ...ui, workAvailable: hasAgents });
   const launcher = activeTab === null && ui.dockLauncher;
   const newSession = useNewSessionFlow();
+  const newProject = useNewSessionFlow({ chooseFolder: true });
   const groups = useMemo(() => selectManagedThreadsByWorkspace(appState, preferences?.managedThreadIds ?? []), [appState, preferences?.managedThreadIds]);
   const sessions = useMemo(() => {
     const result = new Map<string, ThreadSummary>();
@@ -120,8 +121,8 @@ function Shell() {
     if (composing.current) return;
     switch (command) {
       case "settings": uiState.setSettingsOpen(true); break;
-      case "new-session":
-      case "open-project": void newSession(); break;
+      case "new-session": void newSession(); break;
+      case "open-project": void newProject(); break;
       case "toggle-sidebar": uiState.toggleSidebar(); break;
       case "command-palette": openPalette(); break;
       case "toggle-agents": uiState.toggleWork("agents"); break;
@@ -144,7 +145,7 @@ function Shell() {
     else root.dataset["bridgeState"] = bridgeState;
   }, [bridgeState]);
 
-  useEffect(() => window.omo.onMenuCommand(runCommand), [newSession, actions]);
+  useEffect(() => window.omo.onMenuCommand(runCommand), [newSession, newProject, actions]);
   useTerminalShortcut();
 
   useEffect(() => {
