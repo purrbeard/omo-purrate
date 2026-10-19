@@ -47,7 +47,7 @@ const storedLayout = (): { tabOrder: RightTab[]; dockSide: DockSide } => {
 const saveLayout = (): void => {
   try { window.localStorage.setItem(DOCK_LAYOUT_KEY, JSON.stringify({ tabOrder: state.tabOrder, dockSide: state.dockSide })); } catch { /* storage unavailable */ }
 };
-export type SettingsSection = "general" | "appearance" | "keybindings" | "model" | "skills" | "omo" | "accounts" | "mcp" | "android" | "iphone" | "devices" | "archived" | "about";
+export type SettingsSection = "general" | "appearance" | "keybindings" | "model" | "skills" | "omo" | "accounts" | "mcp" | "android" | "iphone" | "devices" | "archived" | "import" | "about";
 
 export interface UiState {
   rightTab: RightTab | null;

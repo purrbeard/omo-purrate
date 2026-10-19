@@ -376,7 +376,7 @@ export function Sidebar() {
               </Menu.Trigger>
               <Menu.Content align="end" side="bottom">
                 <Menu.Item icon={<History />} data-testid="native-sessions-open" onClick={() => setNativeOpen(true)}>{t("shell.managed.inventory")}</Menu.Item>
-                <Menu.Item icon={<Import />} onClick={() => uiState.setSessionImportOpen(true)}>{t("shell.import.open")}</Menu.Item>
+                <Menu.Item icon={<Import />} data-testid="sidebar-import-settings" onClick={() => uiState.setSettingsOpen(true, "import")}>{t("shell.managed.importSettings")}</Menu.Item>
               </Menu.Content>
             </Menu.Root>
           </div>
