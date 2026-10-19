@@ -1,8 +1,7 @@
-import { Tooltip } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useT } from "../../i18n";
 import { useContextUsage } from "./use-context-usage";
 import clsx from "clsx";
-import { focusRing } from "../kit";
+import { focusRing, Tooltip } from "../kit";
 
 export function ContextGauge() {
   const t = useT();
@@ -14,8 +13,8 @@ export function ContextGauge() {
   const label = usage.tokens === null ? t("composer.context.compacted") :
     `${t("composer.context.usage", { used: usage.tokens, window: usage.window, pct: percent ?? 0 })}\n${t("composer.context.autoCompact", { threshold })}`;
   return (
-    <Tooltip label={label} side="top" delayMs={500}>
-      <span className={clsx("inline-flex shrink-0 items-center gap-1 rounded-sm text-xs tabular-nums text-muted-foreground data-[level=critical]:text-destructive-foreground data-[level=warning]:text-warning", focusRing)} tabIndex={0} aria-label={label} data-testid="context-gauge"
+    <Tooltip.Root>
+      <Tooltip.Trigger delay={500} render={<span className={clsx("inline-flex shrink-0 items-center gap-1 rounded-sm text-xs tabular-nums text-muted-foreground data-[level=critical]:text-destructive-foreground data-[level=warning]:text-warning", focusRing)} tabIndex={0} aria-label={label} data-testid="context-gauge"
         data-level={level} data-tokens={usage.tokens ?? ""} data-window={usage.window} data-percent={percent ?? ""}>
         <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true">
           <circle className="fill-none stroke-border stroke-2" cx="10" cy="10" r="7" />
@@ -23,7 +22,8 @@ export function ContextGauge() {
             strokeDasharray={`${Math.min(100, Math.max(0, (usage.tokens ?? 0) / usage.window * 100))} 100`} transform="rotate(-90 10 10)" />}
         </svg>
         <span>{percent === null ? "—" : `${percent}%`}</span>
-      </span>
-    </Tooltip>
+      </span>} />
+      <Tooltip.Content side="top" className="whitespace-pre-line">{label}</Tooltip.Content>
+    </Tooltip.Root>
   );
 }
