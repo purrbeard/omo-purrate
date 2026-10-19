@@ -107,7 +107,7 @@ const GROUPS: readonly SectionGroup[] = [
   },
   {
     id: "omo",
-    label: "app.brand",
+    label: "shell.settings.nav.omoGroup",
     sections: [
       {
         id: "model",
