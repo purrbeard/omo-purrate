@@ -4,8 +4,30 @@ import { useT } from "../../i18n";
 import { useAppSelector } from "../app-context";
 import { GIT_REFRESH_EVENT, selectCompletedTurnCount } from "../git/use-git-info";
 import { uiState } from "../ui-state";
-import css from "./WorkspacePanel.module.css";
+import clsx from "clsx";
+import { Input } from "../kit";
 
+// Keyboard focus inside the panel draws an inset ring on buttons and the preview region.
+const FOCUS = "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid";
+const PANEL = clsx(
+  "flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-solid border-border bg-background text-xs leading-[1.5] text-foreground",
+  "data-[placement=overlay]:shadow-[var(--dsw-elevation-soft),0_18px_48px_-12px_color-mix(in_srgb,var(--foreground)_28%,transparent)]",
+  "[&_button:focus-visible]:outline-2 [&_button:focus-visible]:-outline-offset-2 [&_button:focus-visible]:outline-ring [&_button:focus-visible]:outline-solid",
+);
+/** Header, preview toolbar, list toolbar and footer rows. */
+const BAR = "flex flex-none items-center gap-2";
+// Code, line counts and status letters keep the system monospace stack the panel shipped with.
+const MONO = "[font-family:ui-monospace,SFMono-Regular,Consolas,monospace]";
+const TAB_BUTTON = "cursor-pointer border-0 bg-transparent px-0 py-1 text-muted-foreground [font:inherit]";
+const SEGMENT = "cursor-pointer rounded-xs border-0 bg-transparent px-[7px] py-0.5 text-[11px] text-muted-foreground [font-family:inherit] aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-[0_1px_3px_color-mix(in_srgb,var(--foreground)_10%,transparent)]";
+const LIST_SWITCH = "flex cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-xs leading-[1.5] text-muted-foreground [font-family:inherit] aria-pressed:font-semibold aria-pressed:text-foreground";
+const LINES = clsx("inline-flex flex-none gap-1 text-[10px] leading-4 font-medium text-muted-foreground [&_[data-kind=added]]:text-success [&_[data-kind=removed]]:text-destructive-foreground", MONO);
+const STATUS = clsx("flex-none text-[10px] leading-4 font-semibold text-ring data-[status=added]:text-success data-[status=deleted]:text-destructive-foreground", MONO);
+const FILE_ROW = "box-border flex w-full min-w-0 items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-1.5 text-left text-[11px] text-muted-foreground [font-family:inherit]";
+const FILE_PATH = "min-w-0 flex-1 truncate";
+const EMPTY = "m-0 px-3.5 py-5 text-muted-foreground [overflow-wrap:anywhere]";
+const ERROR = "m-0 px-3.5 py-5 text-foreground [overflow-wrap:anywhere]";
+const BADGE = "ml-1.5 inline-block rounded-full border border-solid border-border px-1.5 align-middle text-[11px] leading-[17px] font-medium text-muted-foreground [corner-shape:round]!";
 
 export interface WorkspacePanelProps {
   placement: "docked" | "overlay";
@@ -111,83 +133,83 @@ function WorkspaceContents({ cwd, threadId, placement }: WorkspacePanelProps & {
   };
 
   return (
-    <aside ref={panelRef} className={css.panel} data-placement={placement} data-testid="workspace-panel" aria-label={labels.title}
+    <aside ref={panelRef} className={PANEL} data-placement={placement} data-testid="workspace-panel" aria-label={labels.title}
       tabIndex={-1}>
-      <header className={css.header} data-window-drag>
-        {cwd !== null && <span className={css.workspace} title={cwd}>{cwd.split(/[\\/]/).filter(Boolean).at(-1)}</span>}
-        <button className={css.iconButton} type="button" aria-label={labels.refresh} title={labels.refresh} disabled={cwd === null || listLoading} onClick={() => setRevision((value) => value + 1)}>
+      <header className={clsx(BAR, "h-[46px] border-b border-border pr-2.5 pl-3.5")} data-window-drag>
+        {cwd !== null && <span className="min-w-0 flex-1 truncate text-muted-foreground" title={cwd}>{cwd.split(/[\\/]/).filter(Boolean).at(-1)}</span>}
+        <button className="grid size-7 flex-none cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:not-disabled:bg-sidebar-accent disabled:cursor-default disabled:opacity-40" type="button" aria-label={labels.refresh} title={labels.refresh} disabled={cwd === null || listLoading} onClick={() => setRevision((value) => value + 1)}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 6a5 5 0 1 0 .1 3M13 2.5V6H9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
       </header>
-      {cwd === null ? <p className={css.empty}>{labels.noWorkspace}</p> : <>
-        {tabs.length > 0 && <div className={css.tabs} aria-label={labels.title}>
-          {tabs.map((file) => <div className={css.tab} data-active={selected === file || undefined} key={file}>
-            <button type="button" className={css.tabSelect} title={file} aria-pressed={selected === file} onClick={() => setSelected(file)}>{file.split("/").at(-1)}</button>
-            <button type="button" className={css.tabClose} aria-label={`${labels.tabClose}: ${file}`} onClick={() => closeTab(file)}>x</button>
+      {cwd === null ? <p className={EMPTY}>{labels.noWorkspace}</p> : <>
+        {tabs.length > 0 && <div className="flex min-h-[34px] flex-none overflow-x-auto border-b border-border" aria-label={labels.title}>
+          {tabs.map((file) => <div className="flex max-w-[190px] flex-none items-center border-r border-b-2 border-r-border border-b-transparent pr-[5px] pl-2.5 data-active:border-b-ring data-active:bg-foreground/4" data-active={selected === file || undefined} key={file}>
+            <button type="button" className={clsx(TAB_BUTTON, "min-w-0 truncate")} title={file} aria-pressed={selected === file} onClick={() => setSelected(file)}>{file.split("/").at(-1)}</button>
+            <button type="button" className={clsx(TAB_BUTTON, "ml-1.5 w-5 rounded-xs hover:bg-sidebar-accent")} aria-label={`${labels.tabClose}: ${file}`} onClick={() => closeTab(file)}>x</button>
           </div>)}
         </div>}
-        <div className={css.previewToolbar}>
-          <span className={css.path} title={selected ?? ""}>{selected ?? ""}</span>
-          <div className={css.segmented}>
-            <button type="button" aria-pressed={mode === "file"} onClick={() => setMode("file")}>{labels.file}</button>
-            <button type="button" aria-pressed={mode === "diff"} onClick={() => setMode("diff")}>{labels.diff}</button>
+        <div className={clsx(BAR, "h-9 border-b border-border pr-2.5 pl-3.5")}>
+          <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={selected ?? ""}>{selected ?? ""}</span>
+          <div className="flex flex-none rounded-md bg-foreground/5 p-0.5">
+            <button type="button" className={SEGMENT} aria-pressed={mode === "file"} onClick={() => setMode("file")}>{labels.file}</button>
+            <button type="button" className={SEGMENT} aria-pressed={mode === "diff"} onClick={() => setMode("diff")}>{labels.diff}</button>
           </div>
         </div>
-        <div className={css.preview} aria-busy={previewLoading} tabIndex={0} role="region" aria-label={selected ?? labels.select} data-read={mode === "file" || undefined} data-diff={mode === "diff" || undefined}>
-          {previewError !== null ? <p className={css.error} role="alert">{previewError}</p>
-            : previewLoading ? <p className={css.empty} role="status">{labels.loading}</p>
-            : preview === null ? <p className={css.empty}>{labels.select}</p>
-            : mode === "diff" && preview.text === "" ? <p className={css.empty}>{labels.noDiff}</p>
-            : <pre className={css.code} data-language={preview.language}>{lines.map((line, index) => <span key={index} className={css.line} data-kind={mode === "diff" ? line.startsWith("+") && !line.startsWith("+++") ? "added" : line.startsWith("-") && !line.startsWith("---") ? "removed" : line.startsWith("@@") ? "hunk" : undefined : undefined}><span className={css.lineNumber} aria-hidden="true">{mode === "file" ? index + 1 : ""}</span><span>{line || " "}</span>{"\n"}</span>)}</pre>}
+        <div className={clsx("min-h-[90px] flex-[1_1_50%] overflow-auto", FOCUS)} aria-busy={previewLoading} tabIndex={0} role="region" aria-label={selected ?? labels.select} data-read={mode === "file" || undefined} data-diff={mode === "diff" || undefined}>
+          {previewError !== null ? <p className={ERROR} role="alert">{previewError}</p>
+            : previewLoading ? <p className={EMPTY} role="status">{labels.loading}</p>
+            : preview === null ? <p className={EMPTY}>{labels.select}</p>
+            : mode === "diff" && preview.text === "" ? <p className={EMPTY}>{labels.noDiff}</p>
+            : <pre className={clsx("m-0 min-w-max px-0 py-3 text-[11px] leading-[19px] [tab-size:2]", MONO)} data-language={preview.language}>{lines.map((line, index) => <span key={index} className="block min-h-[19px] pr-4 whitespace-pre data-[kind=added]:bg-success/12 data-[kind=added]:text-success data-[kind=hunk]:bg-ring/7 data-[kind=hunk]:text-ring data-[kind=removed]:bg-destructive-foreground/12 data-[kind=removed]:text-destructive-foreground" data-kind={mode === "diff" ? line.startsWith("+") && !line.startsWith("+++") ? "added" : line.startsWith("-") && !line.startsWith("---") ? "removed" : line.startsWith("@@") ? "hunk" : undefined : undefined}><span className="box-border inline-block w-11 pr-3 text-right text-muted-foreground select-none" aria-hidden="true">{mode === "file" ? index + 1 : ""}</span><span>{line || " "}</span>{"\n"}</span>)}</pre>}
         </div>
-        <section className={css.files} aria-label={labels.changed}>
-          <div className={css.listToolbar}>
-            <div className={css.listSwitch}>
-              <button type="button" aria-pressed={!sessionView && changesOnly} onClick={() => { setSessionView(false); setChangesOnly(true); }}>{labels.changed} <span className={css.count}>{changed}</span></button>
-              {changed > 0 && <span className={css.lines} data-testid="workspace-line-totals"><span data-kind="added">+{totals.added}</span>{" "}<span data-kind="removed">−{totals.removed}</span></span>}
-              <button type="button" aria-pressed={!sessionView && !changesOnly} onClick={() => { setSessionView(false); setChangesOnly(false); }}>{labels.all}</button>
-              <button type="button" aria-pressed={sessionView} onClick={() => setSessionView(true)}>{t("workspace.panel.sessionHistory")}</button>
+        <section className="flex min-h-[140px] flex-[0_1_34%] flex-col overflow-hidden border-t border-border" aria-label={labels.changed}>
+          <div className={clsx(BAR, "h-[38px] px-3")}>
+            <div className="flex items-center gap-3">
+              <button type="button" className={LIST_SWITCH} aria-pressed={!sessionView && changesOnly} onClick={() => { setSessionView(false); setChangesOnly(true); }}>{labels.changed} <span className="rounded-[5px] bg-foreground/7 px-[5px] text-[10px] font-normal text-muted-foreground">{changed}</span></button>
+              {changed > 0 && <span className={LINES} data-testid="workspace-line-totals"><span data-kind="added">+{totals.added}</span>{" "}<span data-kind="removed">−{totals.removed}</span></span>}
+              <button type="button" className={LIST_SWITCH} aria-pressed={!sessionView && !changesOnly} onClick={() => { setSessionView(false); setChangesOnly(false); }}>{labels.all}</button>
+              <button type="button" className={LIST_SWITCH} aria-pressed={sessionView} onClick={() => setSessionView(true)}>{t("workspace.panel.sessionHistory")}</button>
             </div>
           </div>
-          <input className={css.search} type="search" aria-label={labels.search} placeholder={labels.search} value={filter} onChange={(event) => setFilter(event.target.value)} />
-          <div className={css.fileList} aria-busy={sessionView ? sessionLoading : listLoading}>
+          <Input className="mx-3 mb-2 h-auto! w-[calc(100%-24px)]! flex-none rounded-md! border-border! bg-transparent! px-[9px]! py-[5px]! text-xs! leading-[1.5]!" type="search" aria-label={labels.search} placeholder={labels.search} value={filter} onChange={(event) => setFilter(event.target.value)} />
+          <div className="min-h-0 flex-1 overflow-auto px-1.5 pb-1.5" aria-busy={sessionView ? sessionLoading : listLoading}>
             {sessionView ? <>
-              <p className={css.sessionNote}>{t("workspace.panel.sessionNote")}</p>
-              {sessionError !== null ? <p className={css.error} role="alert">{sessionError}</p>
-                : sessionLoading ? <p className={css.empty} role="status">{labels.loading}</p>
-                : sessionWork.every((work) => work.commits.length === 0 && work.changes.length === 0) ? <p className={css.empty}>{labels.noChanges}</p>
-                : sessionWork.map((work) => <section key={work.root} data-testid="workspace-session-worktree" className={css.sessionGroup}>
-                  <h3 title={work.root} data-base={work.base || undefined}>
+              <p className="mx-2 my-1.5 text-[11px] text-muted-foreground">{t("workspace.panel.sessionNote")}</p>
+              {sessionError !== null ? <p className={ERROR} role="alert">{sessionError}</p>
+                : sessionLoading ? <p className={EMPTY} role="status">{labels.loading}</p>
+                : sessionWork.every((work) => work.commits.length === 0 && work.changes.length === 0) ? <p className={EMPTY}>{labels.noChanges}</p>
+                : sessionWork.map((work) => <section key={work.root} data-testid="workspace-session-worktree" className="border-b border-border px-2 py-1.5">
+                  <h3 className="mx-0 my-1 text-xs leading-[1.5] font-semibold [font-family:inherit] [overflow-wrap:anywhere]" title={work.root} data-base={work.base || undefined}>
                     {work.branch ?? "HEAD"}
                     {work.base
-                      ? <span className={css.flowBadge} data-kind="base">{t("workspace.panel.main")}</span>
-                      : work.baseBranch !== null && <span className={css.flowBadge} data-testid="workspace-session-target">→ {work.baseBranch}</span>}
-                    {work.current && <span className={css.flowBadge} data-kind="current">{t("workspace.panel.thisSession")}</span>}
-                    <span className={css.worktreeFolder}>{work.root.split(/[\\/]/).at(-1)}</span>
+                      ? <span className={clsx(BADGE, "border-success/45 text-success")} data-kind="base">{t("workspace.panel.main")}</span>
+                      : work.baseBranch !== null && <span className={BADGE} data-testid="workspace-session-target">→ {work.baseBranch}</span>}
+                    {work.current && <span className={clsx(BADGE, "border-foreground text-foreground")} data-kind="current">{t("workspace.panel.thisSession")}</span>}
+                    <span className="ml-1.5 font-normal text-muted-foreground">{work.root.split(/[\\/]/).at(-1)}</span>
                   </h3>
-                  {work.changes.filter((file) => file.path.toLowerCase().includes(filter.toLowerCase())).map((file) => <div key={file.path} className={css.fileRow} title={work.root}>
-                    <span className={css.filePath}>{file.path}</span><span className={css.lines}>{file.additions === null ? labels.binary : `+${file.additions ?? 0} −${file.deletions ?? 0}`}</span><span className={css.status}>{file.status}</span>
+                  {work.changes.filter((file) => file.path.toLowerCase().includes(filter.toLowerCase())).map((file) => <div key={file.path} className={clsx(FILE_ROW, "cursor-default")} title={work.root}>
+                    <span className={FILE_PATH}>{file.path}</span><span className={LINES}>{file.additions === null ? labels.binary : `+${file.additions ?? 0} −${file.deletions ?? 0}`}</span><span className={STATUS}>{file.status}</span>
                   </div>)}
                   {work.commits.map((commit) => <details key={commit.hash} open data-testid="workspace-session-commit">
-                    <summary>{commit.hash.slice(0, 7)} {commit.subject}
-                      {commit.merged !== undefined && <span className={css.mergeBadge} data-testid="workspace-session-merged" data-merged={commit.merged}>
+                    <summary className="cursor-pointer [overflow-wrap:anywhere]">{commit.hash.slice(0, 7)} {commit.subject}
+                      {commit.merged !== undefined && <span className={clsx(BADGE, "data-[merged=false]:border-warning/50 data-[merged=false]:text-warning data-[merged=true]:border-success/45 data-[merged=true]:text-success")} data-testid="workspace-session-merged" data-merged={commit.merged}>
                         {commit.merged ? t("workspace.panel.merged", { branch: work.baseBranch ?? "main" }) : t("workspace.panel.notMerged")}
                       </span>}
                     </summary>
-                    {commit.files.filter((file) => file.path.toLowerCase().includes(filter.toLowerCase())).map((file) => <div key={file.path} className={css.fileRow}>
-                      <span className={css.filePath} title={file.path}>{file.path}</span><span className={css.lines} data-testid="workspace-session-lines">{file.additions === null ? labels.binary : `+${file.additions} −${file.deletions}`}</span>
+                    {commit.files.filter((file) => file.path.toLowerCase().includes(filter.toLowerCase())).map((file) => <div key={file.path} className={clsx(FILE_ROW, "cursor-default")}>
+                      <span className={FILE_PATH} title={file.path}>{file.path}</span><span className={LINES} data-testid="workspace-session-lines">{file.additions === null ? labels.binary : `+${file.additions} −${file.deletions}`}</span>
                     </div>)}
                   </details>)}
                 </section>)}
-            </> : listError !== null ? <p className={css.error} role="alert">{labels.error}: {listError}</p>
-              : listLoading ? <p className={css.empty} role="status">{labels.loading}</p>
-              : filtered.length === 0 ? <p className={css.empty}>{changesOnly && filter === "" ? labels.noChanges : labels.empty}</p>
-              : <ul>{filtered.map((file) => <li key={file.path}><button className={css.fileRow} type="button" data-active={selected === file.path || undefined} title={file.path} aria-pressed={selected === file.path} onClick={() => openFile(file)}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 2H4v12h8V4.5L9.5 2ZM9 2v3h3" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg><span className={css.filePath}>{file.path}</span>{file.additions !== undefined && (file.additions === null || file.deletions === null
-                ? <span className={css.lines}>{labels.binary}</span>
-                : <span className={css.lines} data-testid="workspace-file-lines"><span data-kind="added">+{file.additions}</span>{" "}<span data-kind="removed">−{file.deletions}</span></span>)}<span className={css.status} data-status={file.status.includes("D") ? "deleted" : file.status.includes("A") || file.status === "??" ? "added" : "modified"}>{file.status === "??" ? "U" : file.status}</span></button></li>)}</ul>}
+            </> : listError !== null ? <p className={ERROR} role="alert">{labels.error}: {listError}</p>
+              : listLoading ? <p className={EMPTY} role="status">{labels.loading}</p>
+              : filtered.length === 0 ? <p className={EMPTY}>{changesOnly && filter === "" ? labels.noChanges : labels.empty}</p>
+              : <ul className="m-0 list-none p-0">{filtered.map((file) => <li key={file.path}><button className={clsx(FILE_ROW, "cursor-pointer hover:bg-sidebar-accent data-active:bg-ring/10 data-active:text-foreground")} type="button" data-active={selected === file.path || undefined} title={file.path} aria-pressed={selected === file.path} onClick={() => openFile(file)}><svg className="flex-none text-muted-foreground" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M9.5 2H4v12h8V4.5L9.5 2ZM9 2v3h3" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg><span className={FILE_PATH}>{file.path}</span>{file.additions !== undefined && (file.additions === null || file.deletions === null
+                ? <span className={LINES}>{labels.binary}</span>
+                : <span className={LINES} data-testid="workspace-file-lines"><span data-kind="added">+{file.additions}</span>{" "}<span data-kind="removed">−{file.deletions}</span></span>)}<span className={STATUS} data-status={file.status.includes("D") ? "deleted" : file.status.includes("A") || file.status === "??" ? "added" : "modified"}>{file.status === "??" ? "U" : file.status}</span></button></li>)}</ul>}
           </div>
         </section>
-        <footer className={css.footer}><span>{labels.readOnly}</span><span>{preview?.language ?? ""}</span></footer>
+        <footer className={clsx(BAR, "h-[25px] justify-between border-t border-border px-3 text-[10px] text-muted-foreground")}><span>{labels.readOnly}</span><span>{preview?.language ?? ""}</span></footer>
       </>}
     </aside>
   );
