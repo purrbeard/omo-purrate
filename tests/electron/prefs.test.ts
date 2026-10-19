@@ -79,6 +79,13 @@ describe("PreferencesStore", () => {
     expect(new PreferencesStore(dir).get()).toMatchObject({ palette: "sbd", theme: "dark" });
     expect(prefs.set({ theme: "light" })).toMatchObject({ palette: "sbd", theme: "light" });
   });
+  it("persists hidden ssh hosts as unique nonempty aliases", () => {
+    const prefs = new PreferencesStore(dir);
+    prefs.set({ hiddenSshHosts: ["lab", "", "lab", 7, "old-box"] });
+    expect(new PreferencesStore(dir).get().hiddenSshHosts).toEqual(["lab", "old-box"]);
+    prefs.set({ theme: "dark" });
+    expect(new PreferencesStore(dir).get().hiddenSshHosts).toEqual(["lab", "old-box"]);
+  });
   it("returns defaults when no file exists", () => {
     expect(new PreferencesStore(dir).get()).toEqual(DEFAULT_PREFERENCES);
   });

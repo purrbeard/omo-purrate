@@ -7,8 +7,8 @@ export const SIDEBAR_DEFAULT_WIDTH = 280;
 
 export const WORKFLOW_PANEL_WIDTHS = { normal: 580, wide: 720, maximized: 840 } as const;
 export type WorkflowPanelSize = keyof typeof WORKFLOW_PANEL_WIDTHS;
-export type RightTab = "work" | "btw" | "terminal" | "files" | "browser";
-export const RIGHT_TABS: readonly RightTab[] = ["work", "btw", "terminal", "files", "browser"];
+export type RightTab = "work" | "btw" | "terminal" | "files" | "browser" | "servers";
+export const RIGHT_TABS: readonly RightTab[] = ["work", "btw", "terminal", "files", "browser", "servers"];
 /** Tabs every stored layout has; a layout saved before later tabs existed gets them appended. */
 const BASE_TABS: readonly RightTab[] = ["work", "btw", "terminal", "files"];
 /** Views of the single Work panel: agent conversations, the run graph, the work list and the activity log. */

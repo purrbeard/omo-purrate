@@ -123,6 +123,9 @@ function merge(current: Preferences, patch: unknown): Preferences {
       : current.sessionImportCompleted === undefined ? {} : { sessionImportCompleted: current.sessionImportCompleted }),
     ...(typeof patch["sharedHost"] === "boolean" ? { sharedHost: patch["sharedHost"] }
       : current.sharedHost === undefined ? {} : { sharedHost: current.sharedHost }),
+    ...(Array.isArray(patch["hiddenSshHosts"])
+      ? { hiddenSshHosts: [...new Set(patch["hiddenSshHosts"].filter((alias): alias is string => typeof alias === "string" && alias !== "" && alias.length <= 256))].slice(0, 500) }
+      : current.hiddenSshHosts === undefined ? {} : { hiddenSshHosts: current.hiddenSshHosts }),
     ...(has("modelProfile") ? { modelProfile: patch["modelProfile"] === null ? null :
       PROFILES.find(value => value === patch["modelProfile"]) ?? current.modelProfile ?? null }
       : current.modelProfile === undefined ? {} : { modelProfile: current.modelProfile }),

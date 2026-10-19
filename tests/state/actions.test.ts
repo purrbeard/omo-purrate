@@ -133,6 +133,10 @@ class FakeBridge implements OmoBridgeApi {
   browserCancelPick(): ReturnType<OmoBridgeApi["browserCancelPick"]> { return Promise.resolve(); }
   listLocalServers(): ReturnType<OmoBridgeApi["listLocalServers"]> { return Promise.resolve([]); }
   onBrowserState(): () => void { return () => {}; }
+  listSshHosts(): ReturnType<OmoBridgeApi["listSshHosts"]> { return Promise.resolve({ configPath: "", hosts: [], states: {}, error: null }); }
+  testSshHost(): ReturnType<OmoBridgeApi["testSshHost"]> { return Promise.reject(new Error("no ssh in tests")); }
+  refreshSshSpecs(): ReturnType<OmoBridgeApi["refreshSshSpecs"]> { return Promise.reject(new Error("no ssh in tests")); }
+  onSshHostState(): () => void { return () => {}; }
   getIphoneStatus(): ReturnType<OmoBridgeApi["getIphoneStatus"]> { return Promise.resolve({ enabled: false, state: "searching", devices: [] }); }
   onIphoneStatus(): () => void { return () => {}; }
   readonly platform = "darwin";
