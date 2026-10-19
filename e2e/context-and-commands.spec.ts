@@ -21,6 +21,10 @@ test("context usage and native slash command menu", async () => {
     await expect(gauge).toHaveAttribute("data-total-tokens", "25000");
     await expect(gauge).toHaveAttribute("data-cost", "0.07");
     await expect(gauge).toHaveAttribute("aria-label", /Session total: 25,000 tokens · Session cost: \$0\.07/);
+    await page.evaluate(() => window.omo.setPreferences({ showContextUsage: false }));
+    await expect(gauge).toHaveCount(0);
+    await page.evaluate(() => window.omo.setPreferences({ showContextUsage: true }));
+    await expect(gauge).toBeVisible();
 
     const input = byTestId(page, TESTID.composerInput);
     const menu = byTestId(page, TESTID.skillMenu);
@@ -91,10 +95,24 @@ test("Alt+Enter queues a follow-up for after the turn; queued messages can be ed
     await expect(items.first()).toContainText("edited later");
     expect(launched.readFakeLog().map(frame => frame["type"])).toEqual(expect.arrayContaining(["dequeue_message", "edit_queued_message"]));
 
+    // With "Enter while a turn runs: queue", Enter queues and Alt+Enter steers.
+    await page.evaluate(() => window.omo.setPreferences({ followUpBehavior: "queue" }));
+    await input.fill("queued by enter");
+    await expect(byTestId(page, TESTID.composerSend)).toHaveAttribute("aria-label", "Queue for after this turn");
+    await expect(byTestId(page, TESTID.steeringHint)).toHaveCount(0);
+    await input.press("Enter");
+    await expect(items).toHaveCount(2);
+    expect(launched.readFakeLog().filter(frame => frame["type"] === "follow_up")).toHaveLength(3);
+    await input.fill("steered by alt");
+    await input.press("Alt+Enter");
+    await expect.poll(() => launched.readFakeLog().filter(frame => frame["type"] === "steer")).toHaveLength(1);
+    await expect(items).toHaveCount(2);
+
     writeFileSync(gate, "");
     await expect(lastTurn(page)).toHaveAttribute("data-status", "completed", { timeout: 20_000 });
     await expect(items).toHaveCount(0);
     await expect(page.getByText("edited later")).toHaveCount(1);
+    await expect(page.getByText("queued by enter")).toHaveCount(1);
     await expect(page.getByText("drop this")).toHaveCount(0);
   } finally {
     await launched.close();

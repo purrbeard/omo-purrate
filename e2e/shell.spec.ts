@@ -122,8 +122,25 @@ test("a magic keyword highlights, shows the hint and is sent unchanged", async (
   await input.fill("/ulw-loop fix it");
   await expect(composer).toHaveAttribute("data-keyword", "ulw-loop");
   await expect(byTestId(page, TESTID.keywordHighlight)).toHaveText("/ulw-loop");
-  await expect(hint).toHaveText("/ulw-loop: OmO keeps working until the task is done.");
+  await expect(hint).toHaveText("ulw loop: OmO sets a goal and works in checked steps until it is met.");
   await shot(page, "G015-ulw-loop");
+
+  await input.fill("mass ulw research");
+  await expect(composer).toHaveAttribute("data-keyword", "ulw-research");
+  await expect(composer).toHaveAttribute("data-keyword-frame", "");
+  await expect(hint.locator("p")).toHaveText([
+    "ulw research: OmO runs a research team and brings back a cited report.",
+    "mass ulw: OmO splits the job into parallel lanes and runs them in order.",
+  ]);
+  expect(await composer.evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).toMatch(/^linear-gradient/);
+  expect(await byTestId(page, TESTID.keywordHighlight).evaluate((element) => getComputedStyle(element).backgroundClip)).toBe("text");
+  await shot(page, "G016-keyword-effects");
+
+  await page.evaluate(() => window.omo.setPreferences({ keywordEffects: false }));
+  await expect(composer).not.toHaveAttribute("data-keyword-frame");
+  await expect(hint.locator("p")).toHaveCount(2);
+  expect(await byTestId(page, TESTID.keywordHighlight).evaluate((element) => getComputedStyle(element).backgroundClip)).not.toBe("text");
+  await page.evaluate(() => window.omo.setPreferences({ keywordEffects: true }));
 
   await input.fill("ordinary words replace the keyword");
   await expect(composer).not.toHaveAttribute("data-keyword");

@@ -22,7 +22,9 @@ import type { SkillMenuStatus } from "./SkillMenu";
 import { acceptCommand, matchCommands, menuOptions, nativeSkills } from "./commands";
 import { useNativeCatalog } from "./use-native-catalog";
 import type { MenuOption } from "./commands";
-import { detectMagicKeyword, segmentDraft } from "./magic-keyword";
+import { findMagicKeywords, keywordHints, segmentDraft } from "./magic-keyword";
+import type { MagicKeywordHint } from "./magic-keyword";
+import "./keyword-effects.css";
 import { acceptSkill, detectSkillTrigger, pruneSelected, rankSkills, serializeSkillDraft } from "./skill-draft";
 import type { SkillDraft } from "./skill-draft";
 import { capImages, IMAGE_LIMIT, isImageFile, readImage, type ImageInput } from "./attachments";
@@ -53,6 +55,11 @@ const contextChipClass = clsx(
   "text-xs leading-5 text-muted-foreground [font-family:inherit] [&>span]:min-w-0 [&>span]:truncate [&>svg]:flex-none hover:text-foreground",
   focusRing,
 );
+const KEYWORD_LABEL: Record<MagicKeywordHint, string> = { ulw: "ulw", "mass-ulw": "mass ulw", "ulw-plan": "ulw plan", "ulw-loop": "ulw loop", "ulw-research": "ulw research" };
+const KEYWORD_HINT = {
+  ulw: "composer.keyword.hint.ulw", "mass-ulw": "composer.keyword.hint.massUlw", "ulw-plan": "composer.keyword.hint.ulwPlan",
+  "ulw-loop": "composer.keyword.hint.ulwLoop", "ulw-research": "composer.keyword.hint.ulwResearch",
+} as const satisfies Record<MagicKeywordHint, string>;
 /** The mirror and the textarea share one box, font and wrapping so painted keywords line up with the caret. */
 const draftBox = "m-0 box-border block w-full border-0 pt-0.5 pr-2.5 pl-4 [font-family:var(--dsw-font-family)] text-[length:inherit] leading-[inherit] tracking-normal [word-spacing:normal] [overflow-wrap:anywhere] whitespace-pre-wrap";
 /** Round 32px primary action; the send button is solid --primary only while it can send. */
@@ -100,7 +107,11 @@ export function Composer() {
   const turnActive = useAppSelector(selectIsTurnActive);
   const connected = useAppSelector((state) => state.bridge?.state === "connected");
   const lastWorkspace = useUiState().preferences?.lastWorkspace ?? null;
-  const sendKey = useUiState().preferences?.sendKey ?? "enter";
+  const preferences = useUiState().preferences;
+  const sendKey = preferences?.sendKey ?? "enter";
+  const queueFirst = preferences?.followUpBehavior === "queue";
+  const keywordEffects = preferences?.keywordEffects ?? true;
+  const showContextUsage = preferences?.showContextUsage ?? true;
   const queued = useQueuedMessages(activeThreadId);
   const [pickedWorkspace, setPickedWorkspace] = useState<string | null>(null);
   const workspace = pickedWorkspace ?? lastWorkspace;
@@ -405,7 +416,11 @@ export function Composer() {
 
   const blank = text.trim() === "";
   const canSend = connected && (!blank || images.length > 0 || context.length > 0 || goalDraft !== "") && !busy;
-  const keyword = detectMagicKeyword(text);
+  const keywords = useMemo(() => findMagicKeywords(text), [text]);
+  const keyword = keywords[0] ?? null;
+  const hints = keywordHints(keywords);
+  const framed = keyword !== null && keywordEffects;
+  const keywordClass = keywordEffects ? "composer-reserved-keyword font-medium" : "font-medium text-primary";
   const segments = useMemo(() => segmentDraft(text), [text]);
   const syncMirrorScroll = (): void => {
     const mirror = mirrorRef.current;
@@ -547,8 +562,8 @@ export function Composer() {
     // With "Ctrl+Enter sends" a bare Enter keeps its default: a new line.
     if (sendKey === "ctrlEnter" && !event.ctrlKey && !event.metaKey && !event.altKey) return;
     event.preventDefault();
-    // Alt+Enter queues a follow-up for after the running turn.
-    void submit(event.altKey && turnActive ? "followUp" : "send");
+    // While a turn runs, Enter steers or queues per Settings > General; Alt+Enter does the other.
+    void submit(turnActive && event.altKey !== queueFirst ? "followUp" : "send");
   };
 
   const keepFocus = (event: MouseEvent<HTMLButtonElement>): void => {
@@ -565,8 +580,9 @@ export function Composer() {
         ? t("composer.placeholder.running")
         : t("composer.placeholder.idle");
   // A /btw or /side draft goes to the side panel, so it never steers the running turn.
-  const steers = turnActive && parseBtwCommand(text) === null;
-  const sendLabel = steers ? t("composer.steer") : t("composer.send");
+  const steers = turnActive && !queueFirst && parseBtwCommand(text) === null;
+  const queues = turnActive && queueFirst;
+  const sendLabel = steers ? t("composer.steer") : queues ? t("composer.queueFollowUp") : t("composer.send");
 
   return (
     <div className="flex flex-none flex-col items-center px-5 pb-4 [--dsh-composer-card-max-width:var(--container-3xl)]">
@@ -575,11 +591,12 @@ export function Composer() {
         className={clsx(
           "relative box-border flex w-full max-w-3xl flex-col gap-2.5 rounded-2xl border border-solid pt-2.5",
           "bg-composer text-sm leading-6 text-composer-foreground shadow-xs transition-colors duration-150 motion-reduce:transition-none",
-          keyword !== null ? "border-primary" : dropping ? "border-ring bg-accent" : connected ? "border-border focus-within:border-input" : "border-border/60",
+          framed ? "composer-keyword-frame border-transparent" : keyword !== null ? "border-primary" : dropping ? "border-ring bg-accent" : connected ? "border-border focus-within:border-input" : "border-border/60",
         )}
         data-testid={TESTID.composer}
         data-composer-card=""
         data-keyword={keyword?.keyword}
+        data-keyword-frame={framed ? "" : undefined}
         onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); setDropping(true); } }}
         onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false); }}
         onDrop={(event) => { event.preventDefault(); setDropping(false); void addFiles(Array.from(event.dataTransfer.files)); }}
@@ -632,7 +649,7 @@ export function Composer() {
           {planMode && <button type="button" className={contextChipClass} data-testid="plan-mode-chip" aria-label={t("composer.chip.removePlan")} onClick={() => setPlanMode(false)}>{t("composer.chip.planChip")}<X className="size-3" aria-hidden /></button>}
           {goalDraft !== "" && <button type="button" className={contextChipClass} data-testid="goal-draft-chip" title={goalDraft} aria-label={t("composer.chip.removeGoal")} onClick={() => setGoalDraft("")}><span>{t("composer.chip.goalChip")}: {goalDraft}</span><X className="size-3" aria-hidden /></button>}
         </div>}
-        <div className="relative mr-1">
+        <div className="composer-draft relative mr-1">
           <div
             ref={mirrorRef}
             className={clsx(draftBox, "pointer-events-none absolute inset-0 overflow-hidden pr-[calc(10px+var(--dsh-scrollbar-width,5px))] select-none", connected ? "text-composer-foreground" : "text-muted-foreground")}
@@ -640,7 +657,7 @@ export function Composer() {
           >
             {segments.map((segment, index) =>
               segment.kind === "keyword" ? (
-                <span key={index} className="font-medium text-primary" data-testid={TESTID.keywordHighlight}>
+                <span key={index} className={keywordClass} data-testid={TESTID.keywordHighlight}>
                   {segment.text}
                 </span>
               ) : (
@@ -689,10 +706,13 @@ export function Composer() {
             onScroll={syncMirrorScroll}
           />
         </div>
-        {keyword !== null && (
-          <div className="mx-4 mt-0.5 block text-[13px] leading-[18px] [overflow-wrap:anywhere] text-muted-foreground" data-testid={TESTID.keywordHint} role="status">
-            <span className="font-semibold text-primary">{keyword.text}</span>
-            {t(keyword.keyword === "mass-ulw" ? "composer.keyword.massHint" : "composer.keyword.hint")}
+        {hints.length > 0 && (
+          <div className="composer-keyword-hint mx-4 mt-0.5 flex flex-col gap-0.5 text-[13px] leading-[18px] [overflow-wrap:anywhere] text-muted-foreground" data-testid={TESTID.keywordHint} role="status">
+            {hints.map((hint) => (
+              <p key={hint} className="m-0" data-keyword={hint}>
+                <span className={keywordClass}>{KEYWORD_LABEL[hint]}</span>: {t(KEYWORD_HINT[hint])}
+              </p>
+            ))}
           </div>
         )}
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 pt-0.5 pr-2.5 pb-2.5 pl-3 [container-type:inline-size]">
@@ -732,7 +752,7 @@ export function Composer() {
                 {t("composer.steering")}
               </span>
             )}
-            <ContextGauge />
+            {showContextUsage && <ContextGauge />}
             <div className="flex min-w-0 items-center gap-0.5" role="group" aria-label={t("composer.modelGroup")}>
               <ModelPicker disabled={!connected} />
               <ReasoningPicker disabled={!connected} />

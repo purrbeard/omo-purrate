@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectMagicKeyword, findMagicKeywords, segmentDraft } from "../../src/ui/composer/magic-keyword";
+import { detectMagicKeyword, findMagicKeywords, keywordHints, segmentDraft } from "../../src/ui/composer/magic-keyword";
 import { serializeSkillDraft } from "../../src/ui/composer/skill-draft";
 
 describe("detectMagicKeyword", () => {
@@ -41,6 +41,26 @@ describe("detectMagicKeyword", () => {
   it("lists every occurrence in order", () => {
     expect(findMagicKeywords("ulw then ultrawork then ulw").map((match) => match.text)).toEqual(["ulw", "ultrawork", "ulw"]);
   });
+
+  it("matches ulw plan and ulw research like omo, keeping overlapping keywords longest first", () => {
+    expect(findMagicKeywords("mass ulw research")).toEqual([
+      { keyword: "ulw-research", text: "mass ulw research", start: 0, end: 17 },
+      { keyword: "mass-ulw", text: "mass ulw", start: 0, end: 8 },
+    ]);
+    expect(keywordHints(findMagicKeywords("mass ulw research"))).toEqual(["ulw-research", "mass-ulw"]);
+    expect(detectMagicKeyword("ulw plan the migration")).toMatchObject({ keyword: "ulw-plan", text: "ulw plan" });
+    expect(detectMagicKeyword("ulw-research caching")).toMatchObject({ keyword: "ulw-research", text: "ulw-research" });
+    expect(findMagicKeywords("mulw then ulw mass").map((match) => match.keyword)).toEqual(["mass-ulw", "mass-ulw"]);
+    expect(keywordHints(findMagicKeywords("ulw and ultrawork"))).toEqual(["ulw"]);
+    expect(findMagicKeywords("ulw-execute it")).toEqual([{ keyword: "ulw", text: "ulw", start: 0, end: 3 }]);
+  });
+
+  it("ignores keywords in code, quotes, URLs, blockquotes, relayed lines and do-not phrases", () => {
+    for (const text of ["run `ulw` here", "```\nulw-loop\n```", "say \"mass ulw\" aloud", "see https://x.dev/ulw-plan", "> ulw loop", "[REPORT] ulw done", "do not use ulw-loop here"]) {
+      expect(findMagicKeywords(text), text).toEqual([]);
+    }
+    expect(findMagicKeywords("don't run ulw loop, but ulw plan it").map((match) => match.keyword)).toEqual(["ulw-plan"]);
+  });
 });
 
 describe("segmentDraft", () => {
@@ -61,6 +81,7 @@ describe("segmentDraft", () => {
     expect(segmentDraft("")).toEqual([{ kind: "text", text: "" }]);
     expect(segmentDraft("mass-ulwx")).toEqual([{ kind: "text", text: "mass-ulwx" }]);
     expect(segmentDraft("/ulw-loop go")).toEqual([{ kind: "keyword", text: "/ulw-loop" }, { kind: "text", text: " go" }]);
+    expect(segmentDraft("go mass ulw research!")).toEqual([{ kind: "text", text: "go " }, { kind: "keyword", text: "mass ulw research" }, { kind: "text", text: "!" }]);
   });
 
   it("preserves raw mass-ulw text through highlighting and transport serialization", () => {
