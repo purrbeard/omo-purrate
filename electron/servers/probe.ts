@@ -83,9 +83,10 @@ export const POSIX_PROBE = [
   `echo ${MARK}end`,
 ].join("; ");
 
-/** Windows PowerShell reading the CIM classes and printing one JSON object. */
+/** Windows PowerShell reading the CIM classes and printing one JSON object, in UTF-8 whatever the host's code page. */
 export const WINDOWS_SCRIPT = [
   "$ErrorActionPreference = 'SilentlyContinue'",
+  "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
   "$os = Get-CimInstance Win32_OperatingSystem",
   "$cpu = @(Get-CimInstance Win32_Processor)",
   "$cs = Get-CimInstance Win32_ComputerSystem",
