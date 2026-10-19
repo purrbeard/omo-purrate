@@ -1,18 +1,21 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { Input, Modal, observeComposition, ShortcutKeys } from "@deepseek-ai/dsh-client-ui-primitives";
+import clsx from "clsx";
+import { Search } from "lucide-react";
+import { observeComposition, ShortcutKeys } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useT } from "../../i18n";
+import { Dialog } from "../kit";
 import { TESTID } from "../testids";
 import { filterPaletteEntries, type PaletteEntry } from "./palette-model";
-import css from "./CommandPalette.module.css";
 
-/** Modal owns autofocus, Escape, focus trapping and restoration through useModalLayer. */
+/** The kit Dialog owns Escape, focus trapping and restoration; the search input takes initial focus. */
 export function CommandPalette({ entries, onClose }: { entries: readonly PaletteEntry[]; onClose(): void }) {
   const t = useT();
   const listId = useId();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const composition = useRef<ReturnType<typeof observeComposition> | null>(null);
+  const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const matches = useMemo(() => filterPaletteEntries(entries, query), [entries, query]);
   const index = Math.min(selected, Math.max(0, matches.length - 1));
@@ -43,47 +46,60 @@ export function CommandPalette({ entries, onClose }: { entries: readonly Palette
   };
 
   return (
-    <Modal open onClose={onClose} title={t("shell.palette.title")} closeLabel={t("common.close")} className={css.dialog}>
-      <div className={css.root} data-testid={TESTID.commandPalette} onKeyDown={onKeyDown}>
-        <Input
-          data-modal-autofocus=""
-          data-testid={TESTID.paletteInput}
-          role="combobox"
-          aria-label={t("shell.palette.placeholder")}
-          aria-controls={listId}
-          aria-expanded="true"
-          aria-autocomplete="list"
-          aria-activedescendant={matches[index] === undefined ? undefined : `${listId}-${index}`}
-          placeholder={t("shell.palette.placeholder")}
-          value={query}
-          spellCheck={false}
-          onChange={event => { setQuery(event.target.value); setSelected(0); }}
-        />
-        <div ref={list} id={listId} role="listbox" aria-label={t("shell.palette.title")} className={css.list}>
-          {matches.map((entry, entryIndex) => (
-            <button
-              key={entry.id}
-              id={`${listId}-${entryIndex}`}
-              type="button"
-              role="option"
-              aria-selected={entryIndex === index}
-              tabIndex={-1}
-              className={css.entry}
-              data-testid={TESTID.paletteEntry}
-              data-entry-id={entry.id}
-              data-kind={entry.kind}
-              onPointerMove={() => setSelected(entryIndex)}
-              onMouseDown={event => event.preventDefault()}
-              onClick={() => run(entry)}
-            >
-              <span className={css.text}><span>{entry.title}</span>{entry.subtitle !== undefined && <span className={css.subtitle}>{entry.subtitle}</span>}</span>
-              {entry.shortcut !== undefined && <ShortcutKeys keys={entry.shortcut} className={css.keycaps} />}
-            </button>
-          ))}
-          {matches.length === 0 && <p className={css.empty} data-testid={TESTID.paletteEmpty} role="status">{t("shell.palette.empty")}</p>}
+    <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Content initialFocus={input}>
+        <Dialog.Title className="sr-only">{t("shell.palette.title")}</Dialog.Title>
+        <div className="flex min-w-0 flex-col gap-3" data-testid={TESTID.commandPalette} onKeyDown={onKeyDown}>
+          <div className="flex h-10 items-center gap-2 rounded-md border border-solid border-input bg-background px-3 text-muted-foreground focus-within:border-ring">
+            <Search aria-hidden className="size-4 shrink-0" />
+            <input
+              ref={input}
+              className="m-0 h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-foreground outline-none [font-family:inherit] placeholder:text-muted-foreground"
+              data-testid={TESTID.paletteInput}
+              role="combobox"
+              aria-label={t("shell.palette.placeholder")}
+              aria-controls={listId}
+              aria-expanded="true"
+              aria-autocomplete="list"
+              aria-activedescendant={matches[index] === undefined ? undefined : `${listId}-${index}`}
+              placeholder={t("shell.palette.placeholder")}
+              value={query}
+              spellCheck={false}
+              onChange={event => { setQuery(event.target.value); setSelected(0); }}
+            />
+          </div>
+          <div ref={list} id={listId} role="listbox" aria-label={t("shell.palette.title")} className="-mx-2 max-h-[min(360px,45vh)] overflow-y-auto">
+            {matches.map((entry, entryIndex) => (
+              <button
+                key={entry.id}
+                id={`${listId}-${entryIndex}`}
+                type="button"
+                role="option"
+                aria-selected={entryIndex === index}
+                tabIndex={-1}
+                className={clsx(
+                  "m-0 box-border flex w-full cursor-pointer items-center justify-between gap-4 rounded-md border-0 bg-transparent px-3 py-2.5 text-left text-sm text-popover-foreground [font-family:inherit]",
+                  "aria-selected:bg-accent aria-selected:text-accent-foreground max-[480px]:gap-2 max-[480px]:px-1.5",
+                )}
+                data-testid={TESTID.paletteEntry}
+                data-entry-id={entry.id}
+                data-kind={entry.kind}
+                onPointerMove={() => setSelected(entryIndex)}
+                onMouseDown={event => event.preventDefault()}
+                onClick={() => run(entry)}
+              >
+                <span className="flex min-w-0 flex-col gap-1">
+                  <span className="truncate">{entry.title}</span>
+                  {entry.subtitle !== undefined && <span className="truncate text-xs text-muted-foreground">{entry.subtitle}</span>}
+                </span>
+                {entry.shortcut !== undefined && <ShortcutKeys keys={entry.shortcut} className="shrink-0" />}
+              </button>
+            ))}
+            {matches.length === 0 && <p className="m-0 px-3 py-2 text-xs text-muted-foreground" data-testid={TESTID.paletteEmpty} role="status">{t("shell.palette.empty")}</p>}
+          </div>
+          <p className="m-0 text-xs leading-normal text-muted-foreground">{t("shell.palette.hint")}</p>
         </div>
-        <p className={css.hint}>{t("shell.palette.hint")}</p>
-      </div>
-    </Modal>
+      </Dialog.Content>
+    </Dialog.Root>
   );
 }

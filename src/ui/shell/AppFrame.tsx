@@ -4,7 +4,7 @@ import { TESTID } from "../testids";
 import { useModalLayer } from "../../dsh/primitives/useModalLayer";
 import { useT } from "../../i18n";
 import { CENTER_MIN, RIGHTBAR_MIN, computeColumns } from "./columns";
-import css from "./AppFrame.module.css";
+import clsx from "clsx";
 
 export interface AppFrameProps {
   sidebar: ReactNode;
@@ -27,6 +27,8 @@ export interface AppFrameProps {
 interface DragHandleProps {
   left: number;
   testId?: string;
+  /** Eases the handle along with the grid tracks during a show/hide toggle. */
+  animate: boolean;
   onStart(): void;
   onDrag(dx: number): void;
   onEnd(): void;
@@ -90,7 +92,11 @@ function DragHandle(props: DragHandleProps) {
 
   return (
     <div
-      className={css.handle}
+      className={clsx(
+        "absolute inset-y-0 z-11 -ml-1 w-2 cursor-col-resize touch-none [-webkit-app-region:no-drag]",
+        "after:absolute after:inset-y-0 after:left-[3px] after:w-0.5 after:bg-transparent after:content-[''] hover:after:bg-border data-dragging:after:bg-ring",
+        props.animate && "transition-[left] duration-(--ds-transition-duration-slow) ease-(--ds-ease-in-out) motion-reduce:transition-none",
+      )}
       data-testid={props.testId}
       style={{ left: props.left }}
       data-dragging={dragging || undefined}
@@ -102,6 +108,12 @@ function DragHandle(props: DragHandleProps) {
     />
   );
 }
+
+/**
+ * Window-drag strip: the top 52px of each column drags the window on macOS; interactive elements inside subtract
+ * themselves through the global no-drag rule in app.css. Geometry only, so content under it still receives clicks.
+ */
+const dragStrip = "pointer-events-none absolute inset-x-0 top-0 h-13";
 
 /**
  * Shell (sidebar | main | optional right panel) ported from DSH ui-layout AppFrame: grid tracks solved by
@@ -251,10 +263,16 @@ export function AppFrame({
     onRightPanelWidthChange?.(Math.min(viewport - sidebar - CENTER_MIN, Math.max(RIGHTBAR_MIN, rightBase.current + (panelLeft ? dx : -dx))));
   }, [onRightPanelWidthChange, viewport, panelLeft]);
 
+  const easing = animating > 0 && !dragging;
+
   return (
     <div
       ref={frameRef}
-      className={css.frame}
+      className={clsx(
+        "relative grid h-full grid-rows-[100%] overflow-hidden bg-background",
+        easing && "transition-[grid-template-columns] duration-(--ds-transition-duration-slow) ease-(--ds-ease-in-out) motion-reduce:transition-none",
+      )}
+      data-slot="app-frame"
       style={{ gridTemplateColumns: panelLeft && docked ? `${cols.sidebar}px ${cols.rightbar}px minmax(0px, 1fr)` : `${cols.sidebar}px minmax(0px, 1fr) ${docked ? cols.rightbar : 0}px` }}
       data-testid={TESTID.appFrame}
       data-sidebar-collapsed={narrow || !sidebarVisible || undefined}
@@ -264,24 +282,27 @@ export function AppFrame({
       data-panel-side={rightPanelSide}
       data-animating={animating > 0 || undefined}
     >
-      {drawerOpen && <button className={css.sidebarScrim} tabIndex={-1} aria-hidden="true" onClick={() => setSidebarDrawerOpen(false)} />}
-      <div ref={sidebarRef} className={drawerOpen ? css.sidebarDrawer : css.sidebarCol} style={drawerOpen ? undefined : { gridColumn: 1, gridRow: 1 }} aria-hidden={narrow ? !drawerOpen : !sidebarVisible} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen || undefined} aria-label={drawerOpen ? t("shell.showSidebar") : undefined}>
-        <div className={css.dragStrip} data-window-drag />
+      {drawerOpen && <button className="absolute inset-0 z-39 m-0 border-0 bg-background/70 p-0 backdrop-blur-xs" tabIndex={-1} aria-hidden="true" onClick={() => setSidebarDrawerOpen(false)} />}
+      <div ref={sidebarRef} data-slot={drawerOpen ? "sidebar-drawer" : "sidebar-col"} className={clsx("overflow-hidden border-0 border-r border-solid border-sidebar-border bg-sidebar", drawerOpen ? "absolute inset-y-0 left-0 z-40 w-[min(280px,calc(100%-48px))] shadow-2xl" : "relative min-w-0")} style={drawerOpen ? undefined : { gridColumn: 1, gridRow: 1 }} aria-hidden={narrow ? !drawerOpen : !sidebarVisible} role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen || undefined} aria-label={drawerOpen ? t("shell.showSidebar") : undefined}>
+        <div className={dragStrip} data-window-drag />
         {sidebar}
       </div>
-      <div className={css.centerCol} style={{ gridColumn: panelLeft && docked ? 3 : 2, gridRow: 1 }}>
-        <div className={css.dragStrip} data-window-drag />
+      <div className="relative flex min-w-0 flex-col overflow-hidden" data-slot="center-col" style={{ gridColumn: panelLeft && docked ? 3 : 2, gridRow: 1 }}>
+        <div className={dragStrip} data-window-drag />
         {main}
       </div>
       {rightPanel !== null && (
-        <div className={docked ? css.rightCol : css.rightOverlay} data-side={rightPanelSide}
+        <div data-side={rightPanelSide} className={docked
+          ? clsx("relative box-border min-w-0 overflow-hidden bg-background py-2", panelLeft ? "pl-2" : "pr-2")
+          : clsx("absolute inset-y-2 z-30 max-w-[calc(100%-16px)] rounded-lg shadow-2xl transition-[opacity,translate] duration-(--ds-transition-duration) ease-(--ds-ease-in-out) starting:opacity-0 motion-reduce:transition-none",
+            panelLeft ? "left-2 starting:-translate-x-4" : "right-2 starting:translate-x-4")}
           style={docked ? { gridColumn: panelLeft ? 2 : 3, gridRow: 1 } : { width: overlayWidth }}>
-          <div className={css.dragStrip} data-window-drag />
+          <div className={dragStrip} data-window-drag />
           {rightPanel(docked ? "docked" : "overlay")}
         </div>
       )}
-      {sidebarVisible && !narrow && <DragHandle left={cols.sidebar} onStart={onDragStart} onDrag={onDrag} onEnd={onDragEnd} />}
-      {docked && onRightPanelWidthChange !== undefined && <DragHandle testId="right-panel-resize" left={panelLeft ? cols.sidebar + cols.rightbar : cols.sidebar + cols.center} onStart={onRightDragStart} onDrag={onRightDrag} onEnd={onDragEnd} />}
+      {sidebarVisible && !narrow && <DragHandle animate={easing} left={cols.sidebar} onStart={onDragStart} onDrag={onDrag} onEnd={onDragEnd} />}
+      {docked && onRightPanelWidthChange !== undefined && <DragHandle animate={easing} testId="right-panel-resize" left={panelLeft ? cols.sidebar + cols.rightbar : cols.sidebar + cols.center} onStart={onRightDragStart} onDrag={onRightDrag} onEnd={onDragEnd} />}
     </div>
   );
 }

@@ -77,3 +77,52 @@ pre,
 [data-terminal] {
   text-autospace: no-autospace;
 }
+
+/* macOS window chrome around the AppFrame columns (AppFrame.tsx owns the base layout in Tailwind). Overlays outside
+   the frame read the clearance variables from the root. */
+html[data-platform='darwin'] {
+  --dsh-frame-top-clearance: 48px;
+  --dsh-frame-overlay-top: calc(var(--dsh-frame-top-clearance) + 20px);
+}
+
+html[data-platform='darwin'][data-fullscreen] {
+  --dsh-frame-overlay-top: 20px;
+}
+
+html[data-platform='darwin'] [data-slot='app-frame'] {
+  background: transparent;
+}
+
+html[data-platform='darwin'] [data-slot='sidebar-col'] {
+  border-right: none;
+  background: color-mix(in srgb, var(--sidebar-background) 40%, transparent);
+}
+
+html[data-platform='darwin'] body[data-ds-dark-theme] [data-slot='sidebar-col'] {
+  background: color-mix(in srgb, var(--sidebar-background) 50%, transparent);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-platform='darwin'] [data-slot='sidebar-col'],
+  html[data-platform='darwin'] body[data-ds-dark-theme] [data-slot='sidebar-col'] {
+    background: color-mix(in srgb, var(--sidebar-background) 90%, transparent);
+  }
+}
+
+html[data-platform='darwin'] [data-slot='center-col'] {
+  border-left: 0.5px solid var(--border);
+  background: var(--background);
+}
+
+html[data-platform='darwin'] [data-slot='app-frame'][data-sidebar-collapsed] [data-slot='center-col'] {
+  border-left: none;
+}
+
+/* A collapsed sidebar leaves the traffic lights over the main column; main headers pad their start by this. */
+html[data-platform='darwin'] [data-slot='app-frame'][data-sidebar-collapsed] {
+  --dsh-frame-leading-clearance: 88px;
+}
+
+html[data-platform='darwin'][data-fullscreen] [data-slot='app-frame'][data-sidebar-collapsed] {
+  --dsh-frame-leading-clearance: 12px;
+}
