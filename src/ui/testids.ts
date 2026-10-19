@@ -77,6 +77,7 @@ export const TESTID = {
   questionOption: "question-option",
   questionOtherInput: "question-other-input",
   questionSubmit: "question-submit",
+  extensionStatus: "extension-status",
   workingIndicator: "working-indicator",
   workingDetail: "working-detail",
   editMessage: "edit-message",

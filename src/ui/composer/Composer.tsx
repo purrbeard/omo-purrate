@@ -30,7 +30,7 @@ import { AddMenu, type AddAction } from "./AddMenu";
 import { ContextDialog } from "./ContextDialog";
 import { SketchDialog } from "./SketchDialog";
 import { addContext, contextMessage, CONTEXT_LIMIT, type DraftContext } from "./context-draft";
-import { appendToDraft, COMPOSER_INSERT_EVENT } from "./draft-insert";
+import { appendToDraft, COMPOSER_INSERT_EVENT, COMPOSER_SET_EVENT } from "./draft-insert";
 import { userMessageParts } from "../conversation/UserBubble";
 import { userErrorText } from "../conversation/user-error";
 
@@ -213,8 +213,19 @@ export function Composer() {
       pendingCaret.current = next.length;
       setCaret(next.length);
     };
+    const replace = (event: Event): void => {
+      if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
+      const next: string = event.detail;
+      setDraft((current) => ({ text: next, selected: pruneSelected(next, current.selected) }));
+      pendingCaret.current = next.length;
+      setCaret(next.length);
+    };
     window.addEventListener(COMPOSER_INSERT_EVENT, insert);
-    return () => window.removeEventListener(COMPOSER_INSERT_EVENT, insert);
+    window.addEventListener(COMPOSER_SET_EVENT, replace);
+    return () => {
+      window.removeEventListener(COMPOSER_INSERT_EVENT, insert);
+      window.removeEventListener(COMPOSER_SET_EVENT, replace);
+    };
   }, []);
 
   const trigger = connected && !composing ? detectSkillTrigger(text, caret) : null;

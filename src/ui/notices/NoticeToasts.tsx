@@ -72,6 +72,7 @@ function NoticeQueue() {
         : { actionProps: { children: t("notice.action.open"), onClick: () => { void actions.openThread(openThread); toast.close(notice.id); } } }),
     };
     if (notice.level === "error") toast.add({ ...common, type: "error", title: title ?? t("notice.title.error") });
+    else if (notice.level === "warning") toast.add({ ...common, type: "warning", ...(title === null ? {} : { title }) });
     else toast.add({ ...common, type: "info", ...(title === null ? {} : { title }) });
   }, [notice, actions, t, toast]);
 

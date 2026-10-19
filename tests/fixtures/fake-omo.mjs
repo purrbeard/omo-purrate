@@ -747,6 +747,17 @@ function runScenario(record, turn, text) {
     return;
   }
   if (text.includes("SCENARIO:full")) return runFull(record, turn);
+  if (text.includes("SCENARIO:extension-ui")) {
+    // A generic select dialog plus fire-and-forget notify / setStatus / set_editor_text; the chosen option is echoed.
+    event(record, "extension_ui_request", { id: randomUUID(), method: "notify", message: "Extension says hello", notifyType: "warning" });
+    event(record, "extension_ui_request", { id: randomUUID(), method: "setStatus", statusKey: "demo", statusText: "demo status" });
+    event(record, "extension_ui_request", { id: randomUUID(), method: "set_editor_text", text: "text from extension" });
+    return uiRequest(record, { method: "select", title: "Pick a flavor", options: ["Vanilla", "Mint"] }, turn).then((response) => {
+      const item = openAgentMessage(turn);
+      appendAgentDelta(turn, item, `Flavor: ${response.cancelled === true ? "none" : response.value}`);
+      closeAgentMessage(record, turn, item, "stop");
+    });
+  }
   if (text.includes("SCENARIO:async-question")) {
     // A non-blocking question: omo raises it, the turn ends at once, and the question is withdrawn with the turn.
     const id = randomUUID();

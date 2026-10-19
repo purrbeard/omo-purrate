@@ -31,6 +31,7 @@ export function createInitialState(): AppState {
     conversations: {},
     pendingRequests: [],
     notices: [],
+    extensionStatus: {},
     composer: { modelId: null, effort: null },
     skillCatalogs: {},
     loadedSkillCwds: {},

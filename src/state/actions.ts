@@ -8,6 +8,7 @@ import { uiState } from "../ui/ui-state";
 import type { AppStore } from "./store";
 import type { AppState, NoticeCode, SessionModel, SideChat } from "./types";
 import { parseStoredSides, selectSidesOf, sideDraftKey, sideName } from "./btw";
+import { setComposerText } from "../ui/composer/draft-insert";
 import { isModel, isSkill, isSkillError, isThread, parseNotification } from "./wire";
 import { resolveComposerModel, selectIsTurnActive, selectSkillCatalog } from "./selectors";
 import { object, parseGoal } from "./live-wire";
@@ -761,6 +762,10 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
                 void refreshTodo(threadId);
               }
             }
+          }
+          if (parsed?.method === "extension_event" && parsed.params.name === "omo-ui:editor-text" && parsed.params.threadId === store.getState().activeThreadId) {
+            const data = parsed.params.data;
+            if (typeof data === "object" && data !== null && "text" in data && typeof data.text === "string") setComposerText(data.text);
           }
           if (parseNotification(notification)?.method === "skills/changed") {
             const state = store.getState();

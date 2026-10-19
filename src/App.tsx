@@ -10,6 +10,7 @@ import { ActionsContext, StoreContext, useActions, useAppSelector } from "./ui/a
 import { SIDE_PANEL_WIDTH, SidePanel } from "./ui/btw/SidePanel";
 import { useSidePanelShortcut } from "./ui/btw/SideToggle";
 import { Composer } from "./ui/composer/Composer";
+import { ExtensionStatusStrip } from "./ui/composer/ExtensionStatusStrip";
 import { ConversationPane } from "./ui/conversation/ConversationPane";
 import { useNewSessionFlow } from "./ui/new-session";
 import { NoticeToasts } from "./ui/notices/NoticeToasts";
@@ -49,6 +50,7 @@ function MainPane() {
       <ConnectionBanner />
       <ConversationPane />
       <NewThreadBar />
+      <ExtensionStatusStrip />
       <Composer />
       <TerminalDrawerSlot />
     </>

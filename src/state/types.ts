@@ -125,7 +125,7 @@ export type NoticeCode = "noActiveThread" | "steered" | "branchBusy" | "modelSwi
 
 export interface Notice {
   id: string;
-  level: "info" | "error";
+  level: "info" | "warning" | "error";
   message: string;
   /** Values for the placeholders of a coded notice's translation. */
   params?: Record<string, string>;
@@ -197,6 +197,8 @@ export interface AppState {
   conversations: Record<string, Conversation>;
   pendingRequests: PendingRequest[];
   notices: Notice[];
+  /** Status line entries omo extensions set per thread (setStatus), keyed by status key; empty threads are absent. */
+  extensionStatus: Record<string, Record<string, string>>;
   composer: ComposerState;
   skillCatalogs: Record<string, SkillCatalog>;
   /** Cwds loaded through a successful thread/start or thread/resume in this bridge session. */

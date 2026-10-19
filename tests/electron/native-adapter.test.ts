@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { RpcNotification, Turn } from "../../shared/protocol";
 import { classifyTool, TurnProjector } from "../../electron/omo/native/projector";
 import { SessionIndex } from "../../electron/omo/native/threads";
+import { UiBridge } from "../../electron/omo/native/ui-bridge";
+import type { RpcServerRequest } from "../../shared/protocol";
 
 function projector(): { turn: TurnProjector; sent: RpcNotification[]; completed: () => Turn } {
   const sent: RpcNotification[] = [];
@@ -168,5 +170,74 @@ describe("SessionIndex", () => {
     expect(await index.isArchived(source!)).toBe(true);
     await index.unarchive(source!);
     expect(await index.isArchived(source!)).toBe(false);
+  });
+});
+
+describe("UiBridge extension dialogs", () => {
+  const session = { threadId: "thread-1", handle: "h1", cwd: "/work", activeTurnId: "turn-1" };
+  function make() {
+    const answers: Record<string, unknown>[] = [];
+    const requests: RpcServerRequest[] = [];
+    const notifications: RpcNotification[] = [];
+    const bridge = new UiBridge((_handle, frame) => answers.push(frame), (request) => requests.push(request), (notification) => notifications.push(notification));
+    return { bridge, answers, requests, notifications };
+  }
+
+  it("asks a non-permission select as a question and answers with the chosen option", () => {
+    const { bridge, answers, requests } = make();
+    bridge.handle(session, { id: "u1", method: "select", title: "Pick one", options: ["A", "B"], timeout: 5000 });
+    expect(answers).toEqual([]);
+    const request = requests[0]!;
+    expect(request.method).toBe("item/tool/requestUserInput");
+    const params = request.params as { questions: { id: string; question: string; options: { label: string }[] }[]; timeoutMs: number };
+    expect(params.timeoutMs).toBe(5000);
+    expect(params.questions[0]!.question).toBe("Pick one");
+    expect(params.questions[0]!.options.map((option) => option.label)).toEqual(["A", "B"]);
+    bridge.respond(request.id, { answers: { value: { answers: ["B"] } } });
+    expect(answers).toEqual([{ id: "u1", value: "B" }]);
+  });
+
+  it("maps a dismissed select to cancelled", () => {
+    const { bridge, answers, requests } = make();
+    bridge.handle(session, { id: "u2", method: "select", title: "Pick", options: ["A"] });
+    bridge.respond(requests[0]!.id, { cancelled: true });
+    expect(answers).toEqual([{ id: "u2", cancelled: true }]);
+  });
+
+  it("asks input and editor as free-text questions, showing the editor prefill", () => {
+    const { bridge, answers, requests } = make();
+    bridge.handle(session, { id: "u3", method: "input", title: "Name?" });
+    bridge.handle(session, { id: "u4", method: "editor", title: "Edit", prefill: "line 1" });
+    const [input, editor] = requests.map((request) => (request.params as { questions: { question: string; options: unknown }[] }).questions[0]!);
+    expect(input).toMatchObject({ question: "Name?", options: null });
+    expect(editor!.question).toBe("Edit\n\nline 1");
+    bridge.respond(requests[0]!.id, { answers: { value: { answers: ["Ada"] } } });
+    bridge.respond(requests[1]!.id, { answers: { value: { answers: ["edited"] } } });
+    expect(answers).toEqual([{ id: "u3", value: "Ada" }, { id: "u4", value: "edited" }]);
+  });
+
+  it("still turns permission prompts into approvals", () => {
+    const { bridge, answers, requests } = make();
+    bridge.handle(session, { id: "u5", method: "select", title: "Permission required: bash\n\nCommand: $ ls", options: ["Allow once", "Deny"] });
+    expect(requests[0]!.method).toBe("item/commandExecution/requestApproval");
+    bridge.respond(requests[0]!.id, { decision: "accept" });
+    expect(answers).toEqual([{ id: "u5", value: "Allow once" }]);
+  });
+
+  it("emits notify and keeps a per-thread status map where empty text clears a key", () => {
+    const { bridge, notifications } = make();
+    bridge.handle(session, { id: "n1", method: "notify", message: "Heads up", notifyType: "warning" });
+    bridge.handle(session, { method: "setStatus", statusKey: "a", statusText: "one" });
+    bridge.handle(session, { method: "setStatus", statusKey: "b", statusText: "two" });
+    bridge.handle(session, { method: "setStatus", statusKey: "a" });
+    bridge.handle(session, { method: "set_editor_text", text: "draft" });
+    bridge.handle(session, { method: "setTitle", title: "ignored" });
+    expect(notifications.map((entry) => (entry.params as { name: string; data: unknown }))).toEqual([
+      expect.objectContaining({ name: "omo-ui:notify", data: { id: "n1", message: "Heads up", notifyType: "warning" } }),
+      expect.objectContaining({ name: "omo-ui:status", data: { entries: { a: "one" } } }),
+      expect.objectContaining({ name: "omo-ui:status", data: { entries: { a: "one", b: "two" } } }),
+      expect.objectContaining({ name: "omo-ui:status", data: { entries: { b: "two" } } }),
+      expect.objectContaining({ name: "omo-ui:editor-text", data: { text: "draft" } }),
+    ]);
   });
 });

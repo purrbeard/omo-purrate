@@ -21,6 +21,7 @@ import type { AppState, Conversation, ConversationItem } from "./types";
 import type { ServerNotification } from "./wire";
 import { invalidateSkillCatalogs } from "./skills";
 import { applyLiveExtension } from "./live";
+import { applyUiExtension, UI_EXTENSION_PREFIX } from "./ui-extension";
 import { forgetThread, holdPendingSide } from "./btw";
 
 interface ItemPlacement {
@@ -201,6 +202,7 @@ export function applyNotification(state: AppState, notification: ServerNotificat
       return dropRequest(state, notification.params.requestId);
     }
     case "extension_event":
+      if (notification.params.name.startsWith(UI_EXTENSION_PREFIX)) return applyUiExtension(state, notification.params.threadId, notification.params.name, notification.params.data);
       return applyLiveExtension(state, notification.params.threadId, notification.params.name, notification.params.data, receivedAtMs);
   }
 }

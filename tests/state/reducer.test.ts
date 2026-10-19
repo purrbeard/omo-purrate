@@ -270,3 +270,18 @@ describe("thread session model", () => {
     expect(state.conversations["t-model"]?.session).toEqual(session);
   });
 });
+
+describe("omo extension UI events", () => {
+  const ext = (name: string, data: unknown) => notification("extension_event", { type: "extension_event", threadId: "t1", name, data });
+
+  it("turns omo-ui:notify into a thread notice with its level", () => {
+    const state = replay([ext("omo-ui:notify", { id: "n1", message: "Careful", notifyType: "warning" })]);
+    expect(state.notices).toEqual([{ id: "ext-notify:t1:n1", level: "warning", message: "Careful", threadId: "t1" }]);
+  });
+
+  it("keeps the per-thread status entries and clears them when empty", () => {
+    const set = replay([ext("omo-ui:status", { entries: { a: "one", b: "two" } })]);
+    expect(set.extensionStatus).toEqual({ t1: { a: "one", b: "two" } });
+    expect(replay([ext("omo-ui:status", { entries: {} })], set).extensionStatus).toEqual({});
+  });
+});
