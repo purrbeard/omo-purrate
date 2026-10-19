@@ -33,7 +33,7 @@ export function AddMenu({ disabled, skills, loading, plan, onOpen, onAction, onS
     ...skills.map(skill => ({ id: `skill:${skill.name}`, label: <><span>{skill.interface?.displayName ?? skill.name}</span><small>{skillSummary(skill)}</small></>, icon: <IconSkillOutlineRegular size={16} /> })),
   ];
   if (skills.length === 0) entries.push({ type: "label", id: "skills-status", text: loading ? t("composer.add.skillsLoading") : t("composer.add.skillsNone") });
-  return <Menu open={open} side="top" portal autoFocus listClassName="w-[min(540px,calc(100vw-32px))] max-w-[min(540px,calc(100vw-32px))] rounded-2xl [&_small]:ml-2 [&_small]:text-xs [&_small]:text-muted-foreground max-[720px]:[&_small]:ml-0 max-[720px]:[&_small]:block max-[720px]:[&_small]:leading-[18px] max-[720px]:[&_small]:whitespace-normal" items={entries}
+  return <Menu open={open} side="top" portal autoFocus listClassName="w-[min(540px,calc(100vw-32px))]! max-w-[min(540px,calc(100vw-32px))]! rounded-2xl! [&_small]:ml-2 [&_small]:text-xs [&_small]:text-muted-foreground max-[720px]:[&_small]:ml-0 max-[720px]:[&_small]:block max-[720px]:[&_small]:leading-[18px] max-[720px]:[&_small]:whitespace-normal" items={entries}
     selectedId={plan ? "plan" : undefined} onClose={() => setOpen(false)}
     onSelect={id => {
       setOpen(false);

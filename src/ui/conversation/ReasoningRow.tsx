@@ -90,7 +90,7 @@ export const ReasoningRow = memo(function ReasoningRow({
       className={clsx(
         "flex min-w-0 flex-col",
         open
-          ? "[&_[data-open]_[data-disclosure-row]]:sticky [&_[data-open]_[data-disclosure-row]]:top-0 [&_[data-open]_[data-disclosure-row]]:z-[1] [&_[data-open]_[data-disclosure-row]]:bg-background"
+          ? "[&_[data-open]_[data-disclosure-row]]:sticky! [&_[data-open]_[data-disclosure-row]]:top-0 [&_[data-open]_[data-disclosure-row]]:z-[1] [&_[data-open]_[data-disclosure-row]]:bg-background"
           : "h-6 [contain:size_layout]",
       )}
       data-testid={TESTID.reasoning}

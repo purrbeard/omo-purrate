@@ -129,7 +129,7 @@ export const UserBubble = memo(function UserBubble({
               <div className="mt-2 whitespace-normal">
                 <button
                   type="button"
-                  className={clsx(chipCss.refChip, "m-0 cursor-pointer border-0 bg-transparent py-0.5 text-xs [font-family:inherit]", focusRing)}
+                  className={clsx(chipCss.refChip, "m-0! cursor-pointer border-0! bg-transparent! px-0! py-0.5! text-xs! [font-family:inherit]!", focusRing)}
                   data-testid={TESTID.omoContextToggle}
                   aria-expanded={showContext}
                   aria-controls={contextId}

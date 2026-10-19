@@ -14,7 +14,14 @@ import { useActions, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
 import { currentTodo, goalVisible, todoCounts, todoDot, workSummary, type TodoStatus } from "./activity-model";
 import { formatWholeSeconds } from "./format";
-import css from "./ConversationDock.module.css";
+import clsx from "clsx";
+import { CircleAlert } from "lucide-react";
+import { focusRing } from "../kit";
+import { userErrorText } from "./user-error";
+
+const goalButton = clsx("m-0 cursor-pointer rounded-sm border-0 bg-muted px-1.5 py-0.5 text-xs text-muted-foreground [font-family:inherit] hover:text-foreground disabled:cursor-default disabled:opacity-50", focusRing);
+const lead = "grid flex-none place-items-center text-muted-foreground";
+const title = "flex-none text-[13px] font-medium leading-6 whitespace-nowrap text-foreground";
 
 const TODO_LABELS = {
   pending: "todo.status.pending",
@@ -38,45 +45,45 @@ export function TodoDock({ phases, restored, live }: { phases: readonly TodoPhas
   if (counts.total === 0) return null;
   const current = currentTodo(phases);
   return (
-    <section className={css.card} data-testid={TESTID.todoDock} data-source={restored ? "history" : "live"} data-open={open || undefined} aria-label={t("todo.title")}>
+    <section className="box-border overflow-hidden border-0 data-[open]:order-1 data-[open]:basis-full data-[open]:border-t data-[open]:border-l-0 data-[open]:border-solid data-[open]:border-border data-[open]:first:border-t-0" data-testid={TESTID.todoDock} data-source={restored ? "history" : "live"} data-open={open || undefined} aria-label={t("todo.title")}>
       <button
         type="button"
-        className={css.header}
+        className={clsx("m-0 flex h-9 w-full min-w-0 cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3 text-left [font-family:inherit]", focusRing)}
         aria-expanded={open}
         aria-label={t(open ? "todo.collapse" : "todo.expand")}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className={css.lead} aria-hidden>
+        <span className={lead} aria-hidden>
           <IconChecklistOutlineRegular size={14} />
         </span>
-        <span className={css.title}>{t("todo.title")}</span>
-        <span className={css.progress}>
+        <span className={title}>{t("todo.title")}</span>
+        <span className="flex-none text-[13px] leading-5 whitespace-nowrap text-muted-foreground">
           {t("todo.progress", { done: counts.done, total: counts.total })}
           {counts.abandoned > 0 && ` · ${t("todo.abandoned", { count: counts.abandoned })}`}
         </span>
-        {!open && current !== null && <span className={css.current}>{current}</span>}
-        {restored && <span className={css.tag}>{t("todo.restored")}</span>}
-        <span className={css.chevron} aria-hidden>
+        {!open && current !== null && <span className="min-w-0 flex-auto truncate text-[13px] leading-5 text-muted-foreground">{current}</span>}
+        {restored && <span className={clsx("flex-none rounded-sm bg-muted px-1.5 text-[11px] leading-[18px] whitespace-nowrap text-muted-foreground", (open || current === null) && "ml-auto")}>{t("todo.restored")}</span>}
+        <span className={clsx(lead, !restored && "ml-auto")} aria-hidden>
           {open ? <IconChevronDownOutlineRegular size={14} /> : <IconChevronUpOutlineRegular size={14} />}
         </span>
       </button>
       {open && (
-        <div className={css.phases}>
+        <div className="flex max-h-[min(200px,28vh)] flex-col gap-2 overflow-y-auto px-3 pb-2.5">
           {phases.map((phase, index) => {
             const phaseCounts = todoCounts([phase]);
             return (
-              <div key={`${index}:${phase.name}`} className={css.phase} data-testid={TESTID.todoPhase}>
-                <div className={css.phaseHeader}>
-                  <span className={css.phaseName}>{phase.name}</span>
-                  <span className={css.phaseCount}>{`${phaseCounts.done}/${phaseCounts.total}`}</span>
+              <div key={`${index}:${phase.name}`} className="flex min-w-0 flex-col gap-1" data-testid={TESTID.todoPhase}>
+                <div className="flex items-center gap-2 text-xs font-medium leading-[18px] text-muted-foreground">
+                  <span className="min-w-0 truncate">{phase.name}</span>
+                  <span className="flex-none font-normal tabular-nums">{`${phaseCounts.done}/${phaseCounts.total}`}</span>
                 </div>
-                <ul className={css.list}>
+                <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
                   {phase.tasks.map((item, itemIndex) => (
-                    <li key={`${itemIndex}:${item.content}`} className={css.item} data-testid={TESTID.todoItem} data-status={item.status}>
-                      <span className={css.glyph} role="img" aria-label={t(TODO_LABELS[item.status])}>
+                    <li key={`${itemIndex}:${item.content}`} className="group/todo flex min-w-0 items-center gap-2.5 text-[13px] leading-5 text-muted-foreground data-[status=in_progress]:font-medium data-[status=in_progress]:text-foreground data-[status=completed]:opacity-70 data-[status=abandoned]:opacity-70" data-testid={TESTID.todoItem} data-status={item.status}>
+                      <span className="grid size-4 flex-none place-items-center" role="img" aria-label={t(TODO_LABELS[item.status])}>
                         <StateDot state={todoDot(item.status, live)} />
                       </span>
-                      <span className={css.content} title={item.content}>
+                      <span className="min-w-0 truncate group-data-[status=abandoned]/todo:line-through" title={item.content}>
                         {item.content}
                       </span>
                     </li>
@@ -104,7 +111,7 @@ export function GoalStrip({ goal, threadId }: { goal: WireGoal | null | undefine
       if (status === null) await actions.clearGoal(threadId);
       else await actions.setGoalStatus(threadId, status);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(userErrorText(reason, t("conversation.error.requestFailed")).text);
     } finally {
       setPending(false);
     }
@@ -112,23 +119,23 @@ export function GoalStrip({ goal, threadId }: { goal: WireGoal | null | undefine
   if (!goalVisible(goal)) return null;
   const elapsed = formatWholeSeconds(goal.timeUsedSeconds * 1000, t);
   return (
-    <section className={css.goal} data-testid={TESTID.goalStrip} data-status={goal.status} aria-label={t("goal.region")}>
-      <span className={css.lead} aria-hidden>
+    <section className="box-border flex min-h-9 flex-wrap items-center gap-2.5 border-0 px-3 py-1" data-testid={TESTID.goalStrip} data-status={goal.status} aria-label={t("goal.region")}>
+      <span className={lead} aria-hidden>
         <IconGoalOutlineRegular size={14} />
       </span>
-      <span className={css.title}>{t(GOAL_LABELS[goal.status])}</span>
-      <span className={css.objective} title={goal.objective}>
+      <span className={title}>{t(GOAL_LABELS[goal.status])}</span>
+      <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-foreground/80" title={goal.objective}>
         {goal.objective}
       </span>
-      <span className={css.elapsed} aria-label={t("goal.elapsed", { duration: elapsed })}>
+      <span className="flex-none text-xs leading-[18px] text-muted-foreground tabular-nums" aria-label={t("goal.elapsed", { duration: elapsed })}>
         {elapsed}
       </span>
-      <span className={css.goalActions}>
-        {goal.status === "active" && <button type="button" disabled={pending} data-testid={TESTID.goalPause} onClick={() => void change("paused")}>{t("goal.pause")}</button>}
-        {goal.status === "paused" && <button type="button" disabled={pending} data-testid={TESTID.goalResume} onClick={() => void change("active")}>{t("goal.resume")}</button>}
-        <button type="button" disabled={pending} data-testid={TESTID.goalClear} onClick={() => void change(null)}>{t("goal.clear")}</button>
+      <span className="ml-auto flex flex-none gap-1.5">
+        {goal.status === "active" && <button type="button" className={goalButton} disabled={pending} data-testid={TESTID.goalPause} onClick={() => void change("paused")}>{t("goal.pause")}</button>}
+        {goal.status === "paused" && <button type="button" className={goalButton} disabled={pending} data-testid={TESTID.goalResume} onClick={() => void change("active")}>{t("goal.resume")}</button>}
+        <button type="button" className={goalButton} disabled={pending} data-testid={TESTID.goalClear} onClick={() => void change(null)}>{t("goal.clear")}</button>
       </span>
-      {error !== null && <span className={css.goalError} data-testid={TESTID.goalError} role="alert">{error}</span>}
+      {error !== null && <span className="flex basis-full items-start gap-1.5 text-xs [overflow-wrap:anywhere] text-destructive-foreground" data-testid={TESTID.goalError} role="alert"><CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />{error}</span>}
     </section>
   );
 }
@@ -146,7 +153,7 @@ export function ConversationDock() {
   const hasTodo = todo !== null && todoCounts(todo.phases).total > 0;
   if (threadId === null || (!hasTodo && !goalVisible(goal) && !background)) return null;
   return (
-    <div className={css.dock} data-testid="composer-status-line" role="group" aria-label={t("conversation.statusLine")}>
+    <div className="mb-2 box-border flex w-[calc(100%-24px)] max-w-[calc(var(--dsh-composer-card-max-width,760px)-24px)] flex-wrap items-stretch overflow-hidden rounded-lg border border-solid border-border bg-popover text-popover-foreground shadow-md [&>*]:min-w-40 [&>*]:flex-[1_1_0] [&>*+*]:border-0 [&>*+*]:border-l [&>*+*]:border-solid [&>*+*]:border-border" data-testid="composer-status-line" role="group" aria-label={t("conversation.statusLine")}>
       {hasTodo && <TodoDock phases={todo.phases} restored={todo.source === "history"} live={live && todo.source === "live"} />}
       <GoalStrip key={threadId} goal={goal} threadId={threadId} />
       {background && <BackgroundWorkStrip threadId={threadId} />}

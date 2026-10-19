@@ -19,7 +19,8 @@ export function pickerChevron(open: boolean): string {
 }
 
 /** Fixed-position menu surface placed by the picker's own measuring code. */
-export const pickerMenu = "fixed z-[1100] box-border flex flex-col p-1";
+// MenuSurface's unlayered `:where(.surface) { position: relative }` outranks layered utilities, hence fixed!.
+export const pickerMenu = "fixed! z-[1100] box-border flex flex-col p-1";
 
 /** A menu row; the selected row keeps the accent surface and a heavier label. */
 export function pickerOption(selected: boolean): string {

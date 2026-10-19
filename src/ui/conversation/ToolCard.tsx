@@ -39,9 +39,10 @@ import {
   type ToolState,
 } from "./tool-model";
 
-const JSON_CLASS = "max-h-60 rounded-lg border border-solid border-border";
+// Vendored DSH blocks are unlayered CSS that outranks layered utilities, so overrides of their own properties use "!".
+const JSON_CLASS = "max-h-60! rounded-lg! border! border-solid! border-border!";
 const TERMINAL_CLASS =
-  "m-0 border border-solid border-border [--dsl-terminal-font:var(--dsw-font-markdown-code-block-small)] [--dsl-terminal-line-height:18px] [--dsl-terminal-output-max-height:224px]";
+  "m-0! border! border-solid! border-border! [--dsl-terminal-font:var(--dsw-font-markdown-code-block-small)]! [--dsl-terminal-line-height:18px]! [--dsl-terminal-output-max-height:224px]!";
 
 const STATE_LABEL: Record<ToolState, MessageKey> = {
   running: "conversation.tool.state.running",
@@ -139,7 +140,7 @@ function ToolArguments({ tool, args }: { tool: string; args: unknown }) {
             copyLabel={labels.copy}
             copiedLabel={labels.copied}
             toolbarLabels={labels.toolbar}
-            className="m-0"
+            className="m-0!"
           />
         </div>
       )}
@@ -168,7 +169,7 @@ function DynamicToolBody({ item, state }: { item: DynamicToolCallItem; state: To
                   output={part.text}
                   runStateDot={false}
                   labels={labels.terminal}
-                  className={clsx(TERMINAL_CLASS, "[--dsl-terminal-gutter:14px] group-data-[error]/term:border-destructive-foreground")}
+                  className={clsx(TERMINAL_CLASS, "[--dsl-terminal-gutter:14px]! group-data-[error]/term:border-destructive-foreground!")}
                 />
               </div>
             );
@@ -204,7 +205,7 @@ function FileChangeBody({ item, cwd }: { item: FileChangeItem; cwd: string | nul
     () => item.changes.flatMap((change) => fileChangeHunks(change, displayPath(change.path, cwd))),
     [item.changes, cwd],
   );
-  return <DiffBlock diffs={diffs} labels={labels.diff} className="m-0 rounded-lg border border-solid border-border" />;
+  return <DiffBlock diffs={diffs} labels={labels.diff} className="m-0! rounded-lg! border! border-solid! border-border!" />;
 }
 
 function mcpResultText(result: unknown): string | null {

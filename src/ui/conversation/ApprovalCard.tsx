@@ -10,7 +10,7 @@ import { TESTID } from "../testids";
 import { displayPath, isRecord } from "./format";
 import { useConversationLabels } from "./labels";
 
-const CODE_CLASS = "m-0 [--dsl-code-block-content-font:var(--dsw-font-markdown-code-block-small)]";
+const CODE_CLASS = "m-0! [--dsl-code-block-content-font:var(--dsw-font-markdown-code-block-small)]!";
 
 export type ApprovalRequest = Extract<PendingRequest, { kind: "commandApproval" | "fileChangeApproval" }>;
 
