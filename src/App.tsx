@@ -234,6 +234,7 @@ export function App() {
   const { preferences } = useUiState();
 
   useEffect(() => actions.connect(), [actions]);
+  useEffect(() => window.omo.onPreferencesChanged((next) => uiState.setPreferences(next)), []);
 
   useEffect(() => {
     let current = true;

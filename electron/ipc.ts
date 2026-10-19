@@ -487,7 +487,11 @@ export function registerIpc(deps: IpcDeps): () => void {
       userDataPath: app.getPath("userData"),
     }),
     [IPC.getPreferences]: () => prefs.get(),
-    [IPC.setPreferences]: (_event, patch) => prefs.set(patch),
+    [IPC.setPreferences]: (_event, patch) => {
+      const next = prefs.set(patch);
+      send(IPC.preferencesChanged, next);
+      return next;
+    },
     [IPC.setZoomFactor]: (event, factor) => {
       if (typeof factor !== "number" || !Number.isFinite(factor) || factor < 0.8 || factor > 1.5) throw new RangeError("factor must be between 0.8 and 1.5");
       ElectronWindow.fromWebContents(event.sender)?.webContents.setZoomFactor(factor);

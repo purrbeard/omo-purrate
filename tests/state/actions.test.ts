@@ -99,6 +99,7 @@ class FakeBridge implements OmoBridgeApi {
   watchTaskStore(): Promise<void> { return Promise.resolve(); }
   unwatchTaskStore(): Promise<void> { return Promise.resolve(); }
   onTaskWorkChanged(): () => void { return () => {}; }
+  onPreferencesChanged(): () => void { return () => {}; }
   sendTaskMessage(): Promise<void> { return Promise.resolve(); }
   loadThreadLinks(): ReturnType<OmoBridgeApi["loadThreadLinks"]> { return Promise.resolve([]); }
   loadThreadOrigins(): ReturnType<OmoBridgeApi["loadThreadOrigins"]> { return Promise.resolve({}); }
