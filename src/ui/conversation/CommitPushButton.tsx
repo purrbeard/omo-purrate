@@ -4,7 +4,15 @@ import type { GitCommitResult } from "../../../shared/ipc";
 import { useT } from "../../i18n";
 import { TESTID } from "../testids";
 import { GIT_REFRESH_EVENT, useGitInfo } from "../git/use-git-info";
-import css from "./CommitPushButton.module.css";
+import clsx from "clsx";
+import { CircleAlert } from "lucide-react";
+import { Button, Input, focusRing } from "../kit";
+
+const segment = clsx(
+  "m-0 inline-flex cursor-pointer items-center border-0 bg-transparent text-xs font-medium leading-[18px] text-muted-foreground [font-family:inherit]",
+  "transition-colors duration-150 hover:not-disabled:bg-accent hover:not-disabled:text-accent-foreground disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none",
+  focusRing,
+);
 
 /**
  * Split button shown for git workspaces next to Open: the primary action opens a dialog that lists
@@ -72,10 +80,10 @@ export function CommitPushButton({ cwd }: { cwd: string }) {
 
   return (
     <>
-      <div className={css.split} data-testid={TESTID.commitButton}>
+      <div className="box-border inline-flex h-7 items-stretch overflow-hidden rounded-md border border-solid border-border bg-card" data-testid={TESTID.commitButton}>
         <Tooltip label={t("conversation.commit.tooltip")} side="bottom" align="end" delayMs={500}>
-          <button type="button" className={css.primary} onClick={() => start(true)} disabled={open}>
-            <span className={css.label}>{t("conversation.commit.label")}</span>
+          <button type="button" className={clsx(segment, "gap-1.5 px-2.5")} onClick={() => start(true)} disabled={open}>
+            <span className="whitespace-nowrap">{t("conversation.commit.label")}</span>
           </button>
         </Tooltip>
         <Menu
@@ -87,7 +95,7 @@ export function CommitPushButton({ cwd }: { cwd: string }) {
           anchor={
             <button
               type="button"
-              className={css.chevron}
+              className={clsx(segment, "border-0 border-l border-solid border-border px-1.5")}
               data-testid={TESTID.commitMenu}
               aria-label={t("conversation.commit.more")}
               aria-haspopup="menu"
@@ -101,25 +109,24 @@ export function CommitPushButton({ cwd }: { cwd: string }) {
       </div>
 
       {open && (
-        <div className={css.overlay} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
-          <div className={css.dialog} role="dialog" aria-modal="true" aria-label={t("conversation.commit.title")} data-testid={TESTID.commitDialog}>
-            <div className={css.header}>
-              <h2 className={css.title}>{t("conversation.commit.title")}</h2>
-              <span className={css.branch}>{info.branch}</span>
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40 p-6" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
+          <div className="box-border flex max-h-[calc(100vh-48px)] w-full max-w-[480px] flex-col gap-3 rounded-2xl border border-solid border-border bg-popover p-4 text-[13px] text-popover-foreground shadow-lg" role="dialog" aria-modal="true" aria-label={t("conversation.commit.title")} data-testid={TESTID.commitDialog}>
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="m-0 text-sm font-semibold">{t("conversation.commit.title")}</h2>
+              <span className="min-w-0 truncate text-xs text-muted-foreground">{info.branch}</span>
             </div>
-            <div className={css.changes} data-testid={TESTID.commitChanges}>
-              {changes === null && <span className={css.hint}>{t("conversation.commit.loading")}</span>}
-              {changes !== null && changes.length === 0 && <span className={css.hint}>{t("conversation.commit.clean")}</span>}
+            <div className="flex max-h-[180px] min-h-10 flex-col justify-center gap-0.5 overflow-y-auto rounded-md border border-solid border-border p-2" data-testid={TESTID.commitChanges}>
+              {changes === null && <span className="text-muted-foreground">{t("conversation.commit.loading")}</span>}
+              {changes !== null && changes.length === 0 && <span className="text-muted-foreground">{t("conversation.commit.clean")}</span>}
               {changes?.map((line) => (
-                <span key={line} className={css.changeLine}>
-                  <code>{line.slice(0, 2)}</code>
-                  <span className={css.changePath}>{line.slice(3)}</span>
+                <span key={line} className="flex min-w-0 items-center gap-2 leading-5">
+                  <code className="flex-none font-mono text-xs text-muted-foreground">{line.slice(0, 2)}</code>
+                  <span className="min-w-0 truncate">{line.slice(3)}</span>
                 </span>
               ))}
             </div>
-            <input
+            <Input
               ref={inputRef}
-              className={css.message}
               data-testid={TESTID.commitMessage}
               type="text"
               placeholder={t("conversation.commit.message")}
@@ -131,27 +138,28 @@ export function CommitPushButton({ cwd }: { cwd: string }) {
               }}
             />
             {error !== null && (
-              <div className={css.error} data-testid={TESTID.commitError} role="alert">
+              <div className="flex items-start gap-1.5 break-words whitespace-pre-wrap text-destructive-foreground" data-testid={TESTID.commitError} role="alert">
+                <CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
                 {t("conversation.commit.failed", { message: error })}
               </div>
             )}
             {result !== null && (
-              <div className={css.result} data-testid={TESTID.commitResult} role="status">
+              <div className="flex flex-col gap-1 text-muted-foreground" data-testid={TESTID.commitResult} role="status">
                 {result.committed
                   ? result.pushed
                     ? t("conversation.commit.result", { hash: result.commitHash ?? "" })
                     : t("conversation.commit.resultNoPush", { hash: result.commitHash ?? "" })
                   : t("conversation.commit.nothing")}
-                {result.pushSkipped === "no-upstream" && <span className={css.notice}>{t("conversation.commit.pushSkipped")}</span>}
+                {result.pushSkipped === "no-upstream" && <span className="opacity-80">{t("conversation.commit.pushSkipped")}</span>}
               </div>
             )}
-            <div className={css.actions}>
-              <button type="button" className={css.cancel} data-testid={TESTID.commitCancel} onClick={() => setOpen(false)} disabled={busy}>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" data-testid={TESTID.commitCancel} onClick={() => setOpen(false)} disabled={busy}>
                 {t("conversation.commit.cancel")}
-              </button>
-              <button type="button" className={css.submit} data-testid={TESTID.commitSubmit} onClick={submit} disabled={!canSubmit}>
+              </Button>
+              <Button variant="primary" size="sm" data-testid={TESTID.commitSubmit} onClick={submit} disabled={!canSubmit}>
                 {push ? t("conversation.commit.label") : t("conversation.commit.submitOnly")}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

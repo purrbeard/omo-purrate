@@ -12,7 +12,10 @@ import { TurnView } from "./TurnView";
 import { useTaskWork } from "./use-task-work";
 import { cancelChildTask } from "../../state/task-control";
 import { useStickToBottom } from "./use-stick-to-bottom";
-import css from "./AgentWorkspace.module.css";
+import clsx from "clsx";
+import { CircleAlert } from "lucide-react";
+import { Button, focusRing } from "../kit";
+import { userErrorText } from "./user-error";
 
 type Task = LiveTask | HistoricalTask;
 type WorkspaceState = { selected: string | null; closed: string[]; drafts: Record<string, string> };
@@ -109,14 +112,14 @@ function Workspace({ parentId, placement }: { parentId: string; placement: "dock
       window.dispatchEvent(new CustomEvent("omo-ui:task-message", { detail: parentId }));
       setState(value => ({ ...value, drafts: { ...value.drafts, [id]: value.drafts[id] === draft ? "" : value.drafts[id] ?? "" } }));
     } catch (cause) {
-      setErrors(value => ({ ...value, [id]: cause instanceof Error ? cause.message : String(cause) }));
+      setErrors(value => ({ ...value, [id]: userErrorText(cause, t("conversation.error.requestFailed")).text }));
     } finally { setSending(value => value.filter(entry => entry !== id)); }
   };
   const stop = async (taskId: string): Promise<void> => {
     setStopping(value => [...value, taskId]);
     setErrors(value => ({ ...value, [taskId]: "" }));
     try { await cancelChildTask(parentId, taskId); }
-    catch (cause) { setErrors(value => ({ ...value, [taskId]: cause instanceof Error ? cause.message : String(cause) })); }
+    catch (cause) { setErrors(value => ({ ...value, [taskId]: userErrorText(cause, t("conversation.error.requestFailed")).text })); }
     finally { setStopping(value => value.filter(entry => entry !== taskId)); }
   };
   const tabKeys = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -128,43 +131,43 @@ function Workspace({ parentId, placement }: { parentId: string; placement: "dock
     event.preventDefault(); select(next.task_id);
     document.getElementById(`agent-tab-${next.task_id}`)?.focus();
   };
-  return <section className={css.root} data-testid="agent-workspace" data-parent-id={parentId} data-placement={placement}>
-    <div className={css.tabs} role="tablist" aria-label={t("activity.agents")} onKeyDown={tabKeys}>
-      {open.map(task => <div key={task.task_id} className={css.tabWrap}>
-        <button id={`agent-tab-${task.task_id}`} type="button" role="tab" className={css.tab}
+  return <section className={"flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-lg border border-solid border-border bg-background"} data-testid="agent-workspace" data-parent-id={parentId} data-placement={placement}>
+    <div className={"flex shrink-0 overflow-x-auto border-0 border-b border-solid border-border px-2 [scrollbar-width:none]"} role="tablist" aria-label={t("activity.agents")} onKeyDown={tabKeys}>
+      {open.map(task => <div key={task.task_id} className={"flex shrink-0 items-center"}>
+        <button id={`agent-tab-${task.task_id}`} type="button" role="tab" className={clsx("m-0 flex min-h-10 cursor-pointer items-center gap-[7px] border-0 border-b-2 border-solid border-transparent bg-transparent px-2.5 py-2 whitespace-nowrap text-muted-foreground [font-family:inherit] aria-selected:border-foreground aria-selected:text-foreground", focusRing)}
           aria-selected={task.task_id === selected?.task_id} aria-controls="agent-chat-panel" tabIndex={task.task_id === selected?.task_id ? 0 : -1}
           data-testid="agent-chat-tab" data-task-id={task.task_id} data-status={task.status} onClick={() => select(task.task_id)}>
-          <span className={css.dot} data-status={task.status} />{task.name ?? task.agent_type ?? task.category ?? task.task_id}
+          <span className={"size-[7px] shrink-0 rounded-full bg-muted-foreground data-[status=error]:bg-destructive-foreground data-[status=running]:bg-foreground"} data-status={task.status} />{task.name ?? task.agent_type ?? task.category ?? task.task_id}
         </button>
-        <button type="button" className={css.close} aria-label={`${task.name ?? task.task_id} · ${t("activity.closeAgents")}`} onClick={() => close(task.task_id)}>×</button>
+        <button type="button" className={clsx("m-0 min-h-10 cursor-pointer border-0 bg-transparent px-1.5 text-muted-foreground hover:text-foreground", focusRing)} aria-label={`${task.name ?? task.task_id} · ${t("activity.closeAgents")}`} onClick={() => close(task.task_id)}>×</button>
       </div>)}
-      {state.closed.length > 0 && <button className={css.reopen} type="button" onClick={() => setState(value => ({ ...value, closed: [] }))}>+ {t("activity.agents")}</button>}
+      {state.closed.length > 0 && <button className={clsx("m-0 min-h-10 cursor-pointer border-0 bg-transparent px-2 text-muted-foreground [font-family:inherit] hover:text-foreground", focusRing)} type="button" onClick={() => setState(value => ({ ...value, closed: [] }))}>+ {t("activity.agents")}</button>}
     </div>
-    {linkedSessions.length > 0 && <div className={css.sessions}>
-      {linkedSessions.map(child => <button key={child.id} type="button" className={css.session} data-testid="agent-row" data-agent-thread-id={child.id}
+    {linkedSessions.length > 0 && <div className={"flex shrink-0 flex-col gap-1.5 border-0 border-b border-solid border-border px-3 py-2.5"}>
+      {linkedSessions.map(child => <button key={child.id} type="button" className={clsx("m-0 flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-solid border-border bg-transparent px-2.5 py-2 text-left text-[13px] text-foreground [font-family:inherit] hover:bg-accent aria-pressed:bg-accent [&>span]:shrink-0 [&>span]:text-[11px] [&>span]:text-muted-foreground", focusRing)} data-testid="agent-row" data-agent-thread-id={child.id}
         aria-pressed={activeThreadId === child.id} onClick={() => { void actions.openThread(child.id); if (placement === "overlay") uiState.setAgentPanelOpen(false); }}>
         {threadTitle(child, t("shell.newSession"))}<span>{t("activity.agentOpenConversation")}</span>
       </button>)}
     </div>}
-    {loadError !== null && <p className={css.error} role="alert">{loadError}</p>}
-    {selected === undefined ? (linkedSessions.length === 0 && <p className={css.empty}>{t("activity.agentEmpty")}</p>) : <>
-      <div className={css.meta} data-task-id={selected.task_id}><span>{selected.task_summary ?? selected.task_id}</span><span>{selected.status}</span>
-        {(selected.status === "running" || selected.status === "queued") && <button type="button" className={css.stop} data-testid="agent-stop"
+    {loadError !== null && <p className={"mx-4 my-2 flex items-start gap-1.5 text-xs [overflow-wrap:anywhere] text-destructive-foreground"} role="alert"><CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden /><span title={loadError}>{userErrorText(loadError, t("conversation.error.requestFailed")).text}</span></p>}
+    {selected === undefined ? (linkedSessions.length === 0 && <p className={"m-0 p-4 text-[13px] [overflow-wrap:anywhere] whitespace-pre-wrap text-muted-foreground"}>{t("activity.agentEmpty")}</p>) : <>
+      <div className={"flex justify-between gap-3 px-4 py-3 text-xs text-muted-foreground [&>span:first-child]:truncate"} data-task-id={selected.task_id}><span>{selected.task_summary ?? selected.task_id}</span><span>{selected.status}</span>
+        {(selected.status === "running" || selected.status === "queued") && <button type="button" className={clsx("m-0 shrink-0 cursor-pointer rounded-md border border-solid border-border bg-background px-2.5 py-0.5 text-xs text-foreground [font-family:inherit] hover:bg-accent disabled:cursor-default disabled:opacity-50", focusRing)} data-testid="agent-stop"
           aria-label={t("activity.stopAgent")} disabled={stopping.includes(selected.task_id)} onClick={() => void stop(selected.task_id)}>{t("activity.stop")}</button>}</div>
-      <div ref={scroll.scrollRef} id="agent-chat-panel" role="tabpanel" aria-labelledby={`agent-tab-${selected.task_id}`} className={css.transcript} data-testid="agent-chat-history">
+      <div ref={scroll.scrollRef} id="agent-chat-panel" role="tabpanel" aria-labelledby={`agent-tab-${selected.task_id}`} className={"min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-3"} data-testid="agent-chat-history">
         <div ref={scroll.contentRef}>
         {turns.map(turn => <TurnView key={turn.id} turn={turn} cwd={cwd} />)}
-        {turns.length === 0 && <p className={css.empty}>{selected.final_response ?? work?.activity ?? t("activity.agentNoRecords")}</p>}
+        {turns.length === 0 && <p className={"m-0 p-4 text-[13px] [overflow-wrap:anywhere] whitespace-pre-wrap text-muted-foreground"}>{selected.final_response ?? work?.activity ?? t("activity.agentNoRecords")}</p>}
         </div>
       </div>
-      <form className={css.composer} onSubmit={event => void send(event)} data-testid="agent-chat-composer">
+      <form className={"mx-4 mt-3 mb-4 rounded-2xl border border-solid border-border bg-composer p-3 [&_textarea]:box-border [&_textarea]:max-h-40 [&_textarea]:min-h-[62px] [&_textarea]:w-full [&_textarea]:resize-y [&_textarea]:border-0 [&_textarea]:bg-transparent [&_textarea]:text-[13px] [&_textarea]:text-composer-foreground [&_textarea]:[font-family:inherit]"} onSubmit={event => void send(event)} data-testid="agent-chat-composer">
         <textarea aria-label={t("activity.agentMessage")} placeholder={t("activity.agentMessage")} value={draft}
           onChange={event => { const text = event.target.value; setState(value => ({ ...value, drafts: { ...value.drafts, [selected.task_id]: text } })); }}
           onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-        <div className={css.footer}><span>{"model" in selected ? selected.model : ""}</span>
-          <button type="submit" disabled={!canSend || !draft.trim() || sending.includes(selected.task_id)}>{sending.includes(selected.task_id) ? t("activity.agentSending") : t("activity.agentSend")}</button>
+        <div className={"flex items-center justify-between gap-3 [&>span]:truncate [&>span]:text-[11px] [&>span]:text-muted-foreground"}><span>{"model" in selected ? selected.model : ""}</span>
+          <Button type="submit" variant="primary" size="sm" disabled={!canSend || !draft.trim() || sending.includes(selected.task_id)}>{sending.includes(selected.task_id) ? t("activity.agentSending") : t("activity.agentSend")}</Button>
         </div>
-        {errors[selected.task_id] && <p className={css.error} role="alert">{errors[selected.task_id]}</p>}
+        {errors[selected.task_id] && <p className={"mx-4 my-2 flex items-start gap-1.5 text-xs [overflow-wrap:anywhere] text-destructive-foreground"} role="alert"><CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />{errors[selected.task_id]}</p>}
       </form>
     </>}
   </section>;

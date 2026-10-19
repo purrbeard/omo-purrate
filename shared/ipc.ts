@@ -325,6 +325,8 @@ export interface GitInfo {
   ahead: number | null;
   /** Commits on the upstream missing from HEAD; null when the branch has no upstream. */
   behind: number | null;
+  /** True for a linked worktree (`git worktree add`), whose git dir differs from the common dir. */
+  worktree: boolean;
 }
 
 /** Outcome of `git add -A` + commit (+ optional push); git failures reject before this resolves. */

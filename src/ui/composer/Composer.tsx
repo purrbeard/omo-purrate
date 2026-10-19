@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import type { KeyboardEvent, MouseEvent, SyntheticEvent } from "react";
 import clsx from "clsx";
 import { IconFolderOpenOutlineRegular, IconPaperclipOutlineRegular, IconCloseOutlineRegular, Tooltip } from "@deepseek-ai/dsh-client-ui-primitives";
+import { focusRing } from "../kit";
 import { ArrowUpGlyph } from "../glyphs";
 import { parseBtwCommand, selectActiveCwd, selectIsTurnActive, selectSkillCatalog } from "../../state";
 import type { SkillCatalog } from "../../state";
@@ -30,7 +31,29 @@ import { ContextDialog } from "./ContextDialog";
 import { SketchDialog } from "./SketchDialog";
 import { addContext, contextMessage, CONTEXT_LIMIT, type DraftContext } from "./context-draft";
 import { userMessageParts } from "../conversation/UserBubble";
-import css from "./Composer.module.css";
+import { userErrorText } from "../conversation/user-error";
+
+/** Ghost 28px chip in the composer row (attach, workspace). */
+const chipClass = clsx(
+  "m-0 inline-flex h-7 min-w-0 max-w-[min(280px,60cqw)] cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent px-2",
+  "text-[13px] font-medium leading-5 text-muted-foreground [font-family:inherit]",
+  "transition-colors duration-150 hover:not-disabled:bg-accent hover:not-disabled:text-accent-foreground disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none",
+  focusRing,
+);
+/** Removable context chip above the draft. */
+const contextChipClass = clsx(
+  "m-0 inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded-md border border-solid border-border bg-muted px-2 py-0.5",
+  "text-xs leading-5 text-muted-foreground [font-family:inherit] [&>span]:min-w-0 [&>span]:truncate [&>svg]:flex-none hover:text-foreground",
+  focusRing,
+);
+/** The mirror and the textarea share one box, font and wrapping so painted keywords line up with the caret. */
+const draftBox = "m-0 box-border block w-full border-0 pt-0.5 pr-2.5 pl-4 [font-family:var(--dsw-font-family)] text-[length:inherit] leading-[inherit] tracking-normal [word-spacing:normal] [overflow-wrap:anywhere] whitespace-pre-wrap";
+/** Round 32px primary action; the send button is solid --primary only while it can send. */
+const roundAction = clsx(
+  "m-0 grid size-8 flex-none cursor-pointer place-items-center rounded-full border-0 p-0",
+  "transition-colors duration-150 disabled:cursor-default motion-reduce:transition-none",
+  focusRing,
+);
 
 const NO_THREAD_DRAFT = "";
 const EMPTY_DRAFT: SkillDraft = { text: "", selected: [] };
@@ -123,7 +146,7 @@ export function Composer() {
       const imagePaths = kind === "files" ? paths.filter(path => isImageFile(path)) : [];
       addImages(imagePaths.map(path => ({ type: "localImage", path })));
       addReferences(paths.filter(path => !imagePaths.includes(path)).map(value => ({ kind: kind === "folder" ? "folder" : "file", value })));
-    } catch (error) { setImageNotice(String(error)); }
+    } catch (error) { setImageNotice(userErrorText(error, t("conversation.error.requestFailed")).text); }
   };
   const addAction = (action: AddAction): void => {
     dismissMenu();
@@ -251,7 +274,7 @@ export function Composer() {
         case "plan": setPlanMode(current => !current); break;
       }
     } catch (error) {
-      setImageNotice(error instanceof Error ? error.message : String(error));
+      setImageNotice(userErrorText(error, t("conversation.error.requestFailed")).text);
     }
   };
 
@@ -386,7 +409,7 @@ export function Composer() {
         }
       }
     } catch (error) {
-      setImageNotice(String(error));
+      setImageNotice(userErrorText(error, t("conversation.error.requestFailed")).text);
       if (!accepted) {
         setPlanMode(planMode);
         setContext(current => addContext(context, current));
@@ -444,10 +467,14 @@ export function Composer() {
   const sendLabel = steers ? t("composer.steer") : t("composer.send");
 
   return (
-    <div className={css.root}>
+    <div className="flex flex-none flex-col items-center px-5 pb-4 [--dsh-composer-card-max-width:var(--container-3xl)]">
       <ConversationDock />
       <div
-        className={clsx(css.card, !connected && css.cardDisabled, keyword !== null && css.cardMagic, dropping && css.cardDrop)}
+        className={clsx(
+          "relative box-border flex w-full max-w-3xl flex-col gap-2.5 rounded-2xl border border-solid pt-2.5",
+          "bg-composer text-sm leading-6 text-composer-foreground shadow-xs transition-colors duration-150 motion-reduce:transition-none",
+          keyword !== null ? "border-primary" : dropping ? "border-ring bg-accent" : connected ? "border-border focus-within:border-input" : "border-border/60",
+        )}
         data-testid={TESTID.composer}
         data-composer-card=""
         data-keyword={keyword?.keyword}
@@ -473,28 +500,32 @@ export function Composer() {
             onDismiss={dismissMenu}
           />
         )}
-        {dropping && <div className={css.imageNotice} role="status">{t("composer.images.drop")}</div>}
-        {images.length > 0 && <div className={css.images}>
-          {userMessageParts(images).images.map((image, index) => <div key={image.key} className={css.thumbnail} data-testid={TESTID.attachmentThumbnail}>
-            <img src={image.src} alt={t("composer.images.preview", { number: index + 1 })} />
-            <button type="button" className={css.removeImage} data-testid={TESTID.attachmentRemove} aria-label={t("composer.images.remove", { number: index + 1 })} onClick={() => setImages((current) => current.filter((_, position) => position !== index))}><IconCloseOutlineRegular size={14} /></button>
+        {dropping && <div className="px-4 text-[13px] text-muted-foreground" role="status">{t("composer.images.drop")}</div>}
+        {images.length > 0 && <div className="flex flex-wrap gap-2.5 px-4 py-1">
+          {userMessageParts(images).images.map((image, index) => <div key={image.key} className="relative size-[72px]" data-testid={TESTID.attachmentThumbnail}>
+            <img className="size-full rounded-sm border border-solid border-border object-cover" src={image.src} alt={t("composer.images.preview", { number: index + 1 })} />
+            <button type="button" className={clsx("absolute -top-1 -right-1 m-0 grid size-[22px] cursor-pointer place-items-center rounded-sm border border-solid border-border bg-composer p-0 text-composer-foreground", focusRing)} data-testid={TESTID.attachmentRemove} aria-label={t("composer.images.remove", { number: index + 1 })} onClick={() => setImages((current) => current.filter((_, position) => position !== index))}><IconCloseOutlineRegular size={14} /></button>
           </div>)}
         </div>}
-        {imageNotice !== "" && <div className={css.imageNotice} data-testid={TESTID.attachmentNotice} role="status">{imageNotice}</div>}
-        {(context.length > 0 || planMode || goalDraft !== "") && <div className={css.contextChips}>
-          {context.map((entry, index) => <button type="button" key={`${entry.kind}:${entry.value}`} data-testid="context-chip" className={css.contextChip}
+        {imageNotice !== "" && <div className="px-4 text-[13px] text-muted-foreground" data-testid={TESTID.attachmentNotice} role="status">{imageNotice}</div>}
+        {(context.length > 0 || planMode || goalDraft !== "") && <div className="flex flex-wrap gap-1.5 px-4">
+          {context.map((entry, index) => <button type="button" key={`${entry.kind}:${entry.value}`} data-testid="context-chip" className={contextChipClass}
             title={entry.value} aria-label={`${t("composer.chip.removeAttachment")}: ${entry.kind === "terminal" ? "WindowsTerminal" : basename(entry.value)}`}
             onClick={() => setContext(current => current.filter((_, position) => position !== index))}>
             <span>{entry.kind === "terminal" ? "WindowsTerminal" : basename(entry.value)}</span><IconCloseOutlineRegular size={12} />
           </button>)}
-          {planMode && <button type="button" className={css.contextChip} data-testid="plan-mode-chip" aria-label={t("composer.chip.removePlan")} onClick={() => setPlanMode(false)}>{t("composer.chip.planChip")}<IconCloseOutlineRegular size={12} /></button>}
-          {goalDraft !== "" && <button type="button" className={css.contextChip} data-testid="goal-draft-chip" title={goalDraft} aria-label={t("composer.chip.removeGoal")} onClick={() => setGoalDraft("")}><span>{t("composer.chip.goalChip")}: {goalDraft}</span><IconCloseOutlineRegular size={12} /></button>}
+          {planMode && <button type="button" className={contextChipClass} data-testid="plan-mode-chip" aria-label={t("composer.chip.removePlan")} onClick={() => setPlanMode(false)}>{t("composer.chip.planChip")}<IconCloseOutlineRegular size={12} /></button>}
+          {goalDraft !== "" && <button type="button" className={contextChipClass} data-testid="goal-draft-chip" title={goalDraft} aria-label={t("composer.chip.removeGoal")} onClick={() => setGoalDraft("")}><span>{t("composer.chip.goalChip")}: {goalDraft}</span><IconCloseOutlineRegular size={12} /></button>}
         </div>}
-        <div className={css.scroll}>
-          <div ref={mirrorRef} className={css.mirror} aria-hidden>
+        <div className="relative mr-1">
+          <div
+            ref={mirrorRef}
+            className={clsx(draftBox, "pointer-events-none absolute inset-0 overflow-hidden pr-[calc(10px+var(--dsh-scrollbar-width,5px))] select-none", connected ? "text-composer-foreground" : "text-muted-foreground")}
+            aria-hidden
+          >
             {segments.map((segment, index) =>
               segment.kind === "keyword" ? (
-                <span key={index} className={css.keyword} data-testid={TESTID.keywordHighlight}>
+                <span key={index} className="font-medium text-primary" data-testid={TESTID.keywordHighlight}>
                   {segment.text}
                 </span>
               ) : (
@@ -505,7 +536,11 @@ export function Composer() {
           </div>
           <textarea
             ref={inputRef}
-            className={css.input}
+            className={clsx(
+              draftBox,
+              "relative max-h-[292px] min-h-[52px] resize-none overflow-y-scroll bg-transparent text-transparent caret-composer-foreground outline-none [scrollbar-gutter:stable]",
+              "placeholder:text-composer-placeholder disabled:cursor-not-allowed disabled:placeholder:opacity-60",
+            )}
             data-testid={TESTID.composerInput}
             data-thread-id={activeThreadId ?? ""}
             aria-label={t("composer.inputLabel")}
@@ -540,13 +575,13 @@ export function Composer() {
           />
         </div>
         {keyword !== null && (
-          <div className={css.keywordHint} data-testid={TESTID.keywordHint} role="status">
-            <span className={css.keywordHintName}>{keyword.text}</span>
+          <div className="mx-4 mt-0.5 block text-[13px] leading-[18px] [overflow-wrap:anywhere] text-muted-foreground" data-testid={TESTID.keywordHint} role="status">
+            <span className="font-semibold text-primary">{keyword.text}</span>
             {t(keyword.keyword === "mass-ulw" ? "composer.keyword.massHint" : "composer.keyword.hint")}
           </div>
         )}
-        <div className={css.row}>
-          <div className={css.tools}>
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 pt-0.5 pr-2.5 pb-2.5 pl-3 [container-type:inline-size]">
+          <div className="flex min-w-0 items-center gap-2">
             <AddMenu disabled={!connected || busy} skills={catalogSkills ?? []} loading={catalog?.status === "loading"}
               plan={planMode} onOpen={() => {
                 dismissMenu();
@@ -560,37 +595,39 @@ export function Composer() {
                 setDraft(result.draft);
                 setCaret(result.caret);
               }} />
-            <button type="button" className={css.chip} data-testid={TESTID.attachmentPick} aria-label={t("composer.images.attach")} disabled={!connected || busy} onClick={() => void pickReferences("files")}><IconPaperclipOutlineRegular size={16} /></button>
             {connected && <PermissionPicker disabled={!connected} />}
             {activeThreadId === null && (
               <button
                 type="button"
-                className={css.chip}
+                className={chipClass}
                 data-testid={TESTID.workspaceChip}
                 aria-label={workspace === null ? t("composer.workspace.choose") : t("composer.workspace.label", { path: workspace })}
                 title={workspace ?? undefined}
                 disabled={!connected}
                 onClick={() => void pickWorkspace()}
               >
-                <IconFolderOpenOutlineRegular className={css.chipIcon} size={14} />
-                <span className={css.chipLabel}>{workspace === null ? t("composer.workspace.choose") : basename(workspace)}</span>
+                <IconFolderOpenOutlineRegular className="flex-none opacity-70" size={14} />
+                <span className="min-w-0 truncate">{workspace === null ? t("composer.workspace.choose") : basename(workspace)}</span>
               </button>
             )}
           </div>
-          <div className={css.trailing}>
+          <div className="ml-auto flex min-w-0 flex-none items-center gap-2">
             {steers && !blank && (
-              <span className={css.hint} data-testid={TESTID.steeringHint}>
+              <span className="flex-none rounded-sm bg-muted px-2 text-xs leading-[22px] whitespace-nowrap text-muted-foreground" data-testid={TESTID.steeringHint}>
                 {t("composer.steering")}
               </span>
             )}
             <ContextGauge />
-            <ModelPicker disabled={!connected} />
-            <ReasoningPicker disabled={!connected} />
+            <div className="flex min-w-0 items-center gap-0.5" role="group" aria-label={t("composer.modelGroup")}>
+              <ModelPicker disabled={!connected} />
+              <ReasoningPicker disabled={!connected} />
+            </div>
+            <button type="button" className={clsx(chipClass, "w-7 justify-center px-0")} data-testid={TESTID.attachmentPick} aria-label={t("composer.images.attach")} disabled={!connected || busy} onClick={() => void pickReferences("files")}><IconPaperclipOutlineRegular size={16} /></button>
             {turnActive && (
               <Tooltip label={t("composer.stop")} side="top" delayMs={500}>
                 <button
                   type="button"
-                  className={clsx(css.primary, css.stop)}
+                  className={clsx(roundAction, "bg-secondary text-secondary-foreground hover:bg-accent")}
                   data-testid={TESTID.composerStop}
                   aria-label={t("composer.stop")}
                   onMouseDown={keepFocus}
@@ -603,7 +640,7 @@ export function Composer() {
             <Tooltip label={sendLabel} side="top" delayMs={500} disabled={!canSend}>
               <button
                 type="button"
-                className={css.primary}
+                className={clsx(roundAction, canSend ? "bg-composer-send text-composer-send-foreground hover:bg-composer-send/90" : "bg-muted text-muted-foreground")}
                 data-testid={TESTID.composerSend}
                 aria-label={sendLabel}
                 disabled={!canSend}

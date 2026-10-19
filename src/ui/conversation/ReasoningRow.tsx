@@ -5,8 +5,7 @@ import { useT } from "../../i18n";
 import { TESTID } from "../testids";
 import { formatWholeSeconds } from "./format";
 import { useConversationLabels } from "./labels";
-import a11y from "./a11y.module.css";
-import css from "./ReasoningRow.module.css";
+import clsx from "clsx";
 
 const THINK_ICON = <IconThinkOutlineRegular size={14} />;
 const MIN_REPORTED_THINKING_MS = 1000;
@@ -61,9 +60,9 @@ export const ReasoningRow = memo(function ReasoningRow({
     () =>
       preview === "" ? undefined : (
         <>
-          <span className={css.separator} data-shimmer-decoration aria-hidden />
-          <span className={css.preview}>
-            <span className={css.previewText}>
+          <span className="mx-2 size-0.5 flex-none rounded-full bg-muted-foreground" data-shimmer-decoration aria-hidden />
+          <span className="min-w-0 flex-auto overflow-hidden text-[13px] leading-5 whitespace-nowrap [mask-image:linear-gradient(to_right,black_calc(100%-48px),transparent)]">
+            <span className="block overflow-visible">
               <TextShimmer>{preview}</TextShimmer>
             </span>
           </span>
@@ -74,10 +73,10 @@ export const ReasoningRow = memo(function ReasoningRow({
   const body = useMemo(
     () =>
       open ? (
-        <div className={css.body}>
+        <div className="flex min-w-0 flex-col gap-2 py-1 pl-[22px] text-muted-foreground">
           {summary !== "" && content !== "" && (
-            <div className={css.section}>
-              <div className={css.sectionLabel}>{t("conversation.reasoning.summary")}</div>
+            <div className="flex flex-col gap-0.5 border-0 border-b border-solid border-border pb-2">
+              <div className="text-xs leading-5 text-muted-foreground">{t("conversation.reasoning.summary")}</div>
               <MarkdownText text={summary} streaming={streaming} labels={labels.markdown} variant="compact" />
             </div>
           )}
@@ -88,18 +87,23 @@ export const ReasoningRow = memo(function ReasoningRow({
   );
   return (
     <div
-      className={css.root}
+      className={clsx(
+        "flex min-w-0 flex-col",
+        open
+          ? "[&_[data-open]_[data-disclosure-row]]:sticky! [&_[data-open]_[data-disclosure-row]]:top-0 [&_[data-open]_[data-disclosure-row]]:z-[1] [&_[data-open]_[data-disclosure-row]]:bg-background"
+          : "h-6 [contain:size_layout]",
+      )}
       data-testid={TESTID.reasoning}
       data-item-id={item.id}
       data-streaming={streaming || undefined}
       data-expanded={open || undefined}
       data-flow="reasoning"
     >
-      {streaming && <span className={a11y.visuallyHidden}>{t("conversation.tool.state.running")}</span>}
+      {streaming && <span className="sr-only">{t("conversation.tool.state.running")}</span>}
       <DisclosureRow
-        rowClassName={css.row}
-        leadingClassName={css.leading}
-        titleClassName={css.title}
+        rowClassName="overflow-hidden rounded-sm"
+        leadingClassName="shrink-0"
+        titleClassName="font-normal"
         icon={THINK_ICON}
         title={title}
         running={streaming}

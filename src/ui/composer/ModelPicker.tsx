@@ -23,7 +23,17 @@ import { resolveComposerModel, selectActiveSessionModel } from "../../state";
 import { filterGroups, groupModels, modelDisplayName, resolveEffort } from "./model-groups";
 import { EFFORT_KEY } from "./effort-labels";
 import { APP_SHORTCUTS, shortcutKeys } from "../shortcuts";
-import css from "./ModelPicker.module.css";
+import { focusRing } from "../kit";
+import { pickerChevron, pickerMenu, pickerTrigger } from "./picker-classes";
+
+const tabButton = clsx(
+  "m-0 cursor-pointer rounded-sm border-0 bg-transparent px-3 py-[5px] text-[13px] text-muted-foreground [font-family:inherit] aria-selected:bg-background aria-selected:text-foreground",
+  focusRing,
+);
+const optionBase =
+  "m-0 box-border flex min-h-10 w-auto min-w-full cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent px-2.5 py-1.5 text-left text-inherit outline-none [font-family:inherit] disabled:cursor-default";
+const emptyClass = "p-2 text-xs leading-[18px] text-muted-foreground";
+const checkClass = "grid flex-[0_0_14px] place-items-center text-foreground [&_svg]:size-3.5";
 
 import { ProfilePicker } from "./ProfilePicker";
 import { resolveProfile } from "./model-profiles";
@@ -248,11 +258,11 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
   let optionIndex = 0;
 
   return (
-    <div ref={rootRef} className={css.root} onKeyDown={onKeyDown} onBlur={onBlur} onMouseDown={keepRowFocus}>
+    <div ref={rootRef} className="relative min-w-0" onKeyDown={onKeyDown} onBlur={onBlur} onMouseDown={keepRowFocus}>
       <button
         ref={triggerRef}
         type="button"
-        className={css.trigger}
+        className={clsx(pickerTrigger, "max-w-[min(360px,45cqw)]")}
         data-testid={TESTID.modelPicker}
         aria-label={triggerAria}
         aria-haspopup="dialog"
@@ -262,10 +272,10 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
         disabled={disabled}
         onClick={() => (open ? close(true) : show())}
       >
-        {profile ? <IconSparkleRegular className={css.triggerIcon} size={14} /> : <IconDataOutlineRegular className={css.triggerIcon} size={14} />}
-        {profile && <span className={css.profileIndicator} data-geeky={profile.startsWith("geeky")} aria-hidden="true" />}
-        <span className={css.triggerLabel}>{modelLabel}</span>
-        <IconChevronDownOutlineRegular className={clsx(css.chevron, open && css.chevronOpen)} size={12} />
+        {profile ? <IconSparkleRegular className="flex-none opacity-70" size={14} /> : <IconDataOutlineRegular className="flex-none opacity-70" size={14} />}
+        {profile && <span className="size-1.5 flex-none rounded-full bg-warning data-[geeky=true]:bg-muted-foreground" data-geeky={profile.startsWith("geeky")} aria-hidden="true" />}
+        <span className="min-w-0 truncate">{modelLabel}</span>
+        <IconChevronDownOutlineRegular className={pickerChevron(open)} size={12} />
       </button>
 
       {open &&
@@ -273,16 +283,22 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
           <MenuSurface
             ref={menuRef}
             id={`${id}-menu`}
-            className={clsx(css.menu, tab === "profile" && css.profileMenu)}
+            className={clsx(
+              pickerMenu,
+              "rounded-xl! border border-solid border-border text-popover-foreground shadow-lg",
+              tab === "profile"
+                ? "max-h-[calc(100vh-32px)] w-[640px] max-w-[calc(100vw-24px)] overflow-y-auto p-2.5"
+                : "max-h-[min(420px,calc(100vh-96px))] w-max max-w-[min(420px,calc(100vw-32px))] min-w-[min(280px,calc(100vw-32px))] overflow-hidden p-1.5",
+            )}
             style={menuPos ?? MEASURE_STYLE}
             role="dialog"
             aria-label={t("composer.model.label")}
           >
-            <div className={css.tabs} role="tablist" aria-label={t("composer.model.label")}>
-              <button type="button" role="tab" disabled={saving} aria-selected={tab === "profile"} data-testid={TESTID.profileTab} onClick={() => { setEditingProfile(null); setTab("profile"); }}>{t("composer.profile.tab")}</button>
-              <button type="button" role="tab" disabled={saving} aria-selected={tab === "specific"} data-testid={TESTID.specificModelTab} onClick={() => { setEditingProfile(null); setTab("specific"); focusPending.current = true; }}>{t("composer.profile.specific")}</button>
+            <div className="mt-0.5 mb-2 flex self-start rounded-md border border-solid border-border bg-muted p-[3px]" role="tablist" aria-label={t("composer.model.label")}>
+              <button type="button" role="tab" className={tabButton} disabled={saving} aria-selected={tab === "profile"} data-testid={TESTID.profileTab} onClick={() => { setEditingProfile(null); setTab("profile"); }}>{t("composer.profile.tab")}</button>
+              <button type="button" role="tab" className={tabButton} disabled={saving} aria-selected={tab === "specific"} data-testid={TESTID.specificModelTab} onClick={() => { setEditingProfile(null); setTab("specific"); focusPending.current = true; }}>{t("composer.profile.specific")}</button>
             </div>
-            {saveError !== null && <div className={css.empty} role="alert">{t("shell.settings.saveFailed", { message: saveError })}</div>}
+            {saveError !== null && <div className={emptyClass} role="alert">{t("shell.settings.saveFailed", { message: saveError })}</div>}
             {tab === "profile" ? <ProfilePicker models={models} current={profile} profileModels={preferences?.profileModels} onConfigure={(next) => {
               setEditingProfile(next);
               setTab("specific");
@@ -295,22 +311,22 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
               if (resolved.model) void actions.selectModel(resolved.model.id, resolved.effort, next);
             }} /> : <>
             {editingProfile !== null && <>
-              <div className={css.effortHeading}>
+              <div className="px-[7px] pt-1 pb-0.5 text-[11px] font-medium leading-4 text-muted-foreground">
                 {t(editingProfile.startsWith("daily") ? "composer.profile.daily" : "composer.profile.geeky")} · {t(editingProfile.endsWith("heavy") ? "composer.profile.heavy" : "composer.profile.normal")}
               </div>
-              <button type="button" className={css.option} data-profile-automatic={editingProfile} disabled={saving} aria-pressed={preferences?.profileModels?.[editingProfile] === undefined} onClick={() => void saveProfileModel(null)}>
-                <span className={css.optionCopy}>{t("composer.profile.automatic")}</span>
-                <span className={css.check}>{preferences?.profileModels?.[editingProfile] === undefined && <IconCheckOutlineRegular />}</span>
+              <button type="button" className={optionBase} data-profile-automatic={editingProfile} disabled={saving} aria-pressed={preferences?.profileModels?.[editingProfile] === undefined} onClick={() => void saveProfileModel(null)}>
+                <span className="flex min-w-0 flex-1 flex-col">{t("composer.profile.automatic")}</span>
+                <span className={checkClass}>{preferences?.profileModels?.[editingProfile] === undefined && <IconCheckOutlineRegular />}</span>
               </button>
-              {configuredModelUnavailable && <div className={css.empty} role="status" data-profile-unavailable={editingProfile}>
+              {configuredModelUnavailable && <div className={emptyClass} role="status" data-profile-unavailable={editingProfile}>
                 {configuredModelId} · {t("composer.model.searchEmpty")}
               </div>}
             </>}
             {showSearch && (
-              <div className={css.searchRow}>
+              <div className="relative mt-0.5 mb-[3px] shrink-0">
                 <Input
                   ref={searchRef}
-                  className={clsx(css.search, query !== "" && css.searchWithQuery)}
+                  className={clsx("flex! h-auto! rounded-md! border-0! bg-transparent! py-[5px]! pl-[7px]! [&_input]:p-0! [&_input]:text-xs! [&_input]:placeholder:text-muted-foreground", query !== "" ? "pr-[34px]!" : "pr-[7px]!")}
                   type="text"
                   role="searchbox"
                   aria-label={t("composer.model.search")}
@@ -326,7 +342,7 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
                 {query !== "" && (
                   <button
                     type="button"
-                    className={css.searchClear}
+                    className="absolute top-1/2 right-1 m-0 inline-flex size-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 text-muted-foreground hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
                     aria-label={t("composer.model.searchClear")}
                     onClick={() => {
                       setQuery("");
@@ -342,7 +358,7 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
             <div
               ref={groupsRef}
               id={`${id}-models`}
-              className={clsx(css.groups, "scrollable")}
+              className="scrollable min-h-0 overflow-y-auto"
               role="menu"
               aria-label={t("composer.model.label")}
               hidden={visibleGroups.length === 0}
@@ -366,17 +382,17 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
                         data-testid={TESTID.modelOption}
                         data-model-id={model.id}
                         tabIndex={showSearch ? -1 : 0}
-                        className={clsx(css.option, index === activeIndex && css.optionActive)}
+                        className={clsx(optionBase, index === activeIndex && "not-disabled:bg-accent")}
                         title={model.id}
                         onFocus={() => setHighlighted(index)}
                         onMouseMove={index === activeIndex ? undefined : () => setHighlighted(index)}
                         onClick={() => chooseModel(model)}
                       >
-                        <span className={css.optionCopy}>
-                          <span className={css.modelName}>{modelDisplayName(model)}</span>
-                          {model.description !== "" && <span className={css.modelDescription}>{model.description}</span>}
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-[13px] font-normal leading-[18px]">{modelDisplayName(model)}</span>
+                          {model.description !== "" && <span className="truncate text-[11px] leading-4 text-muted-foreground">{model.description}</span>}
                         </span>
-                        <span className={css.check}>{selected && <IconCheckOutlineRegular />}</span>
+                        <span className={checkClass}>{selected && <IconCheckOutlineRegular />}</span>
                       </button>
                     );
                   })}
@@ -384,7 +400,7 @@ export function ModelPicker({ disabled }: { disabled: boolean }) {
               ))}
             </div>
             {visibleGroups.length === 0 && (
-              <div className={css.empty} role="status">
+              <div className={emptyClass} role="status">
                 {t(models.length === 0 ? "composer.model.empty" : "composer.model.searchEmpty")}
               </div>
             )}

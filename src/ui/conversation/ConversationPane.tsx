@@ -1,19 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SessionNotice } from "../../../shared/ipc";
 import clsx from "clsx";
-import {
-  Button,
-  IconChevronDownOutlineRegular,
-  MarkdownDelegateProvider,
-  StateDot,
-  TextShimmer,
-} from "@deepseek-ai/dsh-client-ui-primitives";
+import { MarkdownDelegateProvider, StateDot, TextShimmer } from "@deepseek-ai/dsh-client-ui-primitives";
+import { ArrowDown, CircleAlert } from "lucide-react";
 import { resolveWorkspacePath } from "@deepseek-ai/dsh-util-workspace-path";
 import type { ThreadItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { Conversation, ConversationTurn, PendingRequest } from "../../state";
 import { selectActiveConversation, selectIsTurnActive, selectPendingRequestsForThread, selectMainThreadId, selectTasks } from "../../state";
 import { useActions, useAppSelector } from "../app-context";
+import { Button, focusRing } from "../kit";
 import { TESTID } from "../testids";
 import { uiState, useUiState } from "../ui-state";
 import { ActivityToggle } from "./ActivityPanel";
@@ -27,7 +23,6 @@ import { TurnView, type BranchContext } from "./TurnView";
 import { userMessageParts, UserBubble } from "./UserBubble";
 import { useStickToBottom } from "./use-stick-to-bottom";
 import { durationParts, QUIET_AFTER_MS, workingStatus } from "./working-status";
-import css from "./ConversationPane.module.css";
 
 const NO_TURNS: readonly ConversationTurn[] = [];
 
@@ -43,11 +38,11 @@ function relatedItem(conversation: Conversation | null, turnId: string, itemId: 
 function HistorySkeleton() {
   const t = useT();
   return (
-    <div className={css.skeleton} role="status" aria-label={t("conversation.history.loading")}>
-      <span className={clsx(css.skeletonBlock, css.skeletonBubble)} />
-      <span className={clsx(css.skeletonBlock, css.skeletonLine)} />
-      <span className={clsx(css.skeletonBlock, css.skeletonLine)} />
-      <span className={clsx(css.skeletonBlock, css.skeletonLine)} />
+    <div className="flex flex-col gap-3 [&>span]:block [&>span]:animate-pulse [&>span]:bg-muted motion-reduce:[&>span]:animate-none" role="status" aria-label={t("conversation.history.loading")}>
+      <span className="mb-2 h-10 w-5/12 self-end rounded-2xl" />
+      <span className="h-3.5 w-11/12 rounded-sm" />
+      <span className="h-3.5 w-9/12 rounded-sm" />
+      <span className="h-3.5 w-7/12 rounded-sm" />
     </div>
   );
 }
@@ -56,11 +51,11 @@ function HistoryError({ threadId, message }: { threadId: string; message: string
   const t = useT();
   const actions = useActions();
   return (
-    <div className={css.historyError} data-testid={TESTID.historyError} role="alert">
-      <StateDot state="error" className={css.historyErrorDot} />
-      <div className={css.historyErrorCopy}>
-        <span className={css.historyErrorTitle}>{t("conversation.history.error")}</span>
-        {message !== null && message !== "" && <span className={css.historyErrorMessage}>{message}</span>}
+    <div className="flex items-start gap-2.5 rounded-lg border border-solid border-destructive-foreground/30 bg-destructive px-3 py-2.5 text-sm leading-5" data-testid={TESTID.historyError} role="alert">
+      <CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive-foreground" aria-hidden />
+      <div className="flex min-w-0 flex-1 flex-col [overflow-wrap:anywhere]" title={message ?? undefined}>
+        <span className="font-semibold text-destructive-foreground">{t("conversation.history.error")}</span>
+        <span className="text-muted-foreground">{t("conversation.history.errorHint")}</span>
       </div>
       <Button variant="outline" size="sm" onClick={() => void actions.openThread(threadId)}>
         {t("conversation.history.retry")}
@@ -82,11 +77,11 @@ function WorkingIndicator({ turn }: { turn: ConversationTurn | null }) {
     return minutes > 0 ? t("conversation.duration.minutes", { minutes, seconds }) : t("conversation.duration.seconds", { seconds });
   };
   return (
-    <div className={css.working} data-testid={TESTID.workingIndicator} data-queued={status?.queuedMessage || undefined} role="status">
+    <div className="-mt-3 inline-flex items-center gap-1.5 self-start text-xs leading-6 text-muted-foreground" data-testid={TESTID.workingIndicator} data-queued={status?.queuedMessage || undefined} role="status">
       <StateDot state="ongoing" size={12} />
       <TextShimmer active>{t("conversation.working")}</TextShimmer>
       {status !== null && (
-        <span className={css.workingDetail} data-testid={TESTID.workingDetail}>
+        <span className="tabular-nums opacity-80" data-testid={TESTID.workingDetail}>
           {format(status.elapsedMs)}
           {status.idleMs >= QUIET_AFTER_MS && ` · ${t("conversation.working.lastActivity", { time: format(status.idleMs) })}`}
           {status.queuedMessage && ` · ${t("conversation.working.queued")}`}
@@ -160,10 +155,18 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
   }, [pending, jumpToLatest]);
 
   return (
-    <div className={css.body}>
+    <div className="relative flex min-h-24 flex-1 flex-col">
       {empty && <EmptyHero />}
-      <div ref={scroll.scrollRef} className={clsx(css.scroll, empty && css.scrollHidden)} role="region" aria-label={t("conversation.region")}>
-        <div ref={scroll.contentRef} className={css.column}>
+      <div
+        ref={scroll.scrollRef}
+        className={clsx(
+          "min-h-0 overflow-y-auto px-8 [container-type:inline-size] [scrollbar-gutter:stable_both-edges]",
+          empty ? "h-0 flex-none overflow-hidden" : "flex-1 pt-6 pb-8",
+        )}
+        role="region"
+        aria-label={t("conversation.region")}
+      >
+        <div ref={scroll.contentRef} className="mx-auto flex w-full max-w-3xl flex-col gap-6">
           {historyState === "loading" && <HistorySkeleton />}
           {historyState === "error" && <HistoryError threadId={threadId} message={conversation?.historyError ?? null} />}
           <MarkdownDelegateProvider openExternalLink={openExternalLink} openFile={openFile}>
@@ -185,8 +188,17 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
         </div>
       </div>
       {scroll.showJump && (
-        <button type="button" className={css.jump} onClick={scroll.jumpToLatest}>
-          <IconChevronDownOutlineRegular size={14} />
+        <button
+          type="button"
+          className={clsx(
+            "absolute bottom-4 left-1/2 z-10 m-0 inline-flex h-8 -translate-x-1/2 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full",
+            "border border-solid border-border bg-popover pr-3.5 pl-2.5 text-sm leading-5 text-popover-foreground shadow-md [font-family:inherit]",
+            "transition-colors duration-150 hover:bg-accent motion-reduce:transition-none",
+            focusRing,
+          )}
+          onClick={scroll.jumpToLatest}
+        >
+          <ArrowDown className="size-3.5" aria-hidden />
           <span>{t("conversation.jumpToLatest")}</span>
         </button>
       )}
@@ -217,9 +229,9 @@ export function ConversationPane() {
     [threadId, showActivity, toggleActivity],
   );
   return (
-    <section className={css.root} data-testid={TESTID.conversation}>
+    <section className="relative flex min-h-0 flex-1 flex-col" data-testid={TESTID.conversation}>
       <ConversationHeader active={threadId !== null} thread={thread} running={turnActive} activity={activity} panels={threadId === null ? null : <>
-        {mainId !== null && threadId !== mainId && <button type="button" className={css.agentButton} data-testid="agent-header-return-main" onClick={() => void actions.openThread(mainId)}>{t("activity.returnMain")}</button>}
+        {mainId !== null && threadId !== mainId && <Button variant="outline" size="sm" data-testid="agent-header-return-main" onClick={() => void actions.openThread(mainId)}>{t("activity.returnMain")}</Button>}
       </>} />
       {threadId !== null && <SessionBranches key={threadId} threadId={threadId} />}
       {threadId === null ? (

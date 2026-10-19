@@ -30,7 +30,11 @@ import { TESTID } from "../testids";
 import { sideDisplayText } from "./background";
 import { BubbleIcon, CloseIcon, PlusIcon, SendIcon, SparkIcon, StopIcon } from "./icons";
 import { useAskSide } from "./use-ask-side";
-import css from "./SidePanel.module.css";
+import { CircleAlert } from "lucide-react";
+import { focusRing } from "../kit";
+import { userErrorText } from "../conversation/user-error";
+
+const PAD_X = "px-3.5";
 
 /** Requested width of the docked panel; AppFrame clamps it and overlays the panel when the window is too narrow. */
 export const SIDE_PANEL_WIDTH = 380;
@@ -59,7 +63,7 @@ const keepFocus = (event: MouseEvent<HTMLButtonElement>): void => {
 
 function QuestionBubble({ text, sending = false }: { text: string; sending?: boolean }) {
   return (
-    <div className={css.question} data-testid={TESTID.sideQuestion} data-sending={sending || undefined}>
+    <div className="max-w-[85%] self-end rounded-[16px_16px_4px_16px] bg-message-user px-3 py-[7px] [overflow-wrap:anywhere] whitespace-pre-wrap text-message-user-foreground data-[sending]:opacity-70" data-testid={TESTID.sideQuestion} data-sending={sending || undefined}>
       {text}
     </div>
   );
@@ -68,14 +72,14 @@ function QuestionBubble({ text, sending = false }: { text: string; sending?: boo
 function SideErrorRow({ title, message, onDismiss }: { title: string; message: string; onDismiss?: () => void }) {
   const t = useT();
   return (
-    <div className={css.error} data-testid={TESTID.sideError} role="alert">
-      <StateDot state="error" className={css.errorDot} />
-      <div className={css.errorCopy}>
-        <span className={css.errorTitle}>{title}</span>
-        <span className={css.errorMessage}>{message}</span>
+    <div className="flex items-start gap-2 rounded-xl bg-destructive py-2 pr-2 pl-2.5" data-testid={TESTID.sideError} role="alert">
+      <CircleAlert className="mt-0.5 size-4 flex-none text-destructive-foreground" aria-hidden />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="font-semibold text-destructive-foreground">{title}</span>
+        <span className="[overflow-wrap:anywhere] text-foreground">{message}</span>
       </div>
       {onDismiss !== undefined && (
-        <button type="button" className={css.errorDismiss} aria-label={t("btw.dismiss")} onClick={onDismiss}>
+        <button type="button" className={clsx("m-0 inline-grid size-[22px] flex-none cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground", focusRing)} aria-label={t("btw.dismiss")} onClick={onDismiss}>
           <CloseIcon size={12} />
         </button>
       )}
@@ -115,7 +119,7 @@ const SideTurn = memo(function SideTurn({ side, turn, cwd }: { side: SideChat; t
   const failed = turn.error !== null || turn.status === "failed";
   const message = typeof turn.error?.message === "string" ? turn.error.message.trim() : "";
   return (
-    <div className={css.turn} data-testid={TESTID.sideTurn} data-turn-id={turn.id} data-status={turn.status}>
+    <div className="flex min-w-0 flex-col gap-2.5" data-testid={TESTID.sideTurn} data-turn-id={turn.id} data-status={turn.status}>
       {turn.items.map((entry) => (
         <RenderBoundary key={entry.item.id} label={`a ${entry.item.type} item`} resetKey={entry}>
           <SideItem side={side} entry={entry} cwd={cwd} />
@@ -127,7 +131,7 @@ const SideTurn = memo(function SideTurn({ side, turn, cwd }: { side: SideChat; t
           message={message === "" ? t("conversation.turn.errorUnknown") : message}
         />
       )}
-      {turn.status === "interrupted" && <span className={css.stopped}>{t("conversation.turn.stopped")}</span>}
+      {turn.status === "interrupted" && <span className="text-xs text-muted-foreground">{t("conversation.turn.stopped")}</span>}
     </div>
   );
 });
@@ -148,10 +152,10 @@ function SideTranscript({ side, cwd }: { side: SideChat; cwd: string | null }) {
     [cwd],
   );
   return (
-    <div ref={scroll.scrollRef} className={clsx(css.scroll, "scrollable")} role="region" aria-label={t("btw.transcript")}>
-      <div ref={scroll.contentRef} className={css.transcript} data-testid={TESTID.sideTranscript} data-side-id={side.id}>
+    <div ref={scroll.scrollRef} className="scrollable min-h-0 flex-1 overflow-y-auto" role="region" aria-label={t("btw.transcript")}>
+      <div ref={scroll.contentRef} className={clsx("flex flex-col gap-3.5 pt-3.5 pb-2", PAD_X)} data-testid={TESTID.sideTranscript} data-side-id={side.id}>
         {conversation?.historyState === "loading" && (
-          <div className={css.status} role="status">
+          <div className="flex items-center gap-2 text-muted-foreground" role="status">
             <TextShimmer active>{t("btw.loading")}</TextShimmer>
           </div>
         )}
@@ -164,7 +168,7 @@ function SideTranscript({ side, cwd }: { side: SideChat; cwd: string | null }) {
           <QuestionBubble key={message.clientId} text={sideDisplayText(side, message.text)} sending />
         ))}
         {working && (
-          <div className={css.status} role="status">
+          <div className="flex items-center gap-2 text-muted-foreground" role="status">
             <StateDot state="ongoing" size={10} />
             <TextShimmer active>{t("btw.working")}</TextShimmer>
           </div>
@@ -183,17 +187,19 @@ function SideTranscript({ side, cwd }: { side: SideChat; cwd: string | null }) {
   );
 }
 
+const INTRO = "flex min-h-0 flex-1 flex-col justify-end gap-3 py-4";
+
 function NewSideIntro({ disabled, onAsk }: { disabled: boolean; onAsk: (question: string) => void }) {
   const t = useT();
   return (
-    <div className={css.intro} data-testid={TESTID.sideIntro}>
-      <span className={css.introMark} aria-hidden>
+    <div className={clsx(INTRO, PAD_X)} data-testid={TESTID.sideIntro}>
+      <span className="inline-grid size-9 place-items-center rounded-xl bg-muted text-foreground" aria-hidden>
         <SparkIcon size={18} />
       </span>
-      <p className={css.introText}>{t("btw.intro")}</p>
-      <div className={css.chips}>
+      <p className="m-0 text-muted-foreground">{t("btw.intro")}</p>
+      <div className="flex flex-wrap gap-2">
         {QUICK_ASKS.map((key) => (
-          <button key={key} type="button" className={css.chip} data-testid={TESTID.sideChip} disabled={disabled} onClick={() => onAsk(t(key))}>
+          <button key={key} type="button" className={clsx("m-0 h-8 cursor-pointer rounded-full border-0 bg-muted px-3.5 text-[13px] leading-none font-medium text-foreground [font-family:inherit] hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50", focusRing)} data-testid={TESTID.sideChip} disabled={disabled} onClick={() => onAsk(t(key))}>
             {t(key)}
           </button>
         ))}
@@ -202,22 +208,24 @@ function NewSideIntro({ disabled, onAsk }: { disabled: boolean; onAsk: (question
   );
 }
 
+const CONTEXT = "box-border inline-flex h-[26px] max-w-full items-center gap-1.5 self-start rounded-md text-xs text-muted-foreground";
+
 function ContextChip({ attached, title, workspace, onChange }: { attached: boolean; title: string; workspace: string; onChange: (attached: boolean) => void }) {
   const t = useT();
   if (!attached) {
     return (
-      <button type="button" className={clsx(css.context, css.contextOff)} data-testid={TESTID.sideContext} data-attached="false" onClick={() => onChange(true)}>
+      <button type="button" className={clsx(CONTEXT, "m-0 cursor-pointer border border-dashed border-input bg-transparent px-2 [font-family:inherit] hover:text-foreground", focusRing)} data-testid={TESTID.sideContext} data-attached="false" onClick={() => onChange(true)}>
         <PlusIcon size={12} />
         <span>{t("btw.context.attach")}</span>
       </button>
     );
   }
   return (
-    <span className={css.context} data-testid={TESTID.sideContext} data-attached="true" title={t("btw.context.hint")}>
+    <span className={clsx(CONTEXT, "bg-muted pr-1 pl-2")} data-testid={TESTID.sideContext} data-attached="true" title={t("btw.context.hint")}>
       <BubbleIcon size={13} />
-      <span className={css.contextTitle}>{title}</span>
-      <span className={css.contextHost}>{workspace}</span>
-      <button type="button" className={css.contextRemove} aria-label={t("btw.context.remove")} onClick={() => onChange(false)}>
+      <span className="min-w-0 truncate font-medium text-foreground">{title}</span>
+      <span className="flex-none text-muted-foreground">{workspace}</span>
+      <button type="button" className={clsx("m-0 inline-grid size-5 flex-none cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground", focusRing)} aria-label={t("btw.context.remove")} onClick={() => onChange(false)}>
         <CloseIcon size={10} />
       </button>
     </span>
@@ -233,9 +241,9 @@ function SidePicker({ sides, selected, onSelect }: { sides: readonly SideChat[];
     ...sides.map((side, index) => ({
       id: side.id,
       label: (
-        <span className={css.pickerRow}>
-          <span className={css.pickerIndex}>{t("btw.side.label", { n: index + 1 })}</span>
-          <span className={css.pickerQuestion}>{side.question}</span>
+        <span className="flex min-w-0 max-w-[260px] flex-col">
+          <span className="font-medium">{t("btw.side.label", { n: index + 1 })}</span>
+          <span className="truncate text-xs text-muted-foreground">{side.question}</span>
         </span>
       ),
     })),
@@ -247,7 +255,7 @@ function SidePicker({ sides, selected, onSelect }: { sides: readonly SideChat[];
       open={open}
       portal
       align="start"
-      className={css.pickerMenu}
+      className="flex! min-w-0! flex-[0_1_auto]!"
       items={items}
       selectedId={selected?.id ?? NEW_SIDE_ID}
       onClose={() => setOpen(false)}
@@ -258,14 +266,14 @@ function SidePicker({ sides, selected, onSelect }: { sides: readonly SideChat[];
       anchor={
         <button
           type="button"
-          className={css.picker}
+          className={clsx("m-0 inline-flex h-7 min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent px-2 font-medium text-foreground [font:inherit] hover:bg-accent aria-expanded:bg-accent", focusRing)}
           data-testid={TESTID.sidePicker}
           aria-haspopup="menu"
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
         >
-          <span className={css.pickerLabel}>{position < 0 ? t("btw.picker.new") : t("btw.side.label", { n: position + 1 })}</span>
-          {selected !== null && <span className={css.pickerSummary}>{selected.question}</span>}
+          <span className="flex-none">{position < 0 ? t("btw.picker.new") : t("btw.side.label", { n: position + 1 })}</span>
+          {selected !== null && <span className="min-w-0 truncate font-normal text-muted-foreground">{selected.question}</span>}
           <IconChevronDownOutlineRegular size={12} />
         </button>
       }
@@ -283,6 +291,8 @@ interface SideComposerProps {
   onStop: () => void;
   onEscape: () => void;
 }
+
+const SEND = clsx("m-0 inline-grid size-7 flex-none cursor-pointer place-items-center rounded-full border-0 p-0", focusRing);
 
 function SideComposer({ parentId, side, connected, running, contextChip, onSubmit, onStop, onEscape }: SideComposerProps) {
   const t = useT();
@@ -333,12 +343,12 @@ function SideComposer({ parentId, side, connected, running, contextChip, onSubmi
           : t("btw.placeholder.followUp");
 
   return (
-    <div className={css.composer} data-testid={TESTID.sideComposer}>
+    <div className="flex flex-none flex-col gap-2 px-2.5 pt-2 pb-2.5" data-testid={TESTID.sideComposer}>
       {contextChip}
-      <div className={clsx(css.field, disabled && css.fieldDisabled)}>
+      <div className={clsx("flex items-end gap-1.5 rounded-[18px] border border-solid border-border bg-composer py-1.5 pr-1.5 pl-3 focus-within:border-input", disabled && "opacity-60")}>
         <textarea
           ref={inputRef}
-          className={css.input}
+          className="m-0 max-h-[120px] min-h-6 min-w-0 flex-1 resize-none overflow-y-auto border-0 bg-transparent py-0.5 text-[13px] leading-5 [overflow-wrap:anywhere] whitespace-pre-wrap text-composer-foreground caret-composer-foreground outline-none [font-family:inherit] placeholder:text-composer-placeholder disabled:cursor-not-allowed"
           data-testid={TESTID.sideInput}
           aria-label={t("btw.inputLabel")}
           placeholder={placeholder}
@@ -358,7 +368,7 @@ function SideComposer({ parentId, side, connected, running, contextChip, onSubmi
         />
         {running && (
           <Tooltip label={t("btw.stop")} side="top" delayMs={500}>
-            <button type="button" className={clsx(css.send, css.stop)} data-testid={TESTID.sideStop} aria-label={t("btw.stop")} onMouseDown={keepFocus} onClick={onStop}>
+            <button type="button" className={clsx(SEND, "bg-secondary text-secondary-foreground")} data-testid={TESTID.sideStop} aria-label={t("btw.stop")} onMouseDown={keepFocus} onClick={onStop}>
               <StopIcon />
             </button>
           </Tooltip>
@@ -366,7 +376,7 @@ function SideComposer({ parentId, side, connected, running, contextChip, onSubmi
         <Tooltip label={t("btw.send")} side="top" delayMs={500} disabled={disabled || blank}>
           <button
             type="button"
-            className={css.send}
+            className={clsx(SEND, disabled || blank ? "cursor-not-allowed bg-muted text-muted-foreground" : "bg-composer-send text-composer-send-foreground")}
             data-testid={TESTID.sideSend}
             aria-label={t("btw.send")}
             disabled={disabled || blank}
@@ -413,23 +423,23 @@ export function SidePanel({ placement }: { placement: "docked" | "overlay" }) {
   };
 
   return (
-    <aside className={css.panel} data-testid={TESTID.sidePanel} data-placement={placement} aria-label={t("btw.title")}>
-      <header className={css.header} data-window-drag>
-        <span className={css.badge}>
+    <aside className="relative box-border flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-solid border-border bg-background text-[13px] leading-5 text-foreground [font-family:var(--dsw-font-family)] transition-[opacity,translate] duration-150 ease-out starting:translate-x-3 starting:opacity-0 data-[placement=overlay]:shadow-xl motion-reduce:transition-none" data-testid={TESTID.sidePanel} data-placement={placement} aria-label={t("btw.title")}>
+      <header className="flex h-12 flex-none items-center gap-1.5 border-0 border-b border-solid border-border pr-2 pl-3.5" data-window-drag>
+        <span className="inline-flex h-[22px] flex-none items-center gap-1 rounded-full bg-muted px-2 text-[11px] font-semibold tracking-wide text-foreground">
           <SparkIcon size={12} />
           {t("btw.badge")}
         </span>
         {parentId !== null && (
           <SidePicker sides={sides} selected={selected} onSelect={(sideId) => void actions.selectSide(parentId, sideId)} />
         )}
-        <span className={css.headerSpacer} />
-        <kbd className={css.kbd} aria-hidden>
+        <span className="flex-1" />
+        <kbd className="flex-none rounded-md bg-muted px-1.5 text-[11px] leading-5 font-medium text-muted-foreground [font-family:var(--dsw-font-family)]" aria-hidden>
           {window.omo.platform === "darwin" ? "⌘E" : "Ctrl+E"}
         </kbd>
       </header>
       {parent === null ? (
-        <div className={css.intro} data-testid={TESTID.sideIntro}>
-          <p className={css.introText}>{t("btw.noThread")}</p>
+        <div className={clsx(INTRO, PAD_X)} data-testid={TESTID.sideIntro}>
+          <p className="m-0 text-muted-foreground">{t("btw.noThread")}</p>
         </div>
       ) : selected === null ? (
         <NewSideIntro disabled={!connected} onAsk={(question) => void askSide(question)} />
@@ -437,9 +447,9 @@ export function SidePanel({ placement }: { placement: "docked" | "overlay" }) {
         <SideTranscript key={selected.id} side={selected} cwd={parent.cwd} />
       )}
       {notices.length > 0 && (
-        <div className={css.notices}>
+        <div className={clsx("flex flex-none flex-col gap-2 pb-1", PAD_X)}>
           {notices.map((notice) => (
-            <SideErrorRow key={notice.id} title={t("btw.error.title")} message={notice.message} onDismiss={() => actions.dismissNotice(notice.id)} />
+            <SideErrorRow key={notice.id} title={t("btw.error.title")} message={userErrorText(notice.message, t("conversation.error.requestFailed")).text} onDismiss={() => actions.dismissNotice(notice.id)} />
           ))}
         </div>
       )}

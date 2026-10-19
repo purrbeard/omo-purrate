@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Button, CodeBlock, Input, StateDot } from "@deepseek-ai/dsh-client-ui-primitives";
+import { CodeBlock, StateDot } from "@deepseek-ai/dsh-client-ui-primitives";
+import { Ban } from "lucide-react";
 import type { ApprovalDecision, ThreadItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { PendingRequest } from "../../state";
 import { useActions } from "../app-context";
+import { Button, Input } from "../kit";
 import { TESTID } from "../testids";
 import { displayPath, isRecord } from "./format";
 import { useConversationLabels } from "./labels";
-import css from "./ApprovalCard.module.css";
+
+const CODE_CLASS = "m-0! [--dsl-code-block-content-font:var(--dsw-font-markdown-code-block-small)]!";
 
 export type ApprovalRequest = Extract<PendingRequest, { kind: "commandApproval" | "fileChangeApproval" }>;
 
@@ -82,19 +85,19 @@ export function ApprovalCard({
 
   return (
     <div
-      className={css.card}
+      className="box-border flex w-full flex-col overflow-hidden rounded-2xl border border-solid border-warning/50 bg-composer shadow-md"
       data-testid={TESTID.approvalCard}
       data-kind={request.kind}
       data-request-id={String(request.id)}
       aria-busy={busy}
       onKeyDown={onKeyDown}
     >
-      <div className={css.strip}>
+      <div className="flex items-center gap-2 bg-warning/10 px-4 py-2.5 text-[13px] leading-[18px] text-foreground">
         <StateDot state={busy ? "ongoing" : "warning"} />
         {t("conversation.approval.waiting")}
       </div>
-      <div className={css.body} role="group" tabIndex={0} aria-label={t("conversation.approval.details")}>
-        <div className={css.headline}>
+      <div className="box-border flex max-h-[336px] flex-col gap-2.5 overflow-y-auto px-4 pt-3" role="group" tabIndex={0} aria-label={t("conversation.approval.details")}>
+        <div className="text-[15px] font-medium leading-6 text-foreground">
           {t(request.kind === "commandApproval" ? "conversation.approval.command" : "conversation.approval.fileChange")}
         </div>
         {command !== null && command !== "" && (
@@ -104,7 +107,7 @@ export function ApprovalCard({
             copyLabel={labels.copy}
             copiedLabel={labels.copied}
             toolbarLabels={labels.toolbar}
-            className={css.code}
+            className={CODE_CLASS}
           />
         )}
         {code !== null && (
@@ -114,28 +117,28 @@ export function ApprovalCard({
             copyLabel={labels.copy}
             copiedLabel={labels.copied}
             toolbarLabels={labels.toolbar}
-            className={css.code}
+            className={CODE_CLASS}
           />
         )}
         {changedPaths.length > 0 && (
-          <ul className={css.paths}>
+          <ul className="m-0 list-none p-0 font-mono text-xs leading-[18px] [overflow-wrap:anywhere] text-muted-foreground">
             {changedPaths.map((path) => (
               <li key={path}>{path}</li>
             ))}
           </ul>
         )}
         {(workingDirectory !== null || grantRoot !== null || explanation !== "") && (
-          <dl className={css.meta}>
+          <dl className="m-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-[13px] leading-5 [&_dd]:m-0 [&_dd]:min-w-0 [&_dd]:[overflow-wrap:anywhere] [&_dd]:text-foreground [&_dt]:text-muted-foreground">
             {workingDirectory !== null && (
               <>
                 <dt>{t("conversation.approval.cwd")}</dt>
-                <dd className={css.mono}>{workingDirectory}</dd>
+                <dd className="font-mono text-xs">{workingDirectory}</dd>
               </>
             )}
             {grantRoot !== null && (
               <>
                 <dt>{t("conversation.approval.grantRoot")}</dt>
-                <dd className={css.mono}>{grantRoot}</dd>
+                <dd className="font-mono text-xs">{grantRoot}</dd>
               </>
             )}
             {explanation !== "" && (
@@ -148,8 +151,8 @@ export function ApprovalCard({
         )}
       </div>
       {offers("decline") && (
+        <div className="mx-4 mt-3">
         <Input
-          className={css.reason}
           value={reason}
           disabled={busy}
           placeholder={t("conversation.approval.declineReason")}
@@ -162,12 +165,13 @@ export function ApprovalCard({
             }
           }}
         />
+        </div>
       )}
-      <div className={css.actions}>
+      <div className="flex flex-wrap justify-end gap-2 px-4 py-3.5">
         {offers("decline") && (
           <Button
-            variant="outline"
-            className={css.decline}
+            variant="destructive"
+            icon={<Ban aria-hidden />}
             disabled={busy}
             data-testid={TESTID.approvalDecline}
             onClick={() => answer("decline")}

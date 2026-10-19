@@ -3,12 +3,12 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import type { TerminalStream } from "../../../shared/workbench";
+import { Button } from "../kit";
 import { useT } from "../../i18n";
 import { selectMainThreadId } from "../../state";
 import { useAppSelector } from "../app-context";
 import { isTerminalShortcut } from "../shell/RightDock";
 import { readTerminalFont, readTerminalTheme } from "./terminal-theme";
-import css from "./TerminalPanel.module.css";
 
 /** The element xterm opens into. Outside a packaged app it also carries the public xterm instance for e2e assertions. */
 type TerminalOutputElement = HTMLDivElement & { readonly terminal?: Terminal };
@@ -214,16 +214,16 @@ export function TerminalPanel({ placement }: { placement: "docked" | "overlay" }
     }
   };
 
-  return <aside ref={panelRef} className={css.panel} data-testid="terminal-panel" data-placement={placement} data-thread-id={threadId ?? undefined}
+  return <aside ref={panelRef} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-solid border-border bg-terminal text-xs text-terminal-foreground data-[placement=overlay]:shadow-lg" data-testid="terminal-panel" data-placement={placement} data-thread-id={threadId ?? undefined}
     data-running={running} aria-labelledby={headingId} tabIndex={-1}>
-    <header className={css.header}>
-      <div className={css.heading}><strong id={headingId} className={css.srOnly}>{t("terminal.title")}</strong><span title={cwd}>{cwd?.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || cwd}</span></div>
-      <button type="button" data-testid="terminal-restart" disabled={threadId === null || cwd === undefined || opening} onClick={() => void restart()}>{t("terminal.restart")}</button>
+    <header className="flex items-center gap-2 border-0 border-b border-solid border-border p-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1 [&>span]:truncate [&>span]:text-muted-foreground"><strong id={headingId} className="sr-only">{t("terminal.title")}</strong><span title={cwd}>{cwd?.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || cwd}</span></div>
+      <Button variant="secondary" size="sm" data-testid="terminal-restart" disabled={threadId === null || cwd === undefined || opening} onClick={() => void restart()}>{t("terminal.restart")}</Button>
     </header>
-    <div className={css.body}>
-      {threadId === null && <p className={css.hint}>{t("terminal.empty")}</p>}
-      <div ref={outputRef} className={css.screen} data-testid="terminal-output" hidden={threadId === null} />
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col p-3">
+      {threadId === null && <p className="m-0 leading-normal text-muted-foreground">{t("terminal.empty")}</p>}
+      <div ref={outputRef} className="min-h-0 min-w-0 flex-1 overflow-hidden font-mono leading-tight" data-testid="terminal-output" hidden={threadId === null} />
     </div>
-    {threadId !== null && !running && !opening && <footer className={css.footer}><p className={css.hint}>{t("terminal.stopped")}</p></footer>}
+    {threadId !== null && !running && !opening && <footer className="shrink-0 border-0 border-t border-solid border-border px-3 py-2"><p className="m-0 leading-normal text-muted-foreground">{t("terminal.stopped")}</p></footer>}
   </aside>;
 }

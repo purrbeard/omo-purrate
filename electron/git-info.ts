@@ -32,7 +32,7 @@ export function createGit(deps: GitDeps) {
   const run = (args: readonly string[]): Promise<string> => deps.exec("git", args);
 
   /**
-   * Reads the branch, work-tree root, and ahead/behind counts versus the upstream of `cwd`;
+   * Reads the branch, work-tree root, linked-worktree flag, and ahead/behind counts versus the upstream of `cwd`;
    * resolves null when `cwd` is not inside a git work tree. A detached HEAD reports the short sha
    * as the branch; ahead/behind are null when the branch has no upstream.
    */
@@ -57,7 +57,14 @@ export function createGit(deps: GitDeps) {
     } catch {
       // No upstream configured for this branch; the counts stay null.
     }
-    return { branch, root, ahead, behind };
+    let worktree = false;
+    try {
+      const [gitDir, commonDir] = (await run(["-C", dir, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir"])).trim().split(/\r?\n/);
+      worktree = gitDir !== undefined && commonDir !== undefined && path.resolve(gitDir) !== path.resolve(commonDir);
+    } catch {
+      // Git without --path-format: report the main work tree.
+    }
+    return { branch, root, ahead, behind, worktree };
   };
 
   /** Verbatim `git status --porcelain` lines of `cwd`; empty when the work tree is clean. */

@@ -38,8 +38,11 @@ import {
   type ToolKind,
   type ToolState,
 } from "./tool-model";
-import a11y from "./a11y.module.css";
-import css from "./ToolCard.module.css";
+
+// Vendored DSH blocks are unlayered CSS that outranks layered utilities, so overrides of their own properties use "!".
+const JSON_CLASS = "max-h-60! rounded-lg! border! border-solid! border-border!";
+const TERMINAL_CLASS =
+  "m-0! border! border-solid! border-border! [--dsl-terminal-font:var(--dsw-font-markdown-code-block-small)]! [--dsl-terminal-line-height:18px]! [--dsl-terminal-output-max-height:224px]!";
 
 const STATE_LABEL: Record<ToolState, MessageKey> = {
   running: "conversation.tool.state.running",
@@ -81,13 +84,13 @@ function ToolIcon({ kind }: { kind: ToolKind }) {
 function StatusMark({ state, durationMs }: { state: ToolState; durationMs: number | null }) {
   const t = useT();
   return (
-    <span className={css.status} data-state={state} aria-hidden="true">
+    <span className="inline-flex h-6 flex-none items-center gap-1 text-xs leading-4 whitespace-nowrap text-muted-foreground tabular-nums" data-state={state} aria-hidden="true">
       {state === "running" ? (
         <StateDot state="ongoing" size={12} />
       ) : state === "ok" ? (
-        <IconCheckOutlineRegular size={14} className={css.statusIcon} />
+        <IconCheckOutlineRegular size={14} className="text-success" />
       ) : state === "error" ? (
-        <IconCloseOutlineRegular size={14} className={css.statusIcon} />
+        <IconCloseOutlineRegular size={14} className="text-destructive-foreground" />
       ) : (
         <StateDot state="warning" size={8} />
       )}
@@ -98,10 +101,10 @@ function StatusMark({ state, durationMs }: { state: ToolState; durationMs: numbe
 
 function IoCard({ label, text, error = false }: { label: string; text: string; error?: boolean }) {
   return (
-    <div className={css.ioCard}>
-      <div className={css.ioSection}>
-        <span className={css.ioLabel}>{label}</span>
-        <span className={css.ioText} data-error={error || undefined}>
+    <div className="flex flex-col rounded-lg border border-solid border-border bg-message-code font-mono text-xs leading-[18px]">
+      <div className="grid max-h-[150px] grid-cols-[max-content_1fr] items-baseline gap-x-3.5 overflow-y-auto px-4 py-3">
+        <span className="sticky top-0 self-start text-muted-foreground">{label}</span>
+        <span className="min-w-0 break-words whitespace-pre-wrap text-message-code-foreground data-[error]:text-destructive-foreground" data-error={error || undefined}>
           {text}
         </span>
       </div>
@@ -112,7 +115,7 @@ function IoCard({ label, text, error = false }: { label: string; text: string; e
 function OutputImage({ url }: { url: string }) {
   const t = useT();
   return (
-    <div className={css.image}>
+    <div className="w-[min(100%,360px)] overflow-hidden rounded-lg border border-solid border-border">
       <ImagePreview
         src={url}
         alt={t("conversation.tool.image")}
@@ -130,19 +133,19 @@ function ToolArguments({ tool, args }: { tool: string; args: unknown }) {
   return (
     <>
       {input.code !== null && (
-        <div className={css.codeScroll}>
+        <div className="max-h-[260px] overflow-y-auto rounded-lg">
           <CodeBlock
             code={input.code.text}
             lang={input.code.language}
             copyLabel={labels.copy}
             copiedLabel={labels.copied}
             toolbarLabels={labels.toolbar}
-            className={css.flush}
+            className="m-0!"
           />
         </div>
       )}
       {input.json !== null && (
-        <JsonTree data={input.json} label={t("conversation.tool.arguments")} labels={labels.json} className={css.json} />
+        <JsonTree data={input.json} label={t("conversation.tool.arguments")} labels={labels.json} className={JSON_CLASS} />
       )}
       {input.text !== null && <IoCard label={t("conversation.tool.arguments")} text={input.text} />}
     </>
@@ -160,13 +163,13 @@ function DynamicToolBody({ item, state }: { item: DynamicToolCallItem; state: To
         switch (part.kind) {
           case "terminal":
             return (
-              <div key={index} className={css.terminalFrame} data-error={part.error || undefined}>
+              <div key={index} className="group/term min-w-0" data-error={part.error || undefined}>
                 <TerminalBlock
                   command={item.tool}
                   output={part.text}
                   runStateDot={false}
                   labels={labels.terminal}
-                  className={clsx(css.terminal, css.terminalNoDot)}
+                  className={clsx(TERMINAL_CLASS, "[--dsl-terminal-gutter:14px]! group-data-[error]/term:border-destructive-foreground!")}
                 />
               </div>
             );
@@ -191,7 +194,7 @@ function CommandBody({ item, state }: { item: CommandExecutionItem; state: ToolS
       exitCode={running ? undefined : item.exitCode}
       running={running}
       labels={labels.terminal}
-      className={css.terminal}
+      className={TERMINAL_CLASS}
     />
   );
 }
@@ -202,7 +205,7 @@ function FileChangeBody({ item, cwd }: { item: FileChangeItem; cwd: string | nul
     () => item.changes.flatMap((change) => fileChangeHunks(change, displayPath(change.path, cwd))),
     [item.changes, cwd],
   );
-  return <DiffBlock diffs={diffs} labels={labels.diff} className={css.diff} />;
+  return <DiffBlock diffs={diffs} labels={labels.diff} className="m-0! rounded-lg! border! border-solid! border-border!" />;
 }
 
 function mcpResultText(result: unknown): string | null {
@@ -224,7 +227,7 @@ function McpBody({ item }: { item: McpToolCallItem }) {
       <ToolArguments tool={item.tool} args={item.arguments} />
       {text !== null && <IoCard label={t("conversation.tool.output")} text={text} />}
       {text === null && (isRecord(result) || Array.isArray(result)) && (
-        <JsonTree data={result} label={t("conversation.tool.output")} labels={labels.json} className={css.json} />
+        <JsonTree data={result} label={t("conversation.tool.output")} labels={labels.json} className={JSON_CLASS} />
       )}
       {item.error && <IoCard label={t("conversation.tool.error")} text={item.error.message} error />}
     </>
@@ -274,12 +277,12 @@ export const ToolCard = memo(function ToolCard({
         <>
           {summary !== "" && (
             <>
-              <span className={css.sep} data-shimmer-decoration aria-hidden />
+              <span className="mx-2 size-0.5 flex-none rounded-full bg-muted-foreground" data-shimmer-decoration aria-hidden />
               <span
                 className={clsx(
-                  css.summary,
-                  state === "error" && css.errorSummary,
-                  state === "stopped" && css.stoppedSummary,
+                  "min-w-0 flex-auto truncate text-[13px] leading-6",
+                  state === "error" && "text-destructive-foreground",
+                  state === "stopped" && "text-warning",
                 )}
               >
                 <TextShimmer>{summary}</TextShimmer>
@@ -287,8 +290,9 @@ export const ToolCard = memo(function ToolCard({
             </>
           )}
           {totals !== null && (
-            <TextShimmer className={css.totals}>
-              <span className={css.added}>{`+${totals.added}`}</span> <span className={css.removed}>{`-${totals.removed}`}</span>
+            <TextShimmer className="ml-2.5 flex-none font-mono text-[11px] leading-6 whitespace-nowrap">
+              <span className="group-hover/row:text-success group-aria-expanded/row:text-success">{`+${totals.added}`}</span>{" "}
+              <span className="group-hover/row:text-destructive-foreground group-aria-expanded/row:text-destructive-foreground">{`-${totals.removed}`}</span>
             </TextShimmer>
           )}
         </>
@@ -297,7 +301,7 @@ export const ToolCard = memo(function ToolCard({
   );
   return (
     <div
-      className={css.root}
+      className="relative flex min-w-0 flex-col"
       data-testid={TESTID.toolCard}
       data-tool={model.tool}
       data-status={model.status}
@@ -305,13 +309,13 @@ export const ToolCard = memo(function ToolCard({
       data-item-id={item.id}
       data-flow="tool"
     >
-      <span className={a11y.visuallyHidden}>{t(STATE_LABEL[state])}</span>
-      <div className={css.head}>
+      <span className="sr-only">{t(STATE_LABEL[state])}</span>
+      <div className="flex min-w-0 items-center gap-2">
         <DisclosureRow
-          className={css.disclosure}
-          rowClassName={css.row}
-          leadingClassName={css.leading}
-          titleClassName={css.title}
+          className="min-w-0 flex-auto"
+          rowClassName="group/row rounded-sm"
+          leadingClassName="shrink-0"
+          titleClassName="font-normal"
           icon={icon}
           title={title}
           running={state === "running"}
@@ -325,7 +329,7 @@ export const ToolCard = memo(function ToolCard({
         <StatusMark state={state} durationMs={model.durationMs} />
       </div>
       {open && (
-        <div className={css.body}>
+        <div className="flex min-w-0 flex-col gap-2 py-1 pl-1">
           <ToolBody item={item} state={state} cwd={cwd} />
         </div>
       )}

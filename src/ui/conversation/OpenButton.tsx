@@ -13,7 +13,13 @@ import type { MessageKey } from "../../i18n";
 import { StoreContext } from "../app-context";
 import { EditorGlyph, TerminalGlyph } from "../glyphs";
 import { TESTID } from "../testids";
-import css from "./OpenButton.module.css";
+import { focusRing } from "../kit";
+
+const segment = clsx(
+  "m-0 inline-flex cursor-pointer items-center gap-1.5 border-0 bg-transparent text-[13px] font-medium leading-5 text-inherit [font-family:inherit]",
+  "transition-colors duration-150 hover:bg-accent motion-reduce:transition-none",
+  focusRing,
+);
 
 const TARGET_KEY: Record<OpenTargetId, MessageKey> = {
   vscode: "conversation.open.vscode",
@@ -85,11 +91,11 @@ export function OpenButton({ cwd }: { cwd: string }) {
   const items: MenuEntry[] = targets.map((target) => ({ id: target.id, label: t(targetKey(target.id)), icon: targetIcon(target.id) }));
 
   return (
-    <div className={clsx(css.split, menuOpen && css.splitOpen)} data-testid={TESTID.openWorkspace} data-primary={primary}>
+    <div className={clsx("box-border inline-flex h-7 flex-none items-stretch overflow-hidden rounded-md border border-solid bg-card text-foreground hover:border-input", menuOpen ? "border-input" : "border-border")} data-testid={TESTID.openWorkspace} data-primary={primary}>
       <Tooltip label={t("conversation.open.tooltip", { target: primaryLabel, path: cwd })} side="bottom" align="end" delayMs={500}>
-        <button type="button" className={css.primary} aria-label={t("conversation.open.aria", { target: primaryLabel })} onClick={() => open(null)}>
-          <span className={css.icon}>{targetIcon(primary)}</span>
-          <span className={css.label}>{t("conversation.open.label")}</span>
+        <button type="button" className={clsx(segment, "px-2.5")} aria-label={t("conversation.open.aria", { target: primaryLabel })} onClick={() => open(null)}>
+          <span className="inline-flex text-muted-foreground">{targetIcon(primary)}</span>
+          <span className="whitespace-nowrap">{t("conversation.open.label")}</span>
         </button>
       </Tooltip>
       <Menu
@@ -105,7 +111,7 @@ export function OpenButton({ cwd }: { cwd: string }) {
         anchor={
           <button
             type="button"
-            className={css.chevron}
+            className={clsx(segment, "border-0 border-l border-solid border-border px-1.5 text-muted-foreground")}
             data-testid={TESTID.openWorkspaceMenu}
             aria-label={t("conversation.open.more")}
             aria-haspopup="menu"

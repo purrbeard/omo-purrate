@@ -41,7 +41,7 @@
   width: 100%;
   min-width: 0;
   min-height: 0;
-  max-width: var(--dsh-chat-content-width);
+  max-width: var(--dsh-chat-content-width, 760px);
   max-height: min(400px, 46vh);
   margin: 0 auto;
   padding: 10px 12px;

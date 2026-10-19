@@ -2,7 +2,8 @@ import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react"
 import type { CSSProperties, KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
-import { IconChevronDownOutlineRegular, IconEditOutlineRegular, MenuSurface } from "@deepseek-ai/dsh-client-ui-primitives";
+import { IconChevronDownOutlineRegular, MenuSurface } from "@deepseek-ai/dsh-client-ui-primitives";
+import { ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
 import { PERMISSION_PRESETS } from "../../../shared/ipc";
 import type { PermissionPreset } from "../../../shared/ipc";
 import { useT } from "../../i18n";
@@ -10,7 +11,7 @@ import type { MessageKey } from "../../i18n";
 import { StoreContext, useAppSelector } from "../app-context";
 import { TESTID } from "../testids";
 import { selectActiveCwd } from "../../state";
-import css from "./PermissionPicker.module.css";
+import { pickerChevron, pickerMenu, pickerOption, pickerTrigger } from "./picker-classes";
 
 const MENU_GAP = 8;
 const VIEWPORT_MARGIN = 12;
@@ -21,6 +22,9 @@ const LABEL_KEY: Record<PermissionPreset, MessageKey> = {
   workspace: "composer.permission.workspace",
   ask: "composer.permission.ask",
 };
+
+/** Full access is the one preset that skips approvals, so its chip pairs a warning icon and tone with its label. */
+const PRESET_ICON = { "full-access": ShieldAlert, workspace: ShieldCheck, ask: ShieldQuestion } as const;
 
 const TOOLTIP_KEY: Record<PermissionPreset, MessageKey> = {
   "full-access": "composer.fullAccess.tooltip",
@@ -124,12 +128,13 @@ export function PermissionPicker({ disabled }: { disabled: boolean }) {
     }
   };
 
+  const PresetIcon = PRESET_ICON[preset];
   return (
-    <div ref={rootRef} className={css.root} onKeyDown={onKeyDown}>
+    <div ref={rootRef} className="relative min-w-0 flex-none" onKeyDown={onKeyDown}>
       <button
         ref={triggerRef}
         type="button"
-        className={css.trigger}
+        className={clsx(pickerTrigger, "max-w-[min(220px,55cqw)] gap-1.5", preset === "full-access" && "text-warning")}
         data-testid={TESTID.fullAccessChip}
         data-preset={preset}
         aria-label={t("composer.permission.aria", { mode: t(LABEL_KEY[preset]) })}
@@ -142,16 +147,16 @@ export function PermissionPicker({ disabled }: { disabled: boolean }) {
           setOpen(!open);
         }}
       >
-        <IconEditOutlineRegular size={14} className={css.triggerIcon} />
-        <span className={css.triggerLabel}>{t(LABEL_KEY[preset])}</span>
-        <IconChevronDownOutlineRegular className={clsx(css.chevron, open && css.chevronOpen)} size={12} />
+        <PresetIcon className="size-3.5 flex-none" aria-hidden />
+        <span className="min-w-0 truncate">{t(LABEL_KEY[preset])}</span>
+        <IconChevronDownOutlineRegular className={pickerChevron(open)} size={12} />
       </button>
 
       {open &&
         createPortal(
           <MenuSurface
             ref={menuRef}
-            className={css.menu}
+            className={clsx(pickerMenu, "min-w-[min(320px,calc(100vw-32px))]")}
             style={menuPos ?? MEASURE_STYLE}
             role="menu"
             aria-label={t("composer.permission.label")}
@@ -166,13 +171,13 @@ export function PermissionPicker({ disabled }: { disabled: boolean }) {
                   aria-checked={selected}
                   data-testid={TESTID.permissionOption}
                   data-preset={entry}
-                  className={clsx(css.option, selected && css.optionSelected)}
+                  className={clsx(pickerOption(selected), "py-1.5")}
                   title={t(TOOLTIP_KEY[entry])}
                   onClick={() => choose(entry)}
                 >
-                  <span className={css.optionCopy}>
-                    <span className={css.optionLabel}>{t(LABEL_KEY[entry])}</span>
-                    <span className={css.optionHint}>{t(TOOLTIP_KEY[entry])}</span>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="whitespace-nowrap">{t(LABEL_KEY[entry])}</span>
+                    <span className="text-xs font-normal text-muted-foreground">{t(TOOLTIP_KEY[entry])}</span>
                   </span>
                 </button>
               );
