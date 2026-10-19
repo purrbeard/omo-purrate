@@ -132,8 +132,9 @@ export function RightDock({ tab, placement, children }: { tab: RightTab | null; 
                   }
                 >
                   <Icon aria-hidden />
-                  {/* A narrow dock drops the visible name first; the icon, tooltip and accessible name stay. */}
-                  <span className="min-w-0 truncate @max-[300px]:hidden">{name}</span>
+                  {/* A dock too narrow for every name keeps only the selected tab's name, and the narrowest drops that too;
+                      the icon, tooltip and accessible name stay. */}
+                  <span className={`min-w-0 truncate ${id === tab ? "@max-[300px]:hidden" : "@max-[440px]:hidden"}`}>{name}</span>
                   {id === "btw" && sideCount > 0 && <span className="shrink-0 tabular-nums text-muted-foreground" data-testid="side-count">{sideCount}</span>}
                 </Tooltip.Trigger>
                 <Tooltip.Content side="bottom">{name}</Tooltip.Content>
