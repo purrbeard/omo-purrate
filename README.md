@@ -32,7 +32,8 @@
 
 omo Purrate is a fan-made Windows desktop for omo. It runs the omo you already have, with the same sessions, skills, models and credentials as omo in your terminal, and adds what a terminal can't show at a glance: which agents are running, what they changed, and the tools around your project.
 
-It is an independent project by [purrbeard](https://github.com/purrbeard), not an official omo release. See [Credits](#credits) for where it came from.
+> [!IMPORTANT]
+> **Fan made, not official.** omo Purrate is a fan-made project inspired by [Oh My OpenAgent (omo)](https://get.omo.dev). It is **not** the official omo desktop app, and it is not made, endorsed or supported by the omo team. It is an independent project by [purrbeard](https://github.com/purrbeard); see [Credits](#credits) for where it came from.
 
 ```powershell
 irm https://raw.githubusercontent.com/purrbeard/omo-purrate/main/scripts/install.ps1 | iex
