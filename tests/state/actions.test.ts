@@ -114,6 +114,25 @@ class FakeBridge implements OmoBridgeApi {
   terminalKill(): ReturnType<OmoBridgeApi["terminalKill"]> { return Promise.resolve(); }
   onTerminalChunk(): () => void { return () => {}; }
   onTerminalExit(): () => void { return () => {}; }
+  browserShow(): ReturnType<OmoBridgeApi["browserShow"]> { return Promise.reject(new Error("no browser in tests")); }
+  browserHide(): ReturnType<OmoBridgeApi["browserHide"]> { return Promise.resolve(); }
+  browserSnapshot(): ReturnType<OmoBridgeApi["browserSnapshot"]> { return Promise.resolve(null); }
+  browserNavigate(): ReturnType<OmoBridgeApi["browserNavigate"]> { return Promise.resolve(0); }
+  browserBack(): ReturnType<OmoBridgeApi["browserBack"]> { return Promise.resolve(); }
+  browserForward(): ReturnType<OmoBridgeApi["browserForward"]> { return Promise.resolve(); }
+  browserReload(): ReturnType<OmoBridgeApi["browserReload"]> { return Promise.resolve(); }
+  browserOpenDevTools(): ReturnType<OmoBridgeApi["browserOpenDevTools"]> { return Promise.resolve(); }
+  browserSetColorScheme(): ReturnType<OmoBridgeApi["browserSetColorScheme"]> { return Promise.resolve(); }
+  browserZoom(): ReturnType<OmoBridgeApi["browserZoom"]> { return Promise.resolve(1); }
+  browserSetDevice(): ReturnType<OmoBridgeApi["browserSetDevice"]> { return Promise.resolve(); }
+  browserClearCookies(): ReturnType<OmoBridgeApi["browserClearCookies"]> { return Promise.resolve(); }
+  browserClearCache(): ReturnType<OmoBridgeApi["browserClearCache"]> { return Promise.resolve(); }
+  browserScreenshot(): ReturnType<OmoBridgeApi["browserScreenshot"]> { return Promise.reject(new Error("no browser in tests")); }
+  browserCopyImage(): ReturnType<OmoBridgeApi["browserCopyImage"]> { return Promise.resolve(); }
+  browserPickElement(): ReturnType<OmoBridgeApi["browserPickElement"]> { return Promise.resolve(null); }
+  browserCancelPick(): ReturnType<OmoBridgeApi["browserCancelPick"]> { return Promise.resolve(); }
+  listLocalServers(): ReturnType<OmoBridgeApi["listLocalServers"]> { return Promise.resolve([]); }
+  onBrowserState(): () => void { return () => {}; }
   getIphoneStatus(): ReturnType<OmoBridgeApi["getIphoneStatus"]> { return Promise.resolve({ enabled: false, state: "searching", devices: [] }); }
   onIphoneStatus(): () => void { return () => {}; }
   readonly platform = "darwin";

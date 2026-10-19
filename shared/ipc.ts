@@ -22,6 +22,7 @@ import type { DeviceOverview } from "./device-overview";
 import type { AppUpdateStatus } from "./app-update";
 import type { ModelRoutingInput, ModelRoutingSettings } from "./model-routing";
 import type { WorkbenchBridgeApi } from "./workbench";
+import type { BrowserBridgeApi } from "./browser";
 
 /** URL of the official omo installer script. */
 export const OMO_INSTALL_SCRIPT_URL = "https://get.omo.dev/install.sh";
@@ -444,7 +445,7 @@ export interface ThreadLink {
   status?: import("./protocol").LiveTask["status"];
 }
 
-export interface OmoBridgeApi extends WorkbenchBridgeApi {
+export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi {
   /** Optional JSONL paths add verified header links and their parent chain, using header IDs. */
   loadThreadLinks(cwds: string[], paths?: string[]): Promise<ThreadLink[]>;
   /** Keys are the requested JSONL paths, not thread IDs; unknown creation origins are omitted. */

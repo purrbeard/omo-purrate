@@ -9,6 +9,8 @@ import { IphoneBridge, loadIphoneToken } from "./iphone/bridge";
 import { AndroidBridge } from "./android/bridge";
 import { createSessionFileResolver, registerIpc } from "./ipc";
 import { registerWorkbenchIpc } from "./workbench-ipc";
+import { BrowserHost } from "./browser/browser-host";
+import { registerBrowserIpc } from "./browser/ipc";
 import { createWorkbenchHandlers } from "./workbench/create-handlers";
 import { initLogging } from "./logging";
 import { installApplicationMenu } from "./menu";
@@ -141,6 +143,11 @@ function run(): void {
   const iphone = new IphoneBridge(supervisor, undefined, undefined, loadIphoneToken(app.getPath("userData")));
   const android = new AndroidBridge(supervisor);
   const workbench = createWorkbenchHandlers({ supervisor, homeDir, getWindow: () => mainWindow, sessionFile: createSessionFileResolver(supervisor, homeDir) });
+  const browser = new BrowserHost({
+    getWindow: () => mainWindow,
+    screenshotsDir: () => path.join(app.getPath("userData"), "screenshots"),
+    downloadsDir: () => app.getPath("downloads"),
+  });
 
   app.on("second-instance", () => {
     if (app.isReady()) focusWindow();
@@ -151,6 +158,7 @@ function run(): void {
     installApplicationMenu(sendMenuCommand, { openLogs: () => void shell.openPath(logger.dir) });
     registerIpc({ supervisor, iphone, android, prefs, getWindow: () => mainWindow, homeDir });
     registerWorkbenchIpc(workbench);
+    registerBrowserIpc(browser);
     createWindow();
     iphone.start();
     void supervisor.start();
@@ -174,6 +182,7 @@ function run(): void {
     unsubscribeServerRequest();
     attention.dispose();
     iphone.stop();
+    browser.dispose();
     let timer: NodeJS.Timeout | undefined;
     const bounded = new Promise<void>((resolve) => {
       timer = setTimeout(() => {

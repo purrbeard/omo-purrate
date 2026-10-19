@@ -3,10 +3,10 @@ import { moveTab, parseDockLayout, RIGHT_TABS, shownTab, uiState } from "../../s
 
 describe("moveTab", () => {
   it("moves a tab forward onto the target's position", () => {
-    expect(moveTab(RIGHT_TABS, "work", "terminal")).toEqual(["btw", "terminal", "work", "files"]);
+    expect(moveTab(RIGHT_TABS, "work", "terminal")).toEqual(["btw", "terminal", "work", "files", "browser"]);
   });
   it("moves a tab backward onto the target's position", () => {
-    expect(moveTab(RIGHT_TABS, "files", "btw")).toEqual(["work", "files", "btw", "terminal"]);
+    expect(moveTab(RIGHT_TABS, "files", "btw")).toEqual(["work", "files", "btw", "terminal", "browser"]);
   });
   it("leaves the order unchanged when a tab is dropped on itself", () => {
     expect(moveTab(RIGHT_TABS, "files", "files")).toEqual([...RIGHT_TABS]);
@@ -15,12 +15,15 @@ describe("moveTab", () => {
 
 describe("parseDockLayout", () => {
   it("restores a stored order and side", () => {
-    const tabOrder = ["files", "work", "btw", "terminal"];
+    const tabOrder = ["files", "browser", "work", "btw", "terminal"];
     expect(parseDockLayout(JSON.stringify({ tabOrder, dockSide: "left" }))).toEqual({ tabOrder, dockSide: "left" });
+  });
+  it("appends tabs added since a layout was saved", () => {
+    expect(parseDockLayout(JSON.stringify({ tabOrder: ["files", "work", "btw", "terminal"], dockSide: "right" })).tabOrder).toEqual(["files", "work", "btw", "terminal", "browser"]);
   });
   it("keeps a layout saved before Agents and Workflow merged, with Work where the first of them was", () => {
     const tabOrder = ["files", "agents", "btw", "terminal", "workflow"];
-    expect(parseDockLayout(JSON.stringify({ tabOrder, dockSide: "left" }))).toEqual({ tabOrder: ["files", "work", "btw", "terminal"], dockSide: "left" });
+    expect(parseDockLayout(JSON.stringify({ tabOrder, dockSide: "left" }))).toEqual({ tabOrder: ["files", "work", "btw", "terminal", "browser"], dockSide: "left" });
   });
   it("falls back to the defaults for missing, malformed or incomplete data", () => {
     const fallback = { tabOrder: [...RIGHT_TABS], dockSide: "right" };

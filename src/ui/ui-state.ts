@@ -7,8 +7,10 @@ export const SIDEBAR_DEFAULT_WIDTH = 280;
 
 export const WORKFLOW_PANEL_WIDTHS = { normal: 580, wide: 720, maximized: 840 } as const;
 export type WorkflowPanelSize = keyof typeof WORKFLOW_PANEL_WIDTHS;
-export type RightTab = "work" | "btw" | "terminal" | "files";
-export const RIGHT_TABS: readonly RightTab[] = ["work", "btw", "terminal", "files"];
+export type RightTab = "work" | "btw" | "terminal" | "files" | "browser";
+export const RIGHT_TABS: readonly RightTab[] = ["work", "btw", "terminal", "files", "browser"];
+/** Tabs every stored layout has; a layout saved before later tabs existed gets them appended. */
+const BASE_TABS: readonly RightTab[] = ["work", "btw", "terminal", "files"];
 /** Views of the single Work panel: agent conversations, the run graph, the work list and the activity log. */
 export type WorkView = "agents" | "graph" | "list" | "activity";
 export type DockSide = "left" | "right";
@@ -27,8 +29,9 @@ export function parseDockLayout(raw: string | null): { tabOrder: RightTab[]; doc
     const migrated = Array.isArray(tabOrder)
       ? [...new Set(tabOrder.map((tab: unknown) => (tab === "agents" || tab === "workflow" ? "work" : tab)))]
       : null;
-    const order = migrated !== null && migrated.length === RIGHT_TABS.length && RIGHT_TABS.every((tab) => migrated.includes(tab))
-      ? migrated as RightTab[] : fallback.tabOrder;
+    const known = migrated?.filter((tab): tab is RightTab => RIGHT_TABS.includes(tab as RightTab)) ?? null;
+    const order = known !== null && known.length === migrated?.length && BASE_TABS.every((tab) => known.includes(tab))
+      ? [...known, ...RIGHT_TABS.filter((tab) => !known.includes(tab))] : fallback.tabOrder;
     return { tabOrder: order, dockSide: dockSide === "left" ? "left" : "right" };
   } catch { return fallback; }
 }
