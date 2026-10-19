@@ -4,7 +4,6 @@ import type { ModelProfile, Preferences } from "../../../shared/ipc";
 import { useT } from "../../i18n";
 import { TESTID } from "../testids";
 import { laneAt, PROFILE_LANES, resolveProfile } from "./model-profiles";
-import css from "./ProfilePicker.module.css";
 
 const FONT: Record<string, string> = {
   A: "01110/10001/10001/11111/10001/10001/10001",
@@ -39,6 +38,10 @@ const FONT: Record<string, string> = {
   ".": "00000/00000/00000/00000/00000/00100/00100",
   "-": "00000/00000/00000/11111/00000/00000/00000",
 };
+
+const OFF_DOT = "fill-muted";
+const LIT_DOT = "fill-(--led-active) drop-shadow-[0_0_1px_var(--led-active)]";
+const DIM_DOT = "fill-(--led-active) opacity-30";
 
 /** How long the LED readout scrambles from left to right before it settles on the new text. */
 const LED_SCRAMBLE_MS = 140;
@@ -77,7 +80,7 @@ function Led({
   ];
   return (
     <div
-      className={css.led}
+      className="rounded-(--dsw-radius-md) bg-terminal p-3 shadow-[inset_0_2px_8px_color-mix(in_oklch,var(--color-black)_40%,transparent)] [--led-active:var(--warning)] data-[geeky=true]:[--led-active:var(--muted-foreground)]"
       data-geeky={geeky}
       data-testid={TESTID.profileLed}
       role="img"
@@ -86,7 +89,7 @@ function Led({
       data-effort={effort.toUpperCase()}
       data-settled={phase === 1}
     >
-      <svg viewBox="0 0 575 67" aria-hidden="true">
+      <svg className="block w-full" viewBox="0 0 575 67" aria-hidden="true">
         {rows.flatMap((text, line) =>
           Array.from({ length: 24 }, (_, column) => {
             const char =
@@ -105,9 +108,9 @@ function Led({
                 className={
                   bitmap[pixel] === "1"
                     ? line === 1 && column >= 8
-                      ? css.dimDot
-                      : css.litDot
-                    : css.offDot
+                      ? DIM_DOT
+                      : LIT_DOT
+                    : OFF_DOT
                 }
               />
             ));
@@ -167,25 +170,25 @@ export function ProfilePicker({
     setPosition({ x: target.x, y: target.y });
   };
   return (
-    <div className={css.profile}>
+    <div className="rounded-(--dsw-radius-lg) bg-accent p-2.5">
       <Led
         name={name}
         effort={resolved.effort ?? ""}
         profile={`${lane.family} ${lane.weight}`}
         geeky={lane.family === "geeky"}
       />
-      <div className={css.layout}>
-        <div className={css.axes}>
-          <div className={css.horizontal}>
+      <div className="mt-4 grid grid-cols-[248px_1fr] gap-5 max-[600px]:grid-cols-1">
+        <div className="grid grid-cols-[20px_1fr] grid-rows-[22px_228px_24px] max-[600px]:mx-auto max-[600px]:w-[248px]">
+          <div className="col-start-2 flex justify-between px-1.5 text-[13px] text-muted-foreground">
             <span>{t("composer.profile.daily")}</span>
             <span>{t("composer.profile.geeky")}</span>
           </div>
-          <div className={css.vertical}>
+          <div className="row-start-2 flex flex-col justify-between py-1.5 text-xs text-muted-foreground [&_span]:rotate-180 [&_span]:[writing-mode:vertical-rl]">
             <span>{t("composer.profile.heavy")}</span>
             <span>{t("composer.profile.normal")}</span>
           </div>
           <div
-            className={css.pad}
+            className="relative col-start-2 row-start-2 grid cursor-crosshair touch-none grid-cols-2 grid-rows-2 overflow-hidden rounded-(--dsw-radius-lg) border border-solid border-border bg-accent"
             data-testid={TESTID.profilePad}
             onPointerDown={(event) => {
               event.preventDefault();
@@ -218,7 +221,7 @@ export function ProfilePicker({
             {PROFILE_LANES.map((entry) => (
               <div
                 key={entry.id}
-                className={css.lane}
+                className="pointer-events-none border-r border-b border-border p-2.5 text-xs leading-[18px] text-muted-foreground even:border-r-0 even:text-right nth-[n+3]:flex nth-[n+3]:items-end nth-[n+3]:border-b-0 nth-4:justify-end data-[active=true]:bg-warning data-[active=true]:text-foreground data-[active=true]:data-[geeky=true]:bg-muted-foreground"
                 data-active={entry.id === preview}
                 data-geeky={entry.family === "geeky"}
               >
@@ -228,7 +231,7 @@ export function ProfilePicker({
             <button
               ref={dot}
               type="button"
-              className={css.dot}
+              className="absolute m-0 size-7 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-0 bg-foreground p-0 shadow-[0_2px_8px_color-mix(in_oklch,var(--color-black)_40%,transparent)] [corner-shape:round]! focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-ring focus-visible:outline-solid active:cursor-grabbing"
               data-testid={TESTID.profileDot}
               aria-label={t("composer.profile.pad")}
               aria-describedby="profile-keyboard-help"
@@ -267,17 +270,17 @@ export function ProfilePicker({
               }}
             />
           </div>
-          <div className={css.caption}>{t("composer.profile.pull")}</div>
-          <span id="profile-keyboard-help" className={css.srOnly}>
+          <div className="col-span-2 pt-2 text-center text-xs text-muted-foreground">{t("composer.profile.pull")}</div>
+          <span id="profile-keyboard-help" className="sr-only">
             {t("composer.profile.keyboard")}
           </span>
         </div>
         <div
-          className={css.card}
+          className="mt-[22px] mb-6 flex flex-col rounded-(--dsw-radius-lg) border border-solid border-border bg-composer p-[18px] max-[600px]:m-0 max-[600px]:min-h-[150px]"
           data-testid={TESTID.profilePreview}
           data-profile={preview}
         >
-          <div className={css.cardHeader}>
+          <div className="flex items-center justify-between gap-2 text-[15px] [&_span]:text-[10px] [&_span]:text-muted-foreground">
             <strong>{title}</strong>
             <span>
               {t(
@@ -287,11 +290,11 @@ export function ProfilePicker({
               )}
             </span>
           </div>
-          <p>{t(`composer.profile.description.${preview}`)}</p>
-          <button type="button" className={css.configure} data-profile-configure={preview} onClick={() => onConfigure(preview)}>
+          <p className="text-[13px] leading-[22px] text-muted-foreground">{t(`composer.profile.description.${preview}`)}</p>
+          <button type="button" className="cursor-pointer self-start rounded-(--dsw-radius-md) border border-solid border-border bg-accent px-[9px] py-[5px] text-xs text-foreground [font-family:inherit] focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-solid" data-profile-configure={preview} onClick={() => onConfigure(preview)}>
             {t("composer.profile.model")}
           </button>
-          <div className={css.resolved}>
+          <div className="mt-auto flex flex-col gap-2 border-t border-border pt-3 text-xs [&_span]:text-muted-foreground [&_span]:[overflow-wrap:anywhere] [&_strong]:text-right [&_strong]:font-medium">
             {configuredModelUnavailable && <span role="status" data-profile-unavailable={preview}>
               {t("composer.profile.model")}: {configuredModelId} · {t("composer.model.searchEmpty")}
             </span>}
