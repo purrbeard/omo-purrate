@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { appendFileSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { launchApp, newSession, send, tempDir, threadRow, shot, setTheme } from "./helpers.ts";
+import { launchApp, newSession, send, tempDir, threadRow, shot, setTheme, openNativeSessions } from "./helpers.ts";
 
 /** Sessions this app opens carry its creation marker; dropping it makes one look written by another client or before the marker existed. */
 function asForeignSession(file: string): void {
@@ -25,14 +25,14 @@ test("agent-created sessions stay separate, searchable and reopen their original
     asForeignSession(agent.path!);
     appendFileSync(agent.path!, JSON.stringify({ type: "custom", customType: "rpc_client_message_admission", data: { clientMessageId: `probe-owner:${agent.id}`, clientTurnId: `probe-owner:${agent.id}`, durableSessionId: agent.id } }) + "\n");
     await page.reload();
-    await page.getByTestId("native-sessions-open").click();
+    await openNativeSessions(page);
     const native = page.locator(`[data-testid="native-session-row"][data-thread-id="${agent.id}"]`);
     await expect(native).toContainText("Created by an agent");
     await page.getByTestId("native-sessions-close").click();
     await expect(threadRow(page, agent.id)).toHaveCount(0);
     await expect(threadRow(page, user)).toBeVisible();
     await expect(page.getByTestId("workspace-group").getByTestId("thread-row")).toHaveCount(1);
-    await page.getByTestId("native-sessions-open").click();
+    await openNativeSessions(page);
     await native.getByTestId("native-session-manage").click();
     await page.getByTestId("native-sessions-close").click();
     await expect(threadRow(page, agent.id)).toHaveAttribute("data-creator", "agent");
@@ -94,7 +94,7 @@ test("creator evidence records UI creation, keeps old sessions unknown and persi
     appendFileSync(dori.path!, JSON.stringify({ type: "custom", customType: "rpc_client_message_admission", data: { clientMessageId: "discord:1557620286520696913", durableSessionId: dori.id } }) + "\n");
     await page.reload();
     await expect(threadRow(page, old.id)).toHaveCount(0);
-    await page.getByTestId("native-sessions-open").click();
+    await openNativeSessions(page);
     for (const id of [old.id, dori.id]) await page.locator(`[data-testid="native-session-row"][data-thread-id="${id}"]`).getByTestId("native-session-manage").click();
     await page.getByTestId("native-sessions-close").click();
     await expect(threadRow(page, old.id)).toHaveAttribute("data-creator", "unknown");
@@ -120,7 +120,7 @@ test("creator evidence records UI creation, keeps old sessions unknown and persi
     await expect(threadRow(page, old.id)).toHaveCount(0);
     await page.reload();
     await expect(threadRow(page, old.id)).toHaveCount(0);
-    await page.getByTestId("native-sessions-open").click();
+    await openNativeSessions(page);
     await page.getByTestId("native-sessions-search").fill(old.id);
     const oldNative = page.locator(`[data-testid="native-session-row"][data-thread-id="${old.id}"]`);
     await expect(oldNative).toContainText("Creator unknown");
@@ -131,7 +131,7 @@ test("creator evidence records UI creation, keeps old sessions unknown and persi
     expect(readFileSync(old.path!, "utf8")).toBe(original);
     const nativeIds = await page.evaluate(async () => (await window.omo.request("thread/list", { limit: 100 })).data.map(t => t.id).sort());
     expect(nativeIds).toEqual([main, old.id, dori.id].sort());
-    await page.getByTestId("native-sessions-open").click();
+    await openNativeSessions(page);
     await page.getByTestId("native-sessions-search").fill("Historical");
     await shot(page, "managed-native-dark-dialog-desktop");
     await page.getByTestId("native-sessions-close").click();
@@ -142,7 +142,7 @@ test("creator evidence records UI creation, keeps old sessions unknown and persi
     await setTheme(page, "light");
     await page.getByTestId("header-sidebar-toggle").click();
     await shot(page, "session-creator-light-narrow");
-    await page.getByTestId("native-sessions-open").click();
+    await openNativeSessions(page);
     await shot(page, "managed-native-light-dialog-narrow");
     await page.getByTestId("native-sessions-close").click();
   } finally { await app.close(); }
@@ -246,7 +246,7 @@ test("native inventory pages reveal older sessions and managed IDs survive app r
     expect(firstPage).not.toContain(older);
     await page.reload();
     await expect(page.getByTestId("thread-row")).toHaveCount(0);
-    await page.getByTestId("native-sessions-open").click();
+    await openNativeSessions(page);
     await expect(page.getByTestId("native-session-row")).toHaveCount(50);
     const row = page.locator(`[data-testid="native-session-row"][data-thread-id="${older}"]`);
     await expect(row).toHaveCount(0);

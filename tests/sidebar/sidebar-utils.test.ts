@@ -7,7 +7,7 @@ import { emptyConversation } from "../../src/state/conversation";
 import type { LiveTask } from "../../shared/protocol";
 import { OMO_INSTALL_COMMAND } from "../../shared/ipc";
 import type { ThreadFilter } from "../../src/ui/sidebar/thread-filter";
-import { formatThreadTime } from "../../src/ui/sidebar/thread-time";
+import { formatRowTime, formatThreadFullTime, formatThreadTime } from "../../src/ui/sidebar/thread-time";
 import { workspaceHue, workspaceInitials } from "../../src/ui/sidebar/workspace-badge";
 
 const MIN = 60_000;
@@ -69,6 +69,20 @@ describe("formatThreadTime", () => {
 
   it("never reports a future time as anything but now", () => {
     expect(formatThreadTime(now + HOUR, now, en, "system", "en-US")).toBe("now");
+  });
+});
+
+describe("formatRowTime and formatThreadFullTime", () => {
+  const en = (key: Parameters<typeof translate>[1], vars?: Parameters<typeof translate>[2]) => translate("en", key, vars);
+  const now = new Date(2026, 5, 15, 15, 0).getTime();
+
+  it("stays relative and compact at every age, with the full time honoring the time format", () => {
+    const at = new Date(2026, 5, 11, 9, 5).getTime();
+    expect(formatRowTime(now - 5 * MIN, now, en)).toBe("5m");
+    expect(formatRowTime(at, now, en)).toBe("4d");
+    expect(formatRowTime(now - 70 * 24 * HOUR, now, en)).toBe("2mo");
+    expect(formatThreadFullTime(at, "12h", "en-US")).toBe("Thu, Jun 11, 2026, 9:05 AM");
+    expect(formatThreadFullTime(at, "24h", "en-US")).toBe("Thu, Jun 11, 2026, 09:05");
   });
 });
 
