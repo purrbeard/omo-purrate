@@ -41,6 +41,8 @@ import type { AppUpdateStatus } from "../shared/app-update";
 import type { ModelRoutingInput, ModelRoutingSettings } from "../shared/model-routing";
 import type { ContextUsage, NativeCatalog, TerminalChunk, TerminalExit, TerminalSnapshot, WORKBENCH_IPC } from "../shared/workbench";
 import type { DagRun } from "../shared/protocol";
+import type { SERVERS_IPC, SshHostState, SshInventory } from "../shared/servers";
+import type { BROWSER_IPC, BrowserColorScheme, BrowserDevice, BrowserRect, BrowserScreenshot, BrowserState, BrowserZoom, LocalServer, PickedElement } from "../shared/browser";
 
 // The sandboxed preload can require only "electron", so the channel table is restated here; `satisfies` keeps it equal to IPC.
 const CHANNELS = {
@@ -125,6 +127,35 @@ const WORKBENCH = {
   terminalExit: "terminal:exit",
 } as const satisfies typeof WORKBENCH_IPC;
 
+const BROWSER = {
+  show: "browser:show",
+  hide: "browser:hide",
+  snapshot: "browser:snapshot",
+  navigate: "browser:navigate",
+  back: "browser:back",
+  forward: "browser:forward",
+  reload: "browser:reload",
+  devtools: "browser:devtools",
+  colorScheme: "browser:color-scheme",
+  zoom: "browser:zoom",
+  device: "browser:device",
+  clearCookies: "browser:clear-cookies",
+  clearCache: "browser:clear-cache",
+  screenshot: "browser:screenshot",
+  copyImage: "browser:copy-image",
+  pick: "browser:pick",
+  cancelPick: "browser:cancel-pick",
+  localServers: "browser:local-servers",
+  state: "browser:state",
+} as const satisfies typeof BROWSER_IPC;
+
+const SERVERS = {
+  list: "servers:list",
+  test: "servers:test",
+  refresh: "servers:refresh",
+  state: "servers:state",
+} as const satisfies typeof SERVERS_IPC;
+
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
   try {
     const result: T = await ipcRenderer.invoke(channel, ...args);
@@ -152,6 +183,29 @@ const api = {
   terminalKill: (threadId: string, terminalId: string): Promise<void> => invoke(WORKBENCH.terminalKill, threadId, terminalId),
   onTerminalChunk: (listener: (chunk: TerminalChunk) => void) => subscribe(WORKBENCH.terminalChunk, listener),
   onTerminalExit: (listener: (exit: TerminalExit) => void) => subscribe(WORKBENCH.terminalExit, listener),
+  browserShow: (rect: BrowserRect): Promise<BrowserState> => invoke(BROWSER.show, rect),
+  browserHide: (): Promise<void> => invoke(BROWSER.hide),
+  browserSnapshot: (): Promise<string | null> => invoke(BROWSER.snapshot),
+  browserNavigate: (url: string): Promise<number> => invoke(BROWSER.navigate, url),
+  browserBack: (): Promise<void> => invoke(BROWSER.back),
+  browserForward: (): Promise<void> => invoke(BROWSER.forward),
+  browserReload: (hard: boolean): Promise<void> => invoke(BROWSER.reload, hard),
+  browserOpenDevTools: (): Promise<void> => invoke(BROWSER.devtools),
+  browserSetColorScheme: (scheme: BrowserColorScheme): Promise<void> => invoke(BROWSER.colorScheme, scheme),
+  browserZoom: (direction: BrowserZoom): Promise<number> => invoke(BROWSER.zoom, direction),
+  browserSetDevice: (device: BrowserDevice): Promise<void> => invoke(BROWSER.device, device),
+  browserClearCookies: (): Promise<void> => invoke(BROWSER.clearCookies),
+  browserClearCache: (): Promise<void> => invoke(BROWSER.clearCache),
+  browserScreenshot: (): Promise<BrowserScreenshot> => invoke(BROWSER.screenshot),
+  browserCopyImage: (path: string): Promise<void> => invoke(BROWSER.copyImage, path),
+  browserPickElement: (): Promise<PickedElement | null> => invoke(BROWSER.pick),
+  browserCancelPick: (): Promise<void> => invoke(BROWSER.cancelPick),
+  listLocalServers: (): Promise<LocalServer[]> => invoke(BROWSER.localServers),
+  onBrowserState: (listener: (state: BrowserState) => void) => subscribe(BROWSER.state, listener),
+  listSshHosts: (): Promise<SshInventory> => invoke(SERVERS.list),
+  testSshHost: (alias: string): Promise<SshHostState> => invoke(SERVERS.test, alias),
+  refreshSshSpecs: (alias: string): Promise<SshHostState> => invoke(SERVERS.refresh, alias),
+  onSshHostState: (listener: (state: SshHostState) => void) => subscribe(SERVERS.state, listener),
   readModelRouting: (): Promise<ModelRoutingSettings> => invoke(CHANNELS.readModelRouting),
   saveModelRouting: (input: ModelRoutingInput): Promise<ModelRoutingSettings> => invoke(CHANNELS.saveModelRouting, input),
   importExistingMcpConfigs: (): Promise<{ imported: string[]; sources: number }> => invoke(CHANNELS.importExistingMcpConfigs),

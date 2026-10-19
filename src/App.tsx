@@ -37,6 +37,8 @@ import type { ThreadSummary } from "./state";
 const Onboarding = lazy(() => import("./ui/onboarding/Onboarding").then(module => ({ default: module.Onboarding })));
 const SettingsDialog = lazy(() => import("./ui/settings/SettingsDialog").then(module => ({ default: module.SettingsDialog })));
 const TerminalPanel = lazy(() => import("./ui/terminal/TerminalPanel").then(module => ({ default: module.TerminalPanel })));
+const ServersPanel = lazy(() => import("./ui/servers/ServersPanel").then(module => ({ default: module.ServersPanel })));
+const BrowserPanel = lazy(() => import("./ui/browser/BrowserPanel").then(module => ({ default: module.BrowserPanel })));
 const WorkspacePanel = lazy(() => import("./ui/workspace/WorkspacePanel").then(module => ({ default: module.WorkspacePanel })));
 const SetupWizard = lazy(() => import("./ui/wizard/SetupWizard").then(module => ({ default: module.SetupWizard })));
 const SessionImportDialog = lazy(() => import("./ui/sidebar/SessionImportDialog").then(module => ({ default: module.SessionImportDialog })));
@@ -60,6 +62,8 @@ const PANELS: Record<RightTab, (placement: Placement) => JSX.Element> = {
   btw: (placement) => <SidePanel placement={placement} />,
   terminal: (placement) => <TerminalPanel placement={placement} />,
   files: (placement) => <WorkspacePanel placement={placement} />,
+  browser: (placement) => <BrowserPanel placement={placement} />,
+  servers: (placement) => <ServersPanel placement={placement} />,
 };
 
 function dockWidth(tab: RightTab, workflowWidth: number, workView: WorkView): number {
@@ -68,6 +72,8 @@ function dockWidth(tab: RightTab, workflowWidth: number, workView: WorkView): nu
     case "btw": return SIDE_PANEL_WIDTH;
     case "terminal": return 440;
     case "files": return 440;
+    case "browser": return 560;
+    case "servers": return 440;
   }
 }
 

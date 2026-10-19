@@ -22,6 +22,8 @@ import type { DeviceOverview } from "./device-overview";
 import type { AppUpdateStatus } from "./app-update";
 import type { ModelRoutingInput, ModelRoutingSettings } from "./model-routing";
 import type { WorkbenchBridgeApi } from "./workbench";
+import type { BrowserBridgeApi } from "./browser";
+import type { ServersBridgeApi } from "./servers";
 
 /** URL of the official omo installer script. */
 export const OMO_INSTALL_SCRIPT_URL = "https://get.omo.dev/install.sh";
@@ -181,6 +183,8 @@ export interface Preferences {
   sessionImportCompleted?: boolean;
   /** Attach to omo's shared host instead of starting a private one; omitted means off. */
   sharedHost?: boolean;
+  /** ssh config aliases the Servers panel folds into its Hidden group. */
+  hiddenSshHosts?: string[];
 }
 
 /** Preferences every field resets to on "Restore device defaults" (Settings → General, top right). */
@@ -444,7 +448,7 @@ export interface ThreadLink {
   status?: import("./protocol").LiveTask["status"];
 }
 
-export interface OmoBridgeApi extends WorkbenchBridgeApi {
+export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, ServersBridgeApi {
   /** Optional JSONL paths add verified header links and their parent chain, using header IDs. */
   loadThreadLinks(cwds: string[], paths?: string[]): Promise<ThreadLink[]>;
   /** Keys are the requested JSONL paths, not thread IDs; unknown creation origins are omitted. */
@@ -640,6 +644,10 @@ export const ENV = {
   omoAutoUpdate: "OMO_UI_OMO_AUTO_UPDATE",
   /** omo's agent directory (sessions, goal stores) when it is not `<home>/.omo/agent` (tests and QA). */
   qaAgentDir: "OMO_UI_QA_AGENT_DIR",
+  /** The ssh client config the Servers panel reads instead of `~/.ssh/config` (tests and QA). */
+  sshConfig: "OMO_UI_SSH_CONFIG",
+  /** The ssh binary the Servers panel runs instead of `ssh` on PATH; a `.mjs` runs under Electron's Node (tests and QA). */
+  sshBin: "OMO_UI_SSH_BIN",
 } as const;
 
 declare global {

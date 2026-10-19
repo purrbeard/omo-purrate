@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import clsx from "clsx";
-import { ArrowLeftRight, Bot, FileDiff, FolderOpen, MessagesSquare, SquareTerminal, Workflow, X, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Bot, FileDiff, FolderOpen, Globe, MessagesSquare, Server, SquareTerminal, Workflow, X, type LucideIcon } from "lucide-react";
 import { modalSelector } from "../lib/modal-layer";
 import { useT, type MessageKey } from "../../i18n";
 import { selectMainThreadId, selectSidesOf, useAppStore } from "../../state";
@@ -16,6 +16,8 @@ const LABELS = {
   btw: "btw.title",
   terminal: "shell.dock.terminal",
   files: "shell.workspace.files",
+  browser: "browser.tab",
+  servers: "servers.tab",
 } as const;
 
 const ICONS: Record<RightTab, LucideIcon> = {
@@ -23,6 +25,8 @@ const ICONS: Record<RightTab, LucideIcon> = {
   btw: MessagesSquare,
   terminal: SquareTerminal,
   files: FolderOpen,
+  browser: Globe,
+  servers: Server,
 };
 
 const tabClass = clsx(
@@ -170,6 +174,8 @@ const SURFACES: readonly Surface[] = [
   { id: "files", key: "F", icon: FolderOpen, label: "shell.workspace.files", open: () => uiState.openFiles("all") },
   { id: "changes", key: "C", icon: FileDiff, label: "shell.dock.surface.changes", open: () => uiState.openFiles("changes") },
   { id: "agents", key: "A", icon: Bot, label: "activity.agents", open: () => uiState.openWork("agents") },
+  { id: "browser", key: "B", icon: Globe, label: "browser.tab", open: () => uiState.setRightTab("browser") },
+  { id: "servers", key: "S", icon: Server, label: "servers.tab", open: () => uiState.setRightTab("servers") },
 ];
 
 function isEditable(target: EventTarget | null): boolean {

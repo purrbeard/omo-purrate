@@ -10,12 +10,18 @@ test("right dock tabs show which panel is open and the docked panel edge resizes
     await page.keyboard.press("Control+E");
     const dock = page.getByTestId("right-dock");
     await expect(dock).toHaveAttribute("data-tab", "btw");
-    for (const id of ["work", "btw", "terminal", "files"]) {
+    for (const id of ["work", "btw", "terminal", "files", "browser", "servers"]) {
       const tab = page.getByTestId(`right-tab-${id}`);
       await expect(tab.locator("svg")).toHaveCount(1);
       const clipped = await tab.evaluate((element) => { const strip = element.parentElement!.getBoundingClientRect(); const box = element.getBoundingClientRect(); return box.right > strip.right + 1 || box.left < strip.left - 1; });
       expect(clipped, id + " tab clipped in the narrow side chat dock").toBe(false);
     }
+    await page.getByTestId("right-tab-browser").click();
+    await expect(dock).toHaveAttribute("data-tab", "browser");
+    await expect(page.getByTestId("browser-panel")).toBeVisible();
+    await page.getByTestId("right-tab-servers").click();
+    await expect(dock).toHaveAttribute("data-tab", "servers");
+    await expect(page.getByTestId("servers-panel")).toBeVisible();
     await page.getByTestId("right-tab-files").click();
     await expect(dock).toHaveAttribute("data-tab", "files");
     const selected = page.getByTestId("right-tab-files");
@@ -44,9 +50,9 @@ test("right dock tabs show which panel is open and the docked panel edge resizes
     await page.getByTestId("right-tab-files").click();
     await expect.poll(width).toBe(widened);
     const order = (): Promise<string[]> => page.locator('[data-testid^="right-tab-"]').evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute("data-testid")!.replace("right-tab-", "")));
-    expect(await order()).toEqual(["work", "btw", "terminal", "files"]);
+    expect(await order()).toEqual(["work", "btw", "terminal", "files", "browser", "servers"]);
     await page.getByTestId("right-tab-files").dragTo(page.getByTestId("right-tab-work"));
-    await expect.poll(order).toEqual(["files", "work", "btw", "terminal"]);
+    await expect.poll(order).toEqual(["files", "work", "btw", "terminal", "browser", "servers"]);
     const frame = page.getByTestId(TESTID.appFrame);
     const panelLeftOfConversation = (): Promise<boolean> => page.evaluate(() => {
       const panel = document.querySelector('[data-testid="right-dock"]')!.getBoundingClientRect();
@@ -78,7 +84,7 @@ test("right dock tabs show which panel is open and the docked panel edge resizes
     await expect.poll(composerWidth).toBeGreaterThan(400);
     await page.keyboard.press("Control+E");
     await expect(frame).toHaveAttribute("data-panel-side", "left");
-    await expect.poll(order).toEqual(["files", "work", "btw", "terminal"]);
+    await expect.poll(order).toEqual(["files", "work", "btw", "terminal", "browser", "servers"]);
     await page.getByTestId("right-dock-side").click();
     await expect(frame).toHaveAttribute("data-panel-side", "right");
     for (const theme of ["light", "dark"] as const) {
