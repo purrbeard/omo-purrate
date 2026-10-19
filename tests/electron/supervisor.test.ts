@@ -230,6 +230,8 @@ describe("OmoSupervisor shared host", () => {
     await supervisor.start();
     expect(supervisor.getStatus()).toMatchObject({ state: "connected", transport: "private", hostNotice: "omo host ensure failed (exit 1): host_error" });
     expect(clients.map(entry => entry.options.socket)).toEqual([undefined]);
+    // Without "question" here omo sends ask_user_question as a select the UI bridge cancels.
+    expect(clients[0]?.options.env?.["OMO_RPC_CLIENT_CAPABILITIES"]).toBe("extension_events,question");
   });
 
   it("falls back to a private host when the shared host does not initialize, without spending a restart attempt", async () => {

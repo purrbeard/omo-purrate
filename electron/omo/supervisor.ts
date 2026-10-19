@@ -236,7 +236,9 @@ export class OmoSupervisor {
       command: binary.path,
       args: ["--mode", "rpc", "--multi-session", "--session-runtime", "in-process", "--extension", this.options.extensionPath ?? path.join(__dirname, "task-message-extension.js")],
       cwd: this.options.homeDir,
-      env: { ...env, OMO_RPC_CLIENT_CAPABILITIES: "extension_events" },
+      // omo reads the question capability from this variable, not from set_client_info: without it,
+      // ask_user_question arrives as a plain select + input pair, which the UI bridge cancels at once.
+      env: { ...env, OMO_RPC_CLIENT_CAPABILITIES: "extension_events,question" },
       clientVersion: this.options.clientVersion,
       // The child env drops OMO_* overrides, so omo itself uses <home>/.omo/agent.
       agentDir: this.options.baseEnv[ENV.qaAgentDir] ?? path.join(this.options.homeDir, ".omo", "agent"),
