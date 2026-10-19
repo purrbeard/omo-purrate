@@ -38,6 +38,7 @@ test("interactive PTY supports PowerShell colors, prompts, UTF-8, workspace and 
     const panel = running.page.getByTestId("terminal-panel");
     const output = panel.getByTestId("terminal-output");
     await expect(panel).toHaveAttribute("data-running", "true");
+    await expect(panel).toHaveAttribute("data-placement", "bottom");
     await expect(output.locator(".xterm-helper-textarea")).toBeFocused();
     // When / Then: a normal interactive shell, not a command reader on piped stdin.
     await command(output, '"edition-$($PSVersionTable.PSEdition)"', ["edition-Desktop", "edition-Core"]);
@@ -74,7 +75,7 @@ test("interactive PTY supports PowerShell colors, prompts, UTF-8, workspace and 
     await command(output, "omo", "hi-omo");
     const before = await output.evaluate((element: HTMLDivElement & { terminal?: Terminal }) => element.terminal?.cols);
     await running.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(600, 820));
-    await expect(panel).toHaveAttribute("data-placement", "overlay");
+    await expect(running.page.getByTestId("app-frame")).toHaveAttribute("data-narrow", "true");
     const resized = output.evaluate((element: HTMLDivElement & { terminal?: Terminal }, previous) => {
       const terminal = element.terminal;
       if (terminal === undefined) throw new Error("xterm unavailable");
@@ -93,6 +94,114 @@ test("interactive PTY supports PowerShell colors, prompts, UTF-8, workspace and 
     await shot(running.page, "terminal-light");
     await setTheme(running.page, "dark");
     await shot(running.page, "terminal-dark");
+  } finally { await running.close(); }
+});
+
+test("split terminals run their own shells, close independently and keep running across bottom and side placement", async () => {
+  // Given: the default bottom drawer at the capture size.
+  const running = await launchApp({ omo: "fake", pickDir: tempDir("terminal-split"), size: { width: 1440, height: 900 } });
+  try {
+    await newSession(running.page);
+    await setTheme(running.page, "dark");
+    await running.page.keyboard.press("Control+Backquote");
+    const page = running.page;
+    const panel = page.getByTestId("terminal-panel");
+    const pane = (id: string): Locator => panel.locator(`[data-testid="terminal-pane"][data-terminal-id="${id}"]`);
+    const output = (id: string): Locator => pane(id).getByTestId("terminal-output");
+    const focus = async (id: string): Promise<void> => {
+      await output(id).click();
+      await expect(output(id).locator(".xterm-helper-textarea")).toBeFocused();
+    };
+    const lines = (id: string): Promise<string[]> => output(id).evaluate((element: HTMLDivElement & { terminal?: Terminal }) => {
+      const buffer = element.terminal?.buffer.active;
+      if (buffer === undefined) throw new Error("xterm unavailable");
+      return Array.from({ length: buffer.length }, (_unused, index) => buffer.getLine(index)?.translateToString(true).trim() ?? "");
+    });
+    await expect(page.getByTestId("terminal-drawer")).toBeVisible();
+    await expect(panel).toHaveAttribute("data-placement", "bottom");
+    await expect(pane("t1")).toHaveAttribute("data-running", "true");
+    await expect(page.getByTestId("terminal-list")).toHaveCount(0);
+    await command(output("t1"), "$who = 'first'; Write-Output 'one-ok'", "one-ok");
+
+    // When: split side by side.
+    await panel.getByTestId("terminal-split-horizontal").click();
+    // Then: a second shell to the right, focused, with its own state and output.
+    await expect(pane("t2")).toHaveAttribute("data-running", "true");
+    await expect(output("t2").locator(".xterm-helper-textarea")).toBeFocused();
+    await expect(panel.getByTestId("terminal-panes")).toHaveAttribute("data-split", "horizontal");
+    await command(output("t2"), "$who = 'second'; \"who-$who\"", "who-second");
+    await focus("t1");
+    await expect(panel).toHaveAttribute("data-active-terminal", "t1");
+    await command(output("t1"), '"who-$who"', "who-first");
+    expect(await lines("t1")).not.toContain("who-second");
+    expect(await lines("t2")).not.toContain("one-ok");
+    const [left, right] = [await pane("t1").boundingBox(), await pane("t2").boundingBox()];
+    expect(right!.x).toBeGreaterThan(left!.x + left!.width - 4);
+    expect(Math.abs(right!.y - left!.y)).toBeLessThan(2);
+    const list = page.getByTestId("terminal-list");
+    await expect(list.getByTestId("terminal-group")).toHaveAttribute("data-split", "horizontal");
+    await expect(list.getByTestId("terminal-group")).toContainText("Side by side");
+    await expect(list.getByTestId("terminal-row")).toHaveText(["Terminal 1", "Terminal 2"]);
+    await expect(list.locator('[data-testid="terminal-row"][aria-current="true"]')).toHaveText("Terminal 1");
+    await shot(page, "terminal-bottom-side-by-side");
+
+    // When: a new terminal, split stacked.
+    await panel.getByTestId("terminal-new").click();
+    await expect(pane("t3")).toHaveAttribute("data-running", "true");
+    await expect(pane("t1")).toHaveCount(0);
+    await panel.getByTestId("terminal-split-vertical").click();
+    // Then
+    await expect(pane("t4")).toHaveAttribute("data-running", "true");
+    await expect(panel.getByTestId("terminal-panes")).toHaveAttribute("data-split", "vertical");
+    const [top, bottom] = [await pane("t3").boundingBox(), await pane("t4").boundingBox()];
+    expect(bottom!.y).toBeGreaterThan(top!.y + top!.height - 4);
+    expect(Math.abs(bottom!.x - top!.x)).toBeLessThan(2);
+    await command(output("t4"), "Write-Output 'four-ok'", "four-ok");
+    await expect(list.getByTestId("terminal-group").nth(1)).toHaveAttribute("data-split", "vertical");
+    await expect(list.getByTestId("terminal-group").nth(1)).toContainText("Stacked");
+    await shot(page, "terminal-bottom-stacked");
+
+    // When: close the active terminal.
+    await panel.getByTestId("terminal-close").click();
+    // Then: the other pane of the group stays and keeps working.
+    await expect(pane("t4")).toHaveCount(0);
+    await expect(panel).toHaveAttribute("data-active-terminal", "t3");
+    await expect(list.getByTestId("terminal-row")).toHaveText(["Terminal 1", "Terminal 2", "Terminal 3"]);
+    await focus("t3");
+    await command(output("t3"), "Write-Output 'three-ok'", "three-ok");
+
+    // When: back to the first group, then move the panel to the side.
+    await list.locator('[data-testid="terminal-row"][data-terminal-id="t1"]').click();
+    await expect(pane("t1")).toHaveAttribute("data-running", "true");
+    await panel.getByTestId("terminal-placement").click();
+    // Then: the side panel hosts the same shells, output replayed.
+    await expect(panel).toHaveAttribute("data-placement", "docked");
+    await expect(page.getByTestId("terminal-drawer")).toHaveCount(0);
+    await expect(page.getByTestId("right-tab-terminal")).toHaveAttribute("aria-selected", "true");
+    await expect(pane("t1")).toHaveAttribute("data-running", "true");
+    await expect(pane("t2")).toHaveAttribute("data-running", "true");
+    await expect.poll(() => lines("t1")).toContain("one-ok");
+    await focus("t1");
+    await command(output("t1"), '"side-$who"', "side-first");
+    await shot(page, "terminal-side");
+    // A narrow window floats the side panel over the conversation.
+    await running.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(700, 900));
+    await expect(panel).toHaveAttribute("data-placement", "overlay");
+    await running.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900));
+    await expect(panel).toHaveAttribute("data-placement", "docked");
+
+    // When: back to the bottom; the toggle closes and reopens it there.
+    await panel.getByTestId("terminal-placement").click();
+    // Then
+    await expect(panel).toHaveAttribute("data-placement", "bottom");
+    await expect(page.getByTestId("right-dock")).toHaveCount(0);
+    await focus("t2");
+    await command(output("t2"), '"back-$who"', "back-second");
+    await page.keyboard.press("Control+Backquote");
+    await expect(panel).toHaveCount(0);
+    await page.keyboard.press("Control+Backquote");
+    await expect(panel).toHaveAttribute("data-placement", "bottom");
+    await expect(pane("t2")).toHaveAttribute("data-running", "true");
   } finally { await running.close(); }
 });
 

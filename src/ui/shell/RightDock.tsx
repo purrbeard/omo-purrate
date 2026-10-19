@@ -4,7 +4,8 @@ import clsx from "clsx";
 import { ArrowLeftRight, Bot, FileDiff, FolderOpen, MessagesSquare, SquareTerminal, Workflow, X, type LucideIcon } from "lucide-react";
 import { modalSelector } from "../lib/modal-layer";
 import { useT, type MessageKey } from "../../i18n";
-import { selectSidesOf } from "../../state";
+import { selectMainThreadId, selectSidesOf, useAppStore } from "../../state";
+import { toggleTerminal } from "../terminal/terminal-layout";
 import { useActions, useAppSelector } from "../app-context";
 import { focusRing, IconButton, Tooltip } from "../kit";
 import { uiState, useUiState } from "../ui-state";
@@ -218,13 +219,14 @@ export function isTerminalShortcut(event: globalThis.KeyboardEvent): boolean {
 }
 
 export function useTerminalShortcut(): void {
+  const store = useAppStore();
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent): void => {
       if (!isTerminalShortcut(event)) return;
       event.preventDefault();
-      uiState.toggleRightTab("terminal");
+      toggleTerminal(selectMainThreadId(store.getState()));
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [store]);
 }
