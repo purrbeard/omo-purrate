@@ -3,8 +3,8 @@ import chipCss from "@deepseek-ai/dsh-client-ui-primitives/src/user-text.module.
 import type { UserInput } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import { TESTID } from "../testids";
-import a11y from "./a11y.module.css";
-import css from "./UserBubble.module.css";
+import clsx from "clsx";
+import { focusRing } from "../kit";
 import { projectSkillUserText } from "./skill-text";
 import { splitAttachments } from "../composer/attachments";
 import { splitContext } from "../composer/context-draft";
@@ -46,10 +46,10 @@ export function userMessageParts(content: readonly UserInput[]): { text: string;
 function Thumbnail({ src }: { src: string }) {
   const t = useT();
   const [failed, setFailed] = useState(false);
-  if (failed) return <span className={css.thumbFailed}>{t("conversation.image.failed")}</span>;
+  if (failed) return <span className="box-border grid h-[90px] w-[120px] place-items-center rounded-lg border border-solid border-border p-2 text-center text-xs leading-4 text-muted-foreground">{t("conversation.image.failed")}</span>;
   return (
     <img
-      className={css.thumb}
+      className="block h-[90px] w-[120px] rounded-lg border border-solid border-border bg-card object-cover"
       src={src}
       alt={t("conversation.user.image")}
       loading="lazy"
@@ -87,24 +87,24 @@ export const UserBubble = memo(function UserBubble({
   const hasInstructions = skills.some((skill) => skill.body !== null);
   return (
     <div
-      className={css.row}
+      className="group/bubble flex min-w-0 flex-col items-end"
       data-testid={TESTID.userMessage}
       data-sending={sending || undefined}
       aria-busy={sending || undefined}
       data-flow="user"
     >
-      <div className={css.stack}>
+      <div className="flex min-w-0 max-w-[min(32rem,82%)] flex-col items-end gap-2">
         {images.length > 0 && (
-          <div className={css.attachments}>
+          <div className="flex max-w-full flex-wrap justify-end gap-2">
             {images.map((image) => (
               <Thumbnail key={image.key} src={image.src} />
             ))}
           </div>
         )}
         {text !== "" && (
-          <div className={css.bubble}>
+          <div className="box-border max-w-full rounded-2xl bg-message-user px-4 py-2.5 text-sm leading-[22px] break-words whitespace-pre-wrap text-message-user-foreground group-data-[sending]/bubble:opacity-60">
             {skills.length > 0 && (
-              <div className={css.skills}>
+              <div className="mb-1 flex flex-wrap gap-x-2 gap-y-1">
                 {skills.map((skill) => (
                   <span
                     key={skill.name}
@@ -119,17 +119,17 @@ export const UserBubble = memo(function UserBubble({
               </div>
             )}
             {attached.text}
-            {attached.context.length > 0 && <div className={css.instructions}>
-              {attached.context.map((entry, index) => <details key={index} className={css.contextDetail}>
-                <summary>{entry.kind === "terminal" ? "WindowsTerminal" : entry.value.replaceAll("\\", "/").split("/").at(-1) || entry.value}</summary>
-                <pre>{entry.value}</pre>
+            {attached.context.length > 0 && <div className="mt-2 whitespace-normal">
+              {attached.context.map((entry, index) => <details key={index} className="max-w-full rounded-md bg-accent px-2 py-1 text-xs">
+                <summary className="cursor-pointer [overflow-wrap:anywhere]">{entry.kind === "terminal" ? "WindowsTerminal" : entry.value.replaceAll("\\", "/").split("/").at(-1) || entry.value}</summary>
+                <pre className="m-0 mt-2 max-h-60 overflow-auto font-mono text-xs [overflow-wrap:anywhere] whitespace-pre-wrap">{entry.value}</pre>
               </details>)}
             </div>}
             {context.length > 0 && (
-              <div className={css.instructions}>
+              <div className="mt-2 whitespace-normal">
                 <button
                   type="button"
-                  className={`${chipCss.refChip} ${css.contextToggle}`}
+                  className={clsx(chipCss.refChip, "m-0 cursor-pointer border-0 bg-transparent py-0.5 text-xs [font-family:inherit]", focusRing)}
                   data-testid={TESTID.omoContextToggle}
                   aria-expanded={showContext}
                   aria-controls={contextId}
@@ -137,25 +137,25 @@ export const UserBubble = memo(function UserBubble({
                 >
                   {t("conversation.context.label")}{context.length > 1 ? ` (${context.length})` : ""}
                 </button>
-                <div id={contextId} hidden={!showContext} className={css.instructionsPanel} data-testid={TESTID.omoContext}>
+                <div id={contextId} hidden={!showContext} className="mt-2 border-0 border-t border-solid border-border pt-2 [&>section+section]:mt-3" data-testid={TESTID.omoContext}>
                   {context.map((block, index) => (
                     <section key={`${block.tag}:${index}`}>
-                      <div className={css.instructionName}>
+                      <div className="font-medium">
                         {Object.hasOwn(contextLabels, block.tag)
                           ? contextLabels[block.tag as keyof typeof contextLabels]
                           : block.tag}
                       </div>
-                      <pre className={css.instructionBody}>{block.body}</pre>
+                      <pre className="m-0 mt-2 font-mono text-xs leading-[18px] [overflow-wrap:anywhere] whitespace-pre-wrap">{block.body}</pre>
                     </section>
                   ))}
                 </div>
               </div>
             )}
             {hasInstructions && (
-              <div className={css.instructions}>
+              <div className="mt-2 whitespace-normal">
                 <button
                   type="button"
-                  className={css.instructionsToggle}
+                  className={clsx("m-0 cursor-pointer border-0 bg-transparent p-0 py-0.5 text-left text-xs text-muted-foreground [font-family:inherit] hover:text-foreground", focusRing)}
                   data-testid={TESTID.skillBodyToggle}
                   aria-expanded={showInstructions}
                   aria-controls={instructionsId}
@@ -163,12 +163,12 @@ export const UserBubble = memo(function UserBubble({
                 >
                   {t(showInstructions ? "conversation.skill.hideInstructions" : "conversation.skill.showInstructions")}
                 </button>
-                <div id={instructionsId} hidden={!showInstructions} className={css.instructionsPanel}>
+                <div id={instructionsId} hidden={!showInstructions} className="mt-2 border-0 border-t border-solid border-border pt-2 [&>section+section]:mt-3">
                   {skills.filter((skill) => skill.body !== null).map((skill) => (
                     <section key={skill.name} data-testid={TESTID.skillBody}>
-                      <div className={css.instructionName}>{skill.name}</div>
-                      <div className={css.instructionLocation}>{skill.location}</div>
-                      <pre className={css.instructionBody}>{skill.body}</pre>
+                      <div className="font-medium">{skill.name}</div>
+                      <div className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{skill.location}</div>
+                      <pre className="m-0 mt-2 font-mono text-xs leading-[18px] [overflow-wrap:anywhere] whitespace-pre-wrap">{skill.body}</pre>
                     </section>
                   ))}
                 </div>
@@ -176,7 +176,7 @@ export const UserBubble = memo(function UserBubble({
             )}
           </div>
         )}
-        {sending && <span className={a11y.visuallyHidden}>{t("conversation.user.sending")}</span>}
+        {sending && <span className="sr-only">{t("conversation.user.sending")}</span>}
       </div>
     </div>
   );

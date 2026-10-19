@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import type { SessionTreeResult } from "../../../shared/ipc";
-import { Button, IconEditOutlineRegular, IconRefreshOutlineRegular } from "@deepseek-ai/dsh-client-ui-primitives";
+import clsx from "clsx";
+import { Pencil, RefreshCw } from "lucide-react";
 import type { UserMessageItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import { useActions, useAppSelector } from "../app-context";
+import { Button, focusRing } from "../kit";
 import { TESTID } from "../testids";
 import { resendOf } from "./resend";
-import css from "./BranchControls.module.css";
 
 /** Where a branch starts: the thread and the turn that holds the user message. */
 export interface BranchAt {
@@ -41,9 +42,9 @@ export function SessionBranches({ threadId }: { threadId: string }) {
   }, [bridge, threadId, loaded, lastTurn?.id, lastTurn?.status, revision]);
   if (!tree || tree.branches.length < 2) return null;
   return (
-    <label className={css.branchPicker}>
+    <label className="flex min-w-0 items-center gap-2 px-4 py-2 text-xs leading-5 text-muted-foreground">
       <span>{t("conversation.branch.versions")}</span>
-      <select data-testid="session-branches" aria-label={t("conversation.branch.versions")} disabled={running || busy}
+      <select className={clsx("m-0 min-w-0 max-w-[min(480px,70%)] truncate rounded-md border border-solid border-input bg-background px-2 py-1 text-xs leading-5 text-foreground [font-family:inherit]", focusRing)} data-testid="session-branches" aria-label={t("conversation.branch.versions")} disabled={running || busy}
         value={tree.branches.find(branch => branch.active)?.entryId ?? ""}
         onChange={event => {
           setBusy(true);
@@ -56,22 +57,26 @@ export function SessionBranches({ threadId }: { threadId: string }) {
 }
 
 /** The edit button under a user bubble; it opens `onEdit`. Hidden until the row is hovered or focused. */
-export const userRowClass = css.userRow;
+export const userRowClass = "group/user flex min-w-0 flex-col";
 
 export function EditMessageButton({ onEdit, disabled }: { onEdit: () => void; disabled: boolean }) {
   const t = useT();
   return (
-    <div className={css.userActions}>
+    <div className="mt-0.5 flex justify-end opacity-0 transition-opacity duration-150 group-hover/user:opacity-100 group-focus-within/user:opacity-100 motion-reduce:transition-none">
       <button
         type="button"
-        className={css.iconButton}
+        className={clsx(
+          "m-0 inline-flex size-7 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground",
+          "transition-colors duration-150 hover:not-disabled:bg-accent hover:not-disabled:text-accent-foreground disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none",
+          focusRing,
+        )}
         data-testid={TESTID.editMessage}
         aria-label={t("conversation.user.edit")}
         title={disabled ? t("notice.branchBusy") : t("conversation.user.edit")}
         disabled={disabled}
         onClick={onEdit}
       >
-        <IconEditOutlineRegular size={14} />
+        <Pencil className="size-3.5" aria-hidden />
       </button>
     </div>
   );
@@ -98,9 +103,9 @@ export function EditMessageForm({ at, item, onClose }: { at: BranchAt; item: Use
     }
   };
   return (
-    <div className={css.editor} data-testid={TESTID.editMessageForm}>
+    <div className="ml-auto box-border flex w-full max-w-[min(32rem,100%)] flex-col gap-2 self-stretch rounded-2xl border border-solid border-border bg-message-user px-3 py-2.5" data-testid={TESTID.editMessageForm}>
       <textarea
-        className={css.editorInput}
+        className="m-0 box-border w-full resize-y border-0 bg-transparent p-0 text-sm leading-6 text-message-user-foreground outline-none [font-family:inherit]"
         data-testid={TESTID.editMessageInput}
         aria-label={t("conversation.user.edit")}
         value={text}
@@ -109,8 +114,8 @@ export function EditMessageForm({ at, item, onClose }: { at: BranchAt; item: Use
         onChange={(event) => setText(event.target.value)}
         onKeyDown={onKeyDown}
       />
-      <div className={css.editorFooter}>
-        <span className={css.editorHint}>{t("conversation.branch.hint")}</span>
+      <div className="flex items-center justify-end gap-2">
+        <span className="mr-auto text-xs leading-5 text-muted-foreground">{t("conversation.branch.hint")}</span>
         <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
           {t("conversation.branch.cancel")}
         </Button>
@@ -128,10 +133,10 @@ export function RegenerateButton({ at, item, disabled }: { at: BranchAt; item: U
   const branch = useBranch(at);
   const [busy, setBusy] = useState(false);
   return (
-    <div className={css.turnActions}>
-      <button
-        type="button"
-        className={css.textButton}
+    <Button
+        variant="ghost"
+        size="sm"
+        icon={<RefreshCw aria-hidden />}
         data-testid={TESTID.regenerate}
         title={disabled ? t("notice.branchBusy") : t("conversation.branch.regenerateHint")}
         disabled={disabled || busy}
@@ -140,9 +145,7 @@ export function RegenerateButton({ at, item, disabled }: { at: BranchAt; item: U
           void branch(item, resendOf(item.content).text).finally(() => setBusy(false));
         }}
       >
-        <IconRefreshOutlineRegular size={14} />
-        <span>{t("conversation.branch.regenerate")}</span>
-      </button>
-    </div>
+        {t("conversation.branch.regenerate")}
+      </Button>
   );
 }

@@ -175,6 +175,16 @@ export const messages = {
     "conversation.question.submit": "Submit",
     "conversation.question.submitting": "Submitting…",
     "conversation.question.incomplete": "Answer every question to submit.",
+    // Track B (design/thread): conversation and composer
+    "conversation.history.errorHint": "Check the connection and try again.",
+    "conversation.workLog.worked": "Worked for {duration}",
+    "conversation.workLog.tools": "{count} tool calls",
+    "conversation.workLog.group": "{title} ×{count}",
+    "conversation.answer.copyShort": "Copy",
+    "conversation.files.title": "Edited files · {count}",
+    "conversation.files.view": "View changes",
+    "conversation.files.more": "Show {count} more files",
+    "conversation.files.less": "Show fewer files",
   },
   ko: {
     "conversation.statusLine": "세션 상태",
@@ -352,5 +362,15 @@ export const messages = {
     "conversation.question.submit": "제출",
     "conversation.question.submitting": "제출 중…",
     "conversation.question.incomplete": "모든 질문에 답해야 제출할 수 있습니다.",
+    // Track B (design/thread): conversation and composer
+    "conversation.history.errorHint": "연결을 확인한 뒤 다시 시도하세요.",
+    "conversation.workLog.worked": "작업 {duration}",
+    "conversation.workLog.tools": "도구 {count}개",
+    "conversation.workLog.group": "{title} {count}회",
+    "conversation.answer.copyShort": "복사",
+    "conversation.files.title": "파일 {count}개를 편집했습니다",
+    "conversation.files.view": "변경 사항 보기",
+    "conversation.files.more": "파일 {count}개 더 보기",
+    "conversation.files.less": "접기",
   },
 } as const;

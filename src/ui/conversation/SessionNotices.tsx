@@ -3,7 +3,9 @@ import type { MemoryWriteNotice, SessionNotice } from "../../../shared/ipc";
 import { useLocale, useT } from "../../i18n";
 import type { MessageKey } from "../../i18n";
 import { TESTID } from "../testids";
-import css from "./SessionNotices.module.css";
+import { ChevronRight } from "lucide-react";
+import clsx from "clsx";
+import { focusRing } from "../kit";
 
 const KIB = 1024;
 const SUMMARY_LIMIT = 160;
@@ -60,20 +62,20 @@ export const MemoryWriteCard = memo(function MemoryWriteCard({ write }: { write:
   const previous = relative(write.previousEntryAt, locale, now);
   const consolidated = relative(write.lastConsolidationAt, locale, now);
   return (
-    <div className={css.memory} data-testid={TESTID.memoryWrite} data-flow="notice">
-      <div className={css.memoryTitle}>
-        <span className={css.dot} aria-hidden />
+    <div className="my-1.5 flex flex-col gap-0.5 rounded-lg border border-solid border-border bg-card px-3.5 py-3 font-mono text-xs leading-[18px]" data-testid={TESTID.memoryWrite} data-flow="notice">
+      <div className="flex items-center gap-1.5 font-semibold text-foreground">
+        <span className="size-2 rounded-full bg-success" aria-hidden />
         <span>{t("conversation.memory.remembered")}</span>
         {write.entriesToday !== null && (
           <span>· {t("conversation.memory.entriesToday", { nth: ordinal(write.entriesToday, locale), count: write.entriesToday })}</span>
         )}
       </div>
       {paths !== "" && (
-        <div className={css.memoryLine}>{t("conversation.memory.added", { lines, path: paths })}</div>
+        <div className="text-muted-foreground [overflow-wrap:anywhere]">{t("conversation.memory.added", { lines, path: paths })}</div>
       )}
-      {write.subject !== "" && <div className={css.memoryLine} title={write.sha}>{write.subject}</div>}
+      {write.subject !== "" && <div className="text-muted-foreground [overflow-wrap:anywhere]" title={write.sha}>{write.subject}</div>}
       {write.size !== null && (
-        <div className={css.memoryLine}>
+        <div className="text-muted-foreground [overflow-wrap:anywhere]">
           {t("conversation.memory.size", {
             system: kib(write.size.systemBytes),
             total: kib(write.size.totalBytes),
@@ -82,7 +84,7 @@ export const MemoryWriteCard = memo(function MemoryWriteCard({ write }: { write:
         </div>
       )}
       {(previous !== null || consolidated !== null) && (
-        <div className={css.memoryTimeline}>
+        <div className="text-warning">
           {[
             previous === null ? null : t("conversation.memory.lastEntry", { time: previous }),
             consolidated === null ? null : t("conversation.memory.lastConsolidation", { time: consolidated }),
@@ -109,13 +111,22 @@ export const NoticeRow = memo(function NoticeRow({ notice }: { notice: SessionNo
   const first = body.split("\n").find((line) => line.trim() !== "")?.trim() ?? "";
   const summary = first.length > SUMMARY_LIMIT ? `${first.slice(0, SUMMARY_LIMIT)}…` : first;
   return (
-    <div className={css.notice} data-testid={TESTID.sessionNotice} data-type={notice.customType} data-display={notice.display || undefined} data-flow="notice">
-      <button type="button" className={css.noticeHead} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        <span className={css.chevron} data-open={open || undefined} aria-hidden>›</span>
-        <span className={css.noticeLabel}>{key === undefined ? notice.customType : t(key)}</span>
-        <span className={css.noticeSummary}>{summary}</span>
+    <div className="group/notice my-0.5 text-xs leading-[18px]" data-testid={TESTID.sessionNotice} data-type={notice.customType} data-display={notice.display || undefined} data-flow="notice">
+      <button
+        type="button"
+        className={clsx(
+          "group/head m-0 flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-sm border-0 bg-transparent px-0 py-0.5 text-left",
+          "text-xs leading-[18px] text-muted-foreground [font-family:inherit]",
+          focusRing,
+        )}
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <ChevronRight className={clsx("size-3 flex-none transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} aria-hidden />
+        <span className="flex-none rounded-sm bg-muted px-1.5 font-medium text-muted-foreground group-data-[display]/notice:text-foreground">{key === undefined ? notice.customType : t(key)}</span>
+        <span className="min-w-0 truncate group-hover/head:text-foreground">{summary}</span>
       </button>
-      {open && <pre className={css.noticeBody}>{body}</pre>}
+      {open && <pre className="mt-1 mr-0 mb-1.5 ml-3.5 max-h-80 overflow-auto rounded-md bg-muted px-2.5 py-2 font-mono text-[11px] leading-4 [overflow-wrap:anywhere] whitespace-pre-wrap text-muted-foreground">{body}</pre>}
     </div>
   );
 });

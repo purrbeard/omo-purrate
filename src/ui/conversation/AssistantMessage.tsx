@@ -2,7 +2,6 @@ import { memo } from "react";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import { TESTID } from "../testids";
 import { useConversationLabels } from "./labels";
-import css from "./AssistantMessage.module.css";
 
 export const AssistantMessage = memo(function AssistantMessage({
   id,
@@ -16,7 +15,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   const labels = useConversationLabels();
   return (
     <div
-      className={css.root}
+      className="flex min-w-0 flex-col text-sm leading-6 text-message-assistant-foreground"
       data-testid={TESTID.assistantMessage}
       data-item-id={id}
       data-streaming={streaming || undefined}

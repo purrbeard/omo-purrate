@@ -9,6 +9,11 @@ function changeKind(kind: unknown): ChangeKind {
   return tag === "add" || tag === "delete" ? tag : "update";
 }
 
+/** omo sends a unified patch even for added and deleted files; older records carry whole contents. */
+function isUnifiedPatch(diff: string): boolean {
+  return /^@@/m.test(diff);
+}
+
 function diffLines(diff: string): string[] {
   return diff.replace(/\r?\n$/, "").split(/\r?\n/);
 }
@@ -42,7 +47,12 @@ function parseUnifiedDiff(path: string, diff: string): DiffHunk[] {
 
 /** DiffBlock input for one file change: added and deleted files carry whole contents, updates a unified diff. */
 export function fileChangeHunks(change: FileUpdateChange, path: string): DiffHunk[] {
-  switch (changeKind(change.kind)) {
+  const kind = changeKind(change.kind);
+  if (kind !== "update" && isUnifiedPatch(change.diff)) {
+    const hunks = parseUnifiedDiff(path, change.diff);
+    if (hunks.length > 0) return kind === "add" ? hunks.map((hunk) => ({ ...hunk, oldText: null })) : hunks;
+  }
+  switch (kind) {
     case "add":
       return [{ path, oldText: null, newText: change.diff }];
     case "delete":
@@ -59,7 +69,7 @@ export function fileChangeTotals(changes: FileUpdateChange[]): { added: number; 
   let removed = 0;
   for (const change of changes) {
     const kind = changeKind(change.kind);
-    if (kind === "add" || kind === "delete") {
+    if ((kind === "add" || kind === "delete") && !isUnifiedPatch(change.diff)) {
       const count = change.diff === "" ? 0 : diffLines(change.diff).length;
       if (kind === "add") added += count;
       else removed += count;

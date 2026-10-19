@@ -1,11 +1,10 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { useT } from "../../i18n";
-import css from "./RenderBoundary.module.css";
 
 function RenderFailed() {
   const t = useT();
   return (
-    <div className={css.failed} role="status">
+    <div className="py-0.5 text-sm leading-5 text-muted-foreground" role="status">
       {t("conversation.item.renderError")}
     </div>
   );
