@@ -30,7 +30,10 @@ export function relativizeToCwd(text: string, cwd: string | undefined): string {
   if (cwd === undefined || cwd === '') return text
   const root = cwd.replace(/[/\\]+$/, '')
   if (text.startsWith(`${root}/`) || text.startsWith(`${root}\\`)) return text.slice(root.length + 1)
-  return text
+  // omo tools often spell a Windows path with forward slashes under a backslashed cwd (or the reverse).
+  if (!isWindowsStylePath(root)) return text
+  const fold = (value: string): string => value.replace(/\\/g, '/').toLowerCase()
+  return fold(text).startsWith(`${fold(root)}/`) ? text.slice(root.length + 1) : text
 }
 
 /**
