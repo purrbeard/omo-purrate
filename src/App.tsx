@@ -15,7 +15,7 @@ import { NoticeToasts } from "./ui/notices/NoticeToasts";
 import { ThreadNotifications } from "./ui/notices/ThreadNotifications";
 import { ConnectionBanner } from "./ui/onboarding/ConnectionBanner";
 import { AppFrame } from "./ui/shell/AppFrame";
-import { RightDock, useTerminalShortcut } from "./ui/shell/RightDock";
+import { DockLauncher, RightDock, useTerminalShortcut } from "./ui/shell/RightDock";
 import { Sidebar } from "./ui/sidebar/Sidebar";
 import { applyThemePreference } from "./ui/theme";
 import { shownTab, uiState, useUiState, WORKFLOW_PANEL_WIDTHS } from "./ui/ui-state";
@@ -66,6 +66,8 @@ function dockWidth(tab: RightTab, workflowWidth: number, workView: WorkView): nu
   }
 }
 
+const LAUNCHER_WIDTH = 400;
+
 function Shell() {
   const bridgeState = useAppSelector((state) => state.bridge?.state ?? null);
   useSidePanelShortcut();
@@ -86,6 +88,7 @@ function Shell() {
   });
   useEffect(() => uiState.setWorkAvailable(hasAgents), [hasAgents]);
   const activeTab: RightTab | null = shownTab({ ...ui, workAvailable: hasAgents });
+  const launcher = activeTab === null && ui.dockLauncher;
   const newSession = useNewSessionFlow();
   const groups = useMemo(() => selectManagedThreadsByWorkspace(appState, preferences?.managedThreadIds ?? []), [appState, preferences?.managedThreadIds]);
   const sessions = useMemo(() => {
@@ -189,8 +192,10 @@ function Shell() {
         sidebarWidth={sidebarWidth}
         onSidebarWidthChange={uiState.setSidebarWidth}
         onCanDockChange={uiState.setCanDock}
-        rightPanel={activeTab === null ? null : (placement: Placement) => <RightDock tab={activeTab} placement={placement}><Suspense fallback={null}>{PANELS[activeTab](placement)}</Suspense></RightDock>}
-        rightPanelWidth={activeTab === null ? 0 : rightWidths[activeTab] ?? dockWidth(activeTab, WORKFLOW_PANEL_WIDTHS[workflowPanelSize], ui.workView)}
+        rightPanel={activeTab !== null
+          ? (placement: Placement) => <RightDock tab={activeTab} placement={placement}><Suspense fallback={null}>{PANELS[activeTab](placement)}</Suspense></RightDock>
+          : launcher ? (placement: Placement) => <RightDock tab={null} placement={placement}><DockLauncher /></RightDock> : null}
+        rightPanelWidth={activeTab === null ? (launcher ? LAUNCHER_WIDTH : 0) : rightWidths[activeTab] ?? dockWidth(activeTab, WORKFLOW_PANEL_WIDTHS[workflowPanelSize], ui.workView)}
         onRightPanelWidthChange={activeTab === null ? undefined : (width) => uiState.setRightWidth(activeTab, width)}
         rightPanelSide={dockSide}
       />

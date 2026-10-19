@@ -3,6 +3,7 @@ import type { SessionWorktree, WorkspaceFile } from "../../../shared/workspace";
 import { useT } from "../../i18n";
 import { useAppSelector } from "../app-context";
 import { GIT_REFRESH_EVENT, selectCompletedTurnCount } from "../git/use-git-info";
+import { uiState } from "../ui-state";
 import css from "./WorkspacePanel.module.css";
 
 
@@ -30,7 +31,7 @@ function WorkspaceContents({ cwd, threadId, placement }: WorkspacePanelProps & {
   const [selected, setSelected] = useState<string | null>(null);
   const [mode, setMode] = useState<"file" | "diff">("file");
   const [filter, setFilter] = useState("");
-  const [changesOnly, setChangesOnly] = useState(true);
+  const [changesOnly, setChangesOnly] = useState(() => uiState.get().filesView === "changes");
   const [revision, setRevision] = useState(0);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -119,15 +120,14 @@ function WorkspaceContents({ cwd, threadId, placement }: WorkspacePanelProps & {
         </button>
       </header>
       {cwd === null ? <p className={css.empty}>{labels.noWorkspace}</p> : <>
-        <div className={css.tabs} aria-label={labels.title}>
+        {tabs.length > 0 && <div className={css.tabs} aria-label={labels.title}>
           {tabs.map((file) => <div className={css.tab} data-active={selected === file || undefined} key={file}>
             <button type="button" className={css.tabSelect} title={file} aria-pressed={selected === file} onClick={() => setSelected(file)}>{file.split("/").at(-1)}</button>
             <button type="button" className={css.tabClose} aria-label={`${labels.tabClose}: ${file}`} onClick={() => closeTab(file)}>x</button>
           </div>)}
-          {tabs.length === 0 && <span className={css.tabPlaceholder}>{labels.readOnly}</span>}
-        </div>
+        </div>}
         <div className={css.previewToolbar}>
-          <span className={css.path} title={selected ?? ""}>{selected ?? labels.select}</span>
+          <span className={css.path} title={selected ?? ""}>{selected ?? ""}</span>
           <div className={css.segmented}>
             <button type="button" aria-pressed={mode === "file"} onClick={() => setMode("file")}>{labels.file}</button>
             <button type="button" aria-pressed={mode === "diff"} onClick={() => setMode("diff")}>{labels.diff}</button>

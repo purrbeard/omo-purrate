@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { moveTab, parseDockLayout, RIGHT_TABS, shownTab, uiState } from "../../src/ui/ui-state";
 
 describe("moveTab", () => {
@@ -64,5 +64,19 @@ describe("closing the dock", () => {
     expect(uiState.get()).toMatchObject({ rightTab: "work", workView: "agents", agentPanelOpen: true });
     uiState.closeRightTab("work");
     expect(shownTab(uiState.get())).toBeNull();
+  });
+});
+
+describe("the surface launcher", () => {
+  it("opens while no surface was chosen, and a chosen surface replaces it", async () => {
+    vi.resetModules();
+    const { uiState: fresh } = await import("../../src/ui/ui-state");
+    fresh.toggleDock();
+    expect(fresh.get()).toMatchObject({ dockLauncher: true, rightTab: null });
+    fresh.openFiles("all");
+    expect(fresh.get()).toMatchObject({ dockLauncher: false, rightTab: "files", filesView: "all" });
+    fresh.closeRightTab("files");
+    fresh.toggleDock();
+    expect(fresh.get()).toMatchObject({ dockLauncher: false, rightTab: "files" });
   });
 });

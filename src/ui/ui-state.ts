@@ -12,6 +12,7 @@ export const RIGHT_TABS: readonly RightTab[] = ["work", "btw", "terminal", "file
 /** Views of the single Work panel: agent conversations, the run graph, the work list and the activity log. */
 export type WorkView = "agents" | "graph" | "list" | "activity";
 export type DockSide = "left" | "right";
+export type FilesView = "changes" | "all";
 const DOCK_LAYOUT_KEY = "omo-ui.dock-layout.v1";
 
 /** @returns the stored tab order (every tab exactly once) and panel side, falling back to the defaults */
@@ -56,8 +57,12 @@ export interface UiState {
   workAvailable: boolean;
   /** The view the Work panel shows. */
   workView: WorkView;
-  /** The tab the dock toggle reopens. */
-  lastTab: RightTab;
+  /** The tab the dock toggle reopens; null until the user picks one. */
+  lastTab: RightTab | null;
+  /** The dock is open on its surface launcher (no surface chosen yet). */
+  dockLauncher: boolean;
+  /** The list the Files panel starts on: changed files or every file. */
+  filesView: FilesView;
   /** False while the frame is too narrow for a third column; auto-opened agents wait for room instead of covering the conversation. */
   canDock: boolean;
   workspacePanelOpen: boolean;
@@ -87,7 +92,9 @@ let state: UiState = {
   agentAuto: true,
   workAvailable: false,
   workView: "agents",
-  lastTab: "work",
+  lastTab: null,
+  dockLauncher: false,
+  filesView: "changes",
   canDock: true,
   workspacePanelOpen: false,
   workflowPanelOpen: false,
@@ -113,7 +120,7 @@ export function shownTab(value: Pick<UiState, "rightTab" | "agentAuto" | "canDoc
 function update(patch: Partial<UiState>): void {
   const next = { ...state, ...patch };
   const shown = shownTab(next);
-  state = { ...next, lastTab: next.rightTab ?? next.lastTab, workspacePanelOpen: shown === "files", workflowPanelOpen: shown === "work" && next.workView !== "agents",
+  state = { ...next, lastTab: next.rightTab ?? next.lastTab, dockLauncher: next.dockLauncher && next.rightTab === null, workspacePanelOpen: shown === "files", workflowPanelOpen: shown === "work" && next.workView !== "agents",
     agentPanelOpen: shown === "work" && next.workView === "agents" };
   for (const listener of [...listeners]) listener();
 }
@@ -130,15 +137,23 @@ export function clampSidebarWidth(width: number): number {
 }
 
 export const uiState = {
-  setRightTab: (rightTab: RightTab | null): void => update({ rightTab, ...(rightTab === null ? { agentAuto: false } : {}) }),
+  setRightTab: (rightTab: RightTab | null): void => update({ rightTab, ...(rightTab === null ? { agentAuto: false, dockLauncher: false } : {}) }),
+  /** Opens the Files panel on the changed-files list or on every file. */
+  openFiles: (filesView: FilesView): void => update({ rightTab: "files", filesView }),
   /** Closes the panel the dock shows (including Work opened by itself) or opens `tab`. */
   toggleRightTab: (tab: RightTab): void => update(shownTab(state) === tab ? { rightTab: null, agentAuto: false } : { rightTab: tab }),
   /** Closes `tab` when the dock shows it; closing the auto-opened Work keeps it closed for this window. */
   closeRightTab: (tab: RightTab): void => {
     if (shownTab(state) === tab) update({ rightTab: null, agentAuto: false });
   },
-  /** Opens the dock on the last tab, or closes whatever it shows. */
-  toggleDock: (): void => update(shownTab(state) !== null ? { rightTab: null, agentAuto: false } : { rightTab: state.lastTab }),
+  /**
+   * Closes whatever the dock shows; otherwise reopens the last tab, Work for a session with agents, or the surface
+   * launcher when nothing was chosen yet.
+   */
+  toggleDock: (): void => update(shownTab(state) !== null || state.dockLauncher ? { rightTab: null, agentAuto: false, dockLauncher: false }
+    : state.lastTab !== null ? { rightTab: state.lastTab }
+    : state.workAvailable ? { rightTab: "work" }
+    : { dockLauncher: true }),
   /** Opens Work on `view`; with the same view already shown it closes Work. */
   toggleWork: (view: WorkView): void => update(shownTab(state) === "work" && state.workView === view ? { rightTab: null, agentAuto: false } : { rightTab: "work", workView: view }),
   openWork: (view: WorkView): void => update({ rightTab: "work", workView: view }),
