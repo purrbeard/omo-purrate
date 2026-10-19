@@ -68,6 +68,25 @@ test("an open session follows what another omo process appends to its file", asy
     await expect(changed).toContainText("new line");
     await expect(changed).toContainText("old line");
     await shot(page, "session-sync-changes");
+
+    // Agents the terminal's omo runs for this session follow its task store live instead of a restored snapshot.
+    const tasks = path.join(pickDir, ".omo", "senpi-task", "tasks");
+    mkdirSync(tasks, { recursive: true });
+    const record = (status: string) => JSON.stringify({ task_id: "st_terminal", parent_session_id: THREAD, root_session_id: THREAD, status,
+      execution_mode: "in-process", model: "fake/model", depth: 1, created_at: at, updated_at: new Date().toISOString(),
+      task_summary: "Agent started in the terminal", name: "terminal-agent", residency_state: status === "running" ? "resident" : "persisted_only" });
+    writeFileSync(path.join(tasks, "st_terminal.json"), record("running"));
+    await page.getByTestId("right-tab-work").click();
+    await page.getByTestId("workflow-list").click();
+    const activity = byTestId(page, TESTID.omoActivity);
+    await expect(activity).toHaveAttribute("data-freshness", "live");
+    const row = activity.locator('[data-task-id="st_terminal"]');
+    await expect(row).toHaveAttribute("data-status", "running");
+    writeFileSync(path.join(tasks, "st_terminal.json"), record("completed"));
+    await expect(row).toHaveAttribute("data-status", "completed");
+    await page.getByTestId("workflow-graph-view").click();
+    await expect(page.getByTestId("agent-graph-node").filter({ hasText: "Agent started in the terminal" })).toHaveAttribute("data-state", "completed");
+    await shot(page, "session-sync-live-agents");
   } finally {
     await launched.close();
     for (const target of [fakeHome, pickDir]) rmSync(target, { recursive: true, force: true });

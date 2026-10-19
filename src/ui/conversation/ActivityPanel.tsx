@@ -347,7 +347,7 @@ export function ActivityPanel({ threadId, id, view = "list", docked = false }: {
         {error !== null && <p className={C.error} role="status">{t("activity.children.error")} <span title={error}>{error}</span></p>}
         {summary.total === 0 && <p className={C.empty}>{t(view === "graph" ? "activity.graph.empty" : "activity.empty")}</p>}
         {view === "list" && <div className={C.legend} aria-hidden><span>{t("activity.column.work")}</span><span>{t("activity.column.agent")}</span><span>{t("activity.column.time")}</span><span>{t("activity.column.step")}</span></div>}
-        {runs.map((run) => <RunCard key={run.run_id} run={run} live={isLive && live.runsSource === "live"} restored={live.runsSource === "history"} activity={live.dagActivity[run.run_id]} trees={trees} tasks={taskById} onOpenTask={openTask} now={now} view={view} />)}
+        {runs.map((run) => <RunCard key={run.run_id} run={run} live={isLive && live.runsSource !== "history"} restored={live.runsSource === "history"} activity={live.dagActivity[run.run_id]} trees={trees} tasks={taskById} onOpenTask={openTask} now={now} view={view} />)}
         {view === "graph" && runs.length === 0 && agentTrees.length > 0 && <AgentGraph root={{ id: threadId, title: threadTitle(thread ?? null, t("shell.newSession")), running: turnActive }}
           trees={agentTrees} live={isLive} now={now} onOpen={openTask} />}
         {view === "list" && standalone.length > 0 && <section className={C.section}>

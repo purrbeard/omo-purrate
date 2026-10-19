@@ -95,6 +95,9 @@ class FakeBridge implements OmoBridgeApi {
   getProxySettings(): ReturnType<OmoBridgeApi["getProxySettings"]> { return Promise.resolve({ baseUrl: "", apiKeyConfigured: false, modelCount: 0 }); }
   applyProxySettings(): ReturnType<OmoBridgeApi["applyProxySettings"]> { return Promise.resolve({ baseUrl: "", apiKeyConfigured: false, modelCount: 0 }); }
   loadTaskWork(): ReturnType<OmoBridgeApi["loadTaskWork"]> { return Promise.resolve([]); }
+  watchTaskStore(): Promise<void> { return Promise.resolve(); }
+  unwatchTaskStore(): Promise<void> { return Promise.resolve(); }
+  onTaskWorkChanged(): () => void { return () => {}; }
   sendTaskMessage(): Promise<void> { return Promise.resolve(); }
   loadThreadLinks(): ReturnType<OmoBridgeApi["loadThreadLinks"]> { return Promise.resolve([]); }
   loadThreadOrigins(): ReturnType<OmoBridgeApi["loadThreadOrigins"]> { return Promise.resolve({}); }
