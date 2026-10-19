@@ -103,6 +103,9 @@ export const messages = {
     "composer.skills.scope.repo": "Project",
     "composer.skills.scope.system": "System",
     "composer.skills.scope.admin": "Admin",
+    // Track B (design/thread): conversation and composer
+    "composer.modelGroup": "Model and reasoning effort",
+    "composer.checkout.worktree": "Worktree",
   },
   ko: {
     "composer.context.usage": "{used} / {window} 토큰 ({pct}%)",
@@ -208,5 +211,8 @@ export const messages = {
     "composer.skills.scope.repo": "프로젝트",
     "composer.skills.scope.system": "시스템",
     "composer.skills.scope.admin": "관리자",
+    // Track B (design/thread): conversation and composer
+    "composer.modelGroup": "모델과 추론 노력",
+    "composer.checkout.worktree": "워크트리",
   },
 } as const;

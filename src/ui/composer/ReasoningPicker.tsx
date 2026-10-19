@@ -10,7 +10,7 @@ import { TESTID } from "../testids";
 import { resolveComposerModel, selectActiveSessionModel } from "../../state";
 import { resolveEffort } from "./model-groups";
 import { EFFORT_KEY } from "./effort-labels";
-import css from "./ReasoningPicker.module.css";
+import { pickerChevron, pickerMenu, pickerOption, pickerTrigger } from "./picker-classes";
 
 const MENU_GAP = 8;
 const VIEWPORT_MARGIN = 12;
@@ -97,11 +97,11 @@ export function ReasoningPicker({ disabled }: { disabled: boolean }) {
   };
 
   return (
-    <div ref={rootRef} className={css.root} onKeyDown={onKeyDown}>
+    <div ref={rootRef} className="relative min-w-0 flex-none" onKeyDown={onKeyDown}>
       <button
         ref={triggerRef}
         type="button"
-        className={css.trigger}
+        className={pickerTrigger}
         data-testid={TESTID.reasoningPicker}
         data-effort={currentEffort ?? undefined}
         aria-label={currentEffort === null ? t("composer.reasoning.label") : t("composer.reasoning.aria", { effort: t(EFFORT_KEY[currentEffort]) })}
@@ -114,15 +114,15 @@ export function ReasoningPicker({ disabled }: { disabled: boolean }) {
           setOpen(!open);
         }}
       >
-        <span className={css.triggerLabel}>{currentEffort === null ? t("composer.reasoning.label") : t(EFFORT_KEY[currentEffort])}</span>
-        <IconChevronDownOutlineRegular className={clsx(css.chevron, open && css.chevronOpen)} size={12} />
+        <span className="min-w-0 truncate">{currentEffort === null ? t("composer.reasoning.label") : t(EFFORT_KEY[currentEffort])}</span>
+        <IconChevronDownOutlineRegular className={pickerChevron(open)} size={12} />
       </button>
 
       {open &&
         createPortal(
           <MenuSurface
             ref={menuRef}
-            className={css.menu}
+            className={clsx(pickerMenu, "min-w-44")}
             style={menuPos ?? MEASURE_STYLE}
             role="menu"
             aria-label={t("composer.reasoning.label")}
@@ -137,12 +137,12 @@ export function ReasoningPicker({ disabled }: { disabled: boolean }) {
                   aria-checked={selected}
                   data-testid={TESTID.reasoningOption}
                   data-effort={entry.reasoningEffort}
-                  className={clsx(css.option, selected && css.optionSelected)}
+                  className={clsx(pickerOption(selected), "h-[30px] justify-between")}
                   title={entry.description === "" ? undefined : entry.description}
                   onClick={() => choose(entry.reasoningEffort)}
                 >
-                  <span className={css.optionLabel}>{t(EFFORT_KEY[entry.reasoningEffort])}</span>
-                  <span className={css.check}>{selected && <IconCheckOutlineRegular size={14} />}</span>
+                  <span className="min-w-0 truncate">{t(EFFORT_KEY[entry.reasoningEffort])}</span>
+                  <span className="inline-flex flex-none items-center text-foreground">{selected && <IconCheckOutlineRegular size={14} />}</span>
                 </button>
               );
             })}

@@ -4,7 +4,8 @@ import type { MenuEntry } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { SkillMetadata } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import { skillSummary } from "./skill-draft";
-import css from "./AddMenu.module.css";
+import clsx from "clsx";
+import { focusRing } from "../kit";
 
 export type AddAction = "files" | "folder" | "terminal" | "goal" | "plan" | "sketch";
 
@@ -32,7 +33,7 @@ export function AddMenu({ disabled, skills, loading, plan, onOpen, onAction, onS
     ...skills.map(skill => ({ id: `skill:${skill.name}`, label: <><span>{skill.interface?.displayName ?? skill.name}</span><small>{skillSummary(skill)}</small></>, icon: <IconSkillOutlineRegular size={16} /> })),
   ];
   if (skills.length === 0) entries.push({ type: "label", id: "skills-status", text: loading ? t("composer.add.skillsLoading") : t("composer.add.skillsNone") });
-  return <Menu open={open} side="top" portal autoFocus listClassName={css.menu} items={entries}
+  return <Menu open={open} side="top" portal autoFocus listClassName="w-[min(540px,calc(100vw-32px))] max-w-[min(540px,calc(100vw-32px))] rounded-2xl [&_small]:ml-2 [&_small]:text-xs [&_small]:text-muted-foreground max-[720px]:[&_small]:ml-0 max-[720px]:[&_small]:block max-[720px]:[&_small]:leading-[18px] max-[720px]:[&_small]:whitespace-normal" items={entries}
     selectedId={plan ? "plan" : undefined} onClose={() => setOpen(false)}
     onSelect={id => {
       setOpen(false);
@@ -42,7 +43,7 @@ export function AddMenu({ disabled, skills, loading, plan, onOpen, onAction, onS
         case "files": case "folder": case "terminal": case "goal": case "plan": case "sketch": onAction(id); break;
       }
     }}
-    anchor={<button type="button" className={css.trigger} data-testid="composer-add" aria-label={t("composer.add.label")}
+    anchor={<button type="button" className={clsx("m-0 inline-flex size-7 cursor-pointer items-center justify-center rounded-full border-0 bg-accent p-0 text-muted-foreground transition-colors duration-150 hover:not-disabled:text-foreground disabled:cursor-default disabled:opacity-50 motion-reduce:transition-none", focusRing)} data-testid="composer-add" aria-label={t("composer.add.label")}
       aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => { if (!open) onOpen(); setOpen(!open); }}>
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
     </button>} />;
