@@ -88,7 +88,29 @@ test("interactive PTY supports PowerShell colors, prompts, UTF-8, workspace and 
     const cols = await resized;
     expect(cols).not.toBe(before);
     await output.locator(".xterm-helper-textarea").focus();
-    await command(output, '"width-$($Host.UI.RawUI.WindowSize.Width)"', `width-${cols}`);
+    // The narrow layout can settle through more than one xterm resize, so the shell's width is compared with the
+    // terminal's columns when its answer is parsed, not with the first resize.
+    const answered = output.evaluate((element: HTMLDivElement & { terminal?: Terminal }) => {
+      const terminal = element.terminal;
+      if (terminal === undefined) throw new Error("xterm unavailable");
+      return new Promise<{ reported: number; cols: number }>((resolve, reject) => {
+        const check = (): void => {
+          const buffer = terminal.buffer.active;
+          for (let index = 0; index < buffer.length; index += 1) {
+            const match = /^width-(\d+)$/.exec(buffer.getLine(index)?.translateToString(true).trim() ?? "");
+            if (match === null) continue;
+            subscription.dispose(); clearTimeout(timeout); resolve({ reported: Number(match[1]), cols: terminal.cols }); return;
+          }
+        };
+        const subscription = terminal.onWriteParsed(check);
+        const timeout = setTimeout(() => { subscription.dispose(); reject(new Error("The shell did not report its width")); }, 20_000);
+      });
+    });
+    await running.page.keyboard.type('"width-$($Host.UI.RawUI.WindowSize.Width)"');
+    await running.page.keyboard.press("Enter");
+    const width = await answered;
+    expect(width.reported).toBe(width.cols);
+    expect(width.cols).not.toBe(before);
     await running.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1280, 820));
     await setTheme(running.page, "light");
     await shot(running.page, "terminal-light");
