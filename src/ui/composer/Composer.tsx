@@ -30,6 +30,7 @@ import { AddMenu, type AddAction } from "./AddMenu";
 import { ContextDialog } from "./ContextDialog";
 import { SketchDialog } from "./SketchDialog";
 import { addContext, contextMessage, CONTEXT_LIMIT, type DraftContext } from "./context-draft";
+import { appendToDraft, COMPOSER_INSERT_EVENT } from "./draft-insert";
 import { userMessageParts } from "../conversation/UserBubble";
 import { userErrorText } from "../conversation/user-error";
 
@@ -203,6 +204,18 @@ export function Composer() {
     el.focus({ preventScroll: true });
     el.setSelectionRange(target, target);
   }, [draft]);
+
+  useEffect(() => {
+    const insert = (event: Event): void => {
+      if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
+      const next = appendToDraft(draftRef.current.text, event.detail);
+      setDraft((current) => ({ text: next, selected: pruneSelected(next, current.selected) }));
+      pendingCaret.current = next.length;
+      setCaret(next.length);
+    };
+    window.addEventListener(COMPOSER_INSERT_EVENT, insert);
+    return () => window.removeEventListener(COMPOSER_INSERT_EVENT, insert);
+  }, []);
 
   const trigger = connected && !composing ? detectSkillTrigger(text, caret) : null;
   const menuOpen = trigger !== null && trigger.start !== dismissedStart;
