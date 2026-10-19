@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useModalLayer } from "@deepseek-ai/dsh-client-ui-primitives";
+import { useModalLayer } from "../lib/modal-layer";
 import { useT } from "../../i18n";
 import { Button } from "../kit";
 

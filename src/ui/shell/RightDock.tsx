@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import clsx from "clsx";
 import { ArrowLeftRight, Bot, FileDiff, FolderOpen, MessagesSquare, SquareTerminal, Workflow, X, type LucideIcon } from "lucide-react";
-import { modalSelector } from "@deepseek-ai/dsh-client-ui-primitives";
+import { modalSelector } from "../lib/modal-layer";
 import { useT, type MessageKey } from "../../i18n";
 import { selectSidesOf } from "../../state";
 import { useActions, useAppSelector } from "../app-context";

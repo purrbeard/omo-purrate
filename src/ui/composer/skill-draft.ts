@@ -1,5 +1,5 @@
 import type { SkillMetadata } from "../../../shared/protocol";
-import { rankByName } from "../../dsh/primitives/rank-by-name";
+import { rankByName } from "../lib/rank-by-name";
 
 /** omo expands at most this many distinct leading `/skill:` tokens per message. */
 export const MAX_SKILLS_PER_MESSAGE = 5;

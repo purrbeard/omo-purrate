@@ -24,7 +24,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useModalLayer } from "@deepseek-ai/dsh-client-ui-primitives";
+import { useModalLayer } from "../lib/modal-layer";
 import { useT } from "../../i18n";
 import type { MessageKey, Translate } from "../../i18n";
 import { TESTID } from "../testids";

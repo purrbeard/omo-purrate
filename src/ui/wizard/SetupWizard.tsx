@@ -2,7 +2,7 @@ import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
-import { focusWithoutRing, useModalLayer } from "@deepseek-ai/dsh-client-ui-primitives";
+import { focusWithoutRing, useModalLayer } from "../lib/modal-layer";
 import { Check, ChevronDown, X } from "lucide-react";
 import { Button } from "../kit/Button";
 import { IconButton } from "../kit/IconButton";

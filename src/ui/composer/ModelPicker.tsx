@@ -11,8 +11,8 @@ import {
   Input,
   MenuGroup,
   MenuSurface,
-  observeStickyMenuGroups,
 } from "@deepseek-ai/dsh-client-ui-primitives";
+import { observeStickyMenuGroups } from "../lib/sticky-menu-groups";
 import type { Model } from "../../../shared/protocol";
 import type { ModelProfile } from "../../../shared/ipc";
 import { useT } from "../../i18n";

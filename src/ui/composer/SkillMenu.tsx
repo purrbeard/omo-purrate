@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import type { MouseEvent } from "react";
 import clsx from "clsx";
-import { MenuSurface, useAnchoredMaxHeight } from "@deepseek-ai/dsh-client-ui-primitives";
+import { MenuSurface } from "@deepseek-ai/dsh-client-ui-primitives";
+import { useAnchoredMaxHeight } from "../lib/anchored";
 import type { SkillErrorInfo, SkillScope } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { MessageKey } from "../../i18n";
