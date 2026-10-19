@@ -24,8 +24,10 @@ export interface NativeCatalog {
 
 export type TerminalStream = "stdout" | "stderr" | "system";
 
+/** Shells are keyed by thread and terminal: a thread may hold several terminals. */
 export interface TerminalChunk {
   threadId: string;
+  terminalId: string;
   sequence: number;
   stream: TerminalStream;
   text: string;
@@ -33,11 +35,13 @@ export interface TerminalChunk {
 
 export interface TerminalExit {
   threadId: string;
+  terminalId: string;
   code: number | null;
 }
 
 export interface TerminalSnapshot {
   threadId: string;
+  terminalId: string;
   sequence: number;
   windowsBuild?: number;
   cwd: string;
@@ -63,12 +67,15 @@ export interface WorkbenchBridgeApi {
   loadNativeCatalog(cwd: string, force?: boolean): Promise<NativeCatalog>;
   /** Persisted native runs whose `parentSessionId` is `threadId`, newest first, in the live wire shape. */
   loadDagRuns(cwd: string, threadId: string): Promise<DagRun[]>;
-  /** Returns the existing shell for `threadId` or starts one in `cwd`, which must be an existing absolute directory. */
-  terminalOpen(threadId: string, cwd: string): Promise<TerminalSnapshot>;
+  /**
+   * Returns the existing shell for (`threadId`, `terminalId`) or starts one in `cwd`, which must be an existing absolute
+   * directory.
+   */
+  terminalOpen(threadId: string, terminalId: string, cwd: string): Promise<TerminalSnapshot>;
   /** Writes raw keystrokes, including control characters, without adding a newline. */
-  terminalWrite(threadId: string, data: string): Promise<void>;
-  terminalResize(threadId: string, cols: number, rows: number): Promise<void>;
-  terminalKill(threadId: string): Promise<void>;
+  terminalWrite(threadId: string, terminalId: string, data: string): Promise<void>;
+  terminalResize(threadId: string, terminalId: string, cols: number, rows: number): Promise<void>;
+  terminalKill(threadId: string, terminalId: string): Promise<void>;
   onTerminalChunk(listener: (chunk: TerminalChunk) => void): () => void;
   onTerminalExit(listener: (exit: TerminalExit) => void): () => void;
 }

@@ -22,6 +22,9 @@ const EXPOSE_TERMINAL = import.meta.env.DEV || !window.location.pathname.include
 /** The bridge rejects longer writes, so a large paste is sent as consecutive slices. */
 const MAX_WRITE = 8000;
 
+/** The single shell this panel opens per thread. */
+const TERMINAL_ID = "t1";
+
 /** Shell output is raw PTY data; stderr and system notes are tinted and get CRLF line ends. */
 function streamText(stream: TerminalStream, text: string): string {
   switch (stream) {
@@ -99,12 +102,12 @@ export function TerminalPanel({ placement }: { placement: "docked" | "overlay" }
       const id = shellRef.current;
       if (id === null) return;
       for (const part of slices(data)) {
-        writesRef.current = writesRef.current.then(() => window.omo.terminalWrite(id, part)).catch(error => report(id, error));
+        writesRef.current = writesRef.current.then(() => window.omo.terminalWrite(id, TERMINAL_ID, part)).catch(error => report(id, error));
       }
     });
     const resize = terminal.onResize(({ cols, rows }) => {
       const id = shellRef.current;
-      if (id !== null) window.omo.terminalResize(id, cols, rows).catch(error => report(id, error));
+      if (id !== null) window.omo.terminalResize(id, TERMINAL_ID, cols, rows).catch(error => report(id, error));
     });
     let frame = 0;
     const sizer = new ResizeObserver(() => {
@@ -155,19 +158,19 @@ export function TerminalPanel({ placement }: { placement: "docked" | "overlay" }
     let written: number | null = null;
     const queued: { sequence: number; stream: TerminalStream; text: string }[] = [];
     const unsubscribeChunk = window.omo.onTerminalChunk(chunk => {
-      if (!active || chunk.threadId !== threadId) return;
+      if (!active || chunk.threadId !== threadId || chunk.terminalId !== TERMINAL_ID) return;
       if (written === null) { queued.push(chunk); return; }
       if (chunk.sequence <= written) return;
       written = chunk.sequence;
       terminal.write(streamText(chunk.stream, chunk.text));
     });
     const unsubscribeExit = window.omo.onTerminalExit(exit => {
-      if (!active || exit.threadId !== threadId) return;
+      if (!active || exit.threadId !== threadId || exit.terminalId !== TERMINAL_ID) return;
       exited = true;
       shellRef.current = null;
       setStatus({ threadId, running: false });
     });
-    window.omo.terminalOpen(threadId, cwd).then(snapshot => {
+    window.omo.terminalOpen(threadId, TERMINAL_ID, cwd).then(snapshot => {
       if (!active) return;
       if (snapshot.windowsBuild !== undefined) terminal.options.windowsPty = { backend: "conpty", buildNumber: snapshot.windowsBuild };
       // Replies xterm emits while parsing the replay would answer queries the shell sent long ago, so input (and
@@ -177,7 +180,7 @@ export function TerminalPanel({ placement }: { placement: "docked" | "overlay" }
         if (snapshot.running && !exited) {
           shellRef.current = threadId;
           setStatus({ threadId, running: true });
-          window.omo.terminalResize(threadId, terminal.cols, terminal.rows).catch(error => report(threadId, error));
+          window.omo.terminalResize(threadId, TERMINAL_ID, terminal.cols, terminal.rows).catch(error => report(threadId, error));
         }
         setOpening(false);
       });
@@ -204,7 +207,7 @@ export function TerminalPanel({ placement }: { placement: "docked" | "overlay" }
     shellRef.current = null;
     setStatus({ threadId: id, running: false });
     try {
-      await window.omo.terminalKill(id);
+      await window.omo.terminalKill(id, TERMINAL_ID);
       if (panelRef.current?.dataset.threadId !== id) return;
       setRevision(current => current + 1);
     } catch (error) {

@@ -6,6 +6,11 @@ export function threadId(value: unknown): string {
   return value;
 }
 
+export function terminalId(value: unknown): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,64}$/u.test(value)) throw new Error("Invalid terminal id");
+  return value;
+}
+
 export async function workspace(value: unknown): Promise<string> {
   if (typeof value !== "string" || !path.isAbsolute(value)) throw new Error("Workbench cwd must be an absolute directory");
   const cwd = await realpath(value);

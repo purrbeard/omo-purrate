@@ -108,7 +108,7 @@ class FakeBridge implements OmoBridgeApi {
     this.dagLoads.push({ cwd, threadId });
     return this.dagRuns(cwd, threadId);
   }
-  terminalOpen(threadId: string, cwd: string): ReturnType<OmoBridgeApi["terminalOpen"]> { return Promise.resolve({ threadId, cwd, sequence: 0, running: true, output: [] }); }
+  terminalOpen(threadId: string, terminalId: string, cwd: string): ReturnType<OmoBridgeApi["terminalOpen"]> { return Promise.resolve({ threadId, terminalId, cwd, sequence: 0, running: true, output: [] }); }
   terminalWrite(): ReturnType<OmoBridgeApi["terminalWrite"]> { return Promise.resolve(); }
   terminalResize(): ReturnType<OmoBridgeApi["terminalResize"]> { return Promise.resolve(); }
   terminalKill(): ReturnType<OmoBridgeApi["terminalKill"]> { return Promise.resolve(); }
