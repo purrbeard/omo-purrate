@@ -94,7 +94,7 @@ function BannerBody({ state, bridge }: { state: VisibleState; bridge: BridgeStat
       {restartError !== null && (
         <div className="mr-2 mb-1 flex flex-col gap-1">
           <InputError>{t("shell.banner.restartFailed", { message: "" }).replace(/:\s*$/, "")}</InputError>
-          <p className="m-0 text-xs leading-[18px] text-muted-foreground [overflow-wrap:anywhere]">{restartError.replace(/^-?\d+:\s*/, "")}</p>
+          <p className="m-0 text-xs leading-[18px] text-muted-foreground [overflow-wrap:anywhere]">{restartError}</p>
         </div>
       )}
     </div>

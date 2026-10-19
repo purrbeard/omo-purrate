@@ -122,7 +122,7 @@ export function Onboarding() {
         {check.kind === "failed" && (
           <div className="flex flex-col gap-1" role="alert">
             <InputError>{t("shell.onboarding.checkFailed", { message: "" }).replace(/:\s*$/, "")}</InputError>
-            <p className="m-0 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">{check.message.replace(/^-?\d+:\s*/, "")}</p>
+            <p className="m-0 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">{check.message}</p>
           </div>
         )}
         <InstallStatus installer={installer} />

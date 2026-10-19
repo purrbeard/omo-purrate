@@ -42,7 +42,7 @@ export function InstallStatus({ installer }: { installer: Installer }) {
             ? t("shell.install.failed", { code: phase.exitCode })
             : t("shell.install.failedMessage", { message: "" }).replace(/:\s*$/, "")}</InputError>
           {phase.exitCode === null && phase.message !== null && (
-            <p className="m-0 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">{phase.message.replace(/^-?\d+:\s*/, "")}</p>
+            <p className="m-0 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">{phase.message}</p>
           )}
         </div>
       );
