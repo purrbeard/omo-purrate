@@ -23,6 +23,7 @@ export function noticeContent(notice: Notice, t: Translate): { title: string | n
 }
 
 function holdMs(notice: Notice, openThread: string | null): number {
+  if (notice.pinned === true) return 0;
   if (openThread !== null || notice.code === "modelSwitch") return ACTION_HOLD_MS;
   return notice.level === "error" ? ERROR_HOLD_MS : INFO_HOLD_MS;
 }
@@ -72,8 +73,7 @@ function NoticeQueue() {
         : { actionProps: { children: t("notice.action.open"), onClick: () => { void actions.openThread(openThread); toast.close(notice.id); } } }),
     };
     if (notice.level === "error") toast.add({ ...common, type: "error", title: title ?? t("notice.title.error") });
-    else if (notice.level === "warning") toast.add({ ...common, type: "warning", ...(title === null ? {} : { title }) });
-    else toast.add({ ...common, type: "info", ...(title === null ? {} : { title }) });
+    else toast.add({ ...common, type: notice.level === "warning" ? "warning" : "info", ...(title === null ? {} : { title }) });
   }, [notice, actions, t, toast]);
 
   return null;

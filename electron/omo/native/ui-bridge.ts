@@ -17,6 +17,8 @@ export interface UiSession {
   handle: string;
   cwd: string;
   activeTurnId: string | null;
+  /** The files a running file tool call is about to change, by tool call id. */
+  filePaths?: (toolCallId: string | undefined) => string[];
 }
 
 interface Pending {
@@ -201,7 +203,8 @@ export class UiBridge {
     const itemId = toolCallId ?? `approval-${toolName}`;
     const pending: Pending = { kind: "approval", uiId, session, ...(toolCallId === undefined ? {} : { toolCallId }) };
     if (fileChange) {
-      this.serverRequest(session, pending, "item/fileChange/requestApproval", { itemId, reason: reason || null, grantRoot: null });
+      const paths = [...new Set([...(session.filePaths?.(toolCallId) ?? []), ...(subject === null ? [] : [subject])])];
+      this.serverRequest(session, pending, "item/fileChange/requestApproval", { itemId, reason: reason || null, grantRoot: null, ...(paths.length === 0 ? {} : { paths }) });
     } else {
       this.serverRequest(session, pending, "item/commandExecution/requestApproval", {
         itemId, command: subject, cwd: session.cwd, reason: reason || null, availableDecisions: APPROVAL_DECISIONS,

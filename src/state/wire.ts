@@ -3,6 +3,7 @@ import type {
   CommandApprovalParams,
   FileChangeApprovalParams,
   Model,
+  ReasoningEffort,
   RequestId,
   SkillErrorInfo,
   SkillMetadata,
@@ -200,6 +201,27 @@ export function parseNotification(notification: RpcNotification): ServerNotifica
       const { name, data } = params;
       return isString(threadId) && isString(name)
         ? { method: "extension_event", params: { type: "extension_event", threadId, name, data } } : null;
+    }
+    case "thread/settings/changed": {
+      const { model, effort, source } = params;
+      return isString(threadId) && isString(model) && (effort === null || isString(effort)) && isString(source)
+        ? { method: "thread/settings/changed", params: { threadId, model, effort: effort as ReasoningEffort | null, source } } : null;
+    }
+    case "thread/notice/added": {
+      const notice = params["notice"];
+      if (!isString(threadId) || !isObject(notice)) return null;
+      const { id, customType, display, text, timestamp } = notice;
+      return isString(id) && isString(customType) && typeof display === "boolean" && isString(text) && (timestamp === null || typeof timestamp === "number")
+        ? { method: "thread/notice/added", params: { threadId, notice: { id, customType, display, text, timestamp } } } : null;
+    }
+    case "thread/alert": {
+      const { key, level, code, pinned } = params;
+      const alertParams = params["params"];
+      const known = code === "modelFallback" || code === "transcriptWriteFailed" || code === "extensionError" || code === "compactFailed";
+      if (!isString(threadId) || !isString(key) || !known || typeof pinned !== "boolean" || !isObject(alertParams)) return null;
+      if (level !== "info" && level !== "warning" && level !== "error") return null;
+      const strings = Object.fromEntries(Object.entries(alertParams).filter((entry): entry is [string, string] => isString(entry[1])));
+      return { method: "thread/alert", params: { threadId, key, level, code, params: strings, pinned } };
     }
     case "thread/goal/updated": {
       const goal = parseGoal(params["goal"]);

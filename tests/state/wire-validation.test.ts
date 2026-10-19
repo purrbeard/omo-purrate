@@ -82,3 +82,37 @@ describe("result validation", () => {
     expect(isThread({ ...makeThread("T"), name: null, path: null })).toBe(true);
   });
 });
+
+describe("live omo notifications", () => {
+  const open = () => reduce(createInitialState(), { type: "thread/activated", threadId: "T" });
+  const apply = (state: ReturnType<typeof open>, method: string, params: unknown) =>
+    reduce(state, { type: "rpc/notification", notification: { method, params }, receivedAtMs: 1 });
+
+  it("shows a live custom message once, placed after the running turn's items", () => {
+    const notice = { id: "n1", customType: "omo-kibitzer:recall", display: true, text: "recalled", timestamp: 5 };
+    const first = apply(open(), "thread/notice/added", { threadId: "T", notice });
+    const again = apply(first, "thread/notice/added", { threadId: "T", notice });
+    expect(again.conversations["T"]?.annotations.notices).toEqual([{ ...notice, turnIndex: 0, afterItems: 0 }]);
+    expect(parseNotification({ method: "thread/notice/added", params: { threadId: "T", notice: { id: 1 } } })).toBeNull();
+  });
+
+  it("follows a model change on the thread and on the composer of the active thread only", () => {
+    const params = { threadId: "T", model: "fake/beta", effort: "high", source: "fallback" };
+    const active = apply(open(), "thread/settings/changed", params);
+    expect(active.conversations["T"]?.session).toEqual({ modelProvider: "fake", model: "beta", reasoningEffort: "high" });
+    expect(active.composer).toMatchObject({ modelId: "fake/beta", effort: "high" });
+    const other = apply(reduce(open(), { type: "thread/activated", threadId: "U" }), "thread/settings/changed", params);
+    expect(other.composer.modelId).not.toBe("fake/beta");
+    expect(parseNotification({ method: "thread/settings/changed", params: { threadId: "T", model: 4 } })).toBeNull();
+  });
+
+  it("turns an alert into one coded notice per key, pinned when asked", () => {
+    const alert = { threadId: "T", key: "transcript:1", level: "error", code: "transcriptWriteFailed", params: { error: "EACCES" }, pinned: true };
+    const state = apply(apply(open(), "thread/alert", alert), "thread/alert", alert);
+    expect(state.notices).toEqual([expect.objectContaining({ id: "alert:T:transcript:1", level: "error", code: "transcriptWriteFailed", pinned: true, threadId: "T", params: { error: "EACCES" } })]);
+    const warning = apply(open(), "thread/alert", { ...alert, key: "ext", level: "warning", code: "extensionError", pinned: false });
+    expect(warning.notices[0]).toMatchObject({ level: "warning", code: "extensionError" });
+    expect(warning.notices[0]?.pinned).toBeUndefined();
+    expect(parseNotification({ method: "thread/alert", params: { ...alert, code: "nope" } })).toBeNull();
+  });
+});

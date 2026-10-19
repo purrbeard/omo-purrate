@@ -1,6 +1,7 @@
 import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import type { RpcNotification, Turn } from "../../shared/protocol";
 import { classifyTool, TurnProjector } from "../../electron/omo/native/projector";
@@ -120,8 +121,80 @@ describe("TurnProjector", () => {
   });
 
   it("classifies omo's tools the way the removed app-server did", () => {
-    expect(["bash", "edit", "write", "apply_patch", "github__search", "read"].map(classifyTool))
-      .toEqual(["commandExecution", "fileChange", "fileChange", "fileChange", "mcpToolCall", "dynamicToolCall"]);
+    expect(["bash", "edit", "write", "apply_patch", "multiedit", "github__search", "read"].map(classifyTool))
+      .toEqual(["commandExecution", "fileChange", "fileChange", "fileChange", "fileChange", "mcpToolCall", "dynamicToolCall"]);
+  });
+
+  it("keeps a turn open through an auto-retry and continues the same turn when it succeeds", () => {
+    const { turn, sent, completed } = projector();
+    turn.beginClientTurn([{ type: "text", text: "hi", text_elements: [] }], "c1");
+    turn.handle({ type: "message_end", message: assistant([], "error", { errorMessage: "529 overloaded" }) });
+    turn.handle({ type: "auto_retry_start", attempt: 1, maxAttempts: 3, delayMs: 2000, errorMessage: "529 overloaded" });
+    turn.handle({ type: "agent_end", willRetry: true });
+    expect(turn.retryPending).toBe(true);
+    expect(sent.some((entry) => entry.method === "turn/completed")).toBe(false);
+    expect(sent.filter((entry) => entry.method === "error")).toEqual([
+      expect.objectContaining({ params: expect.objectContaining({ willRetry: true, error: expect.objectContaining({ message: expect.stringContaining("attempt 1/3") }) }) }),
+    ]);
+    const turnId = turn.activeTurnId;
+    turn.handle({ type: "auto_retry_end", success: true, attempt: 1 });
+    expect(turn.retryPending).toBe(false);
+    turn.handle({ type: "message_end", message: assistant([{ type: "text", text: "ok" }]) });
+    turn.handle({ type: "agent_end" });
+    expect(sent.filter((entry) => entry.method === "turn/started")).toHaveLength(1);
+    expect(completed()).toMatchObject({ id: turnId, status: "completed", error: null });
+    expect(sent.filter((entry) => entry.method === "error")).toHaveLength(1);
+  });
+
+  it("fails the turn with the final error when the retries run out, and agent_end alone does not end a pending retry", () => {
+    const { turn, sent, completed } = projector();
+    turn.beginClientTurn([], null);
+    turn.handle({ type: "message_end", message: assistant([], "error", { errorMessage: "529 overloaded" }) });
+    turn.handle({ type: "auto_retry_start", attempt: 1, maxAttempts: 2, delayMs: 10, errorMessage: "529 overloaded" });
+    turn.handle({ type: "agent_end" });
+    expect(sent.some((entry) => entry.method === "turn/completed")).toBe(false);
+    turn.handle({ type: "auto_retry_end", success: false, attempt: 2, finalError: "529 overloaded_error: Overloaded" });
+    turn.handle({ type: "agent_settled" });
+    expect(completed()).toMatchObject({ status: "failed", error: { message: "529 overloaded_error: Overloaded" } });
+    expect(sent.filter((entry) => entry.method === "error").at(-1)?.params).toMatchObject({ willRetry: false });
+  });
+
+  it("previews the files a running file tool changes from its arguments", () => {
+    const { turn, sent } = projector();
+    turn.handle({ type: "tool_execution_start", toolCallId: "e1", toolName: "edit", args: { path: "src/a.ts", oldText: "one", newText: "two" } });
+    turn.handle({ type: "tool_execution_start", toolCallId: "m1", toolName: "multiedit", args: { path: "src/b.ts", edits: [{ oldText: "x", newText: "y" }, { oldText: "p", newText: "q" }] } });
+    turn.handle({ type: "tool_execution_start", toolCallId: "w1", toolName: "write", args: { path: "src/c.ts", content: "hello\n" } });
+    turn.handle({ type: "tool_execution_start", toolCallId: "p1", toolName: "apply_patch", args: { input: "*** Begin Patch\n*** Update File: src/d.ts\n@@\n-a\n+b\n*** Add File: src/e.ts\n+new\n*** End Patch" } });
+    const started = sent.filter((entry) => entry.method === "item/started").map((entry) => (entry.params as { item: { id: string; type: string; changes: Array<{ path: string; diff: string }> } }).item);
+    expect(started.map((item) => item.type)).toEqual(["fileChange", "fileChange", "fileChange", "fileChange"]);
+    expect(started[0]?.changes).toEqual([expect.objectContaining({ path: "src/a.ts", diff: "-one\n+two\n" })]);
+    expect(started[1]?.changes).toEqual([expect.objectContaining({ path: "src/b.ts", diff: "-x\n+y\n-p\n+q\n" })]);
+    expect(started[2]?.changes).toEqual([expect.objectContaining({ path: "src/c.ts", diff: "+hello\n" })]);
+    expect(started[3]?.changes.map((change) => change.path)).toEqual(["src/d.ts", "src/e.ts"]);
+    expect(turn.filePathsOf("p1")).toEqual(["src/d.ts", "src/e.ts"]);
+    expect(turn.filePathsOf("missing")).toEqual([]);
+  });
+
+  it("carries tool-result images into the tool item: kept files as file URLs, inline data as data URLs", () => {
+    const { turn, completed } = projector();
+    turn.handle({ type: "tool_execution_start", toolCallId: "r1", toolName: "read", args: { path: "shot.png" } });
+    turn.handle({
+      type: "tool_execution_end", toolCallId: "r1",
+      result: { content: [
+        { type: "text", text: "image" },
+        { type: "image_ref", mimeType: "image/png", byteLength: 10, ref: { toolCallId: "r1", contentIndex: 1 }, path: path.resolve("/media/a b.png") },
+        { type: "image_ref", mimeType: "image/png", byteLength: 10, ref: { toolCallId: "r1", contentIndex: 2 }, unavailableReason: "image_too_large" },
+        { type: "image", mimeType: "image/jpeg", data: "QUJD" },
+      ] },
+    });
+    turn.handle({ type: "agent_settled" });
+    const item = completed().items[0];
+    expect(item).toMatchObject({ type: "dynamicToolCall", tool: "read" });
+    expect((item as { contentItems: unknown }).contentItems).toEqual([
+      { type: "inputText", text: "image" },
+      { type: "inputImage", imageUrl: pathToFileURL(path.resolve("/media/a b.png")).href },
+      { type: "inputImage", imageUrl: "data:image/jpeg;base64,QUJD" },
+    ]);
   });
 });
 

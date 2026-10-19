@@ -15,6 +15,7 @@ import type {
   RpcServerRequest,
   SkillMetadata,
   Thread,
+  ThreadAlertCode,
   ThreadSessionResult,
   ThreadStatus,
   Turn,
@@ -45,6 +46,10 @@ interface Loaded {
   projector: TurnProjector;
   holding: NativeRecord[] | null;
   goal: string | null;
+  /** Ids of custom_message entries already shown live, so one entry never produces two notices. */
+  noticeIds: Set<string>;
+  /** `extensionPath\0event` pairs already reported, so a failing extension warns once. */
+  extensionErrors: Set<string>;
 }
 
 const DEFAULT_STOP_TIMEOUTS: StopTimeouts = { afterStdinEnd: 2_000, afterSigterm: 3_000 };
@@ -184,7 +189,7 @@ export class NativeAppServerClient {
       const info = params(await this.connection.send("get_protocol_info", {}, startTimeoutMs));
       if (info["mode"] !== "multi") throw new Error(`omo answered in ${String(info["mode"])} mode, not multi-session`);
       try {
-        await this.connection.send("set_client_info", { width: 120, capabilities: ["extension_events", "question"] }, startTimeoutMs);
+        await this.connection.send("set_client_info", { width: 120, capabilities: ["extension_events", "question", "media_placeholders"] }, startTimeoutMs);
       } catch (error) {
         if (!(error instanceof NativeCommandError)) throw error;
       }
@@ -342,7 +347,10 @@ export class NativeAppServerClient {
   private apply(loaded: Loaded, record: NativeRecord): void {
     switch (record.type) {
       case "extension_ui_request":
-        this.ui.handle({ threadId: loaded.threadId, handle: loaded.handle, cwd: loaded.cwd, activeTurnId: loaded.projector.activeTurnId }, record);
+        this.ui.handle({
+          threadId: loaded.threadId, handle: loaded.handle, cwd: loaded.cwd, activeTurnId: loaded.projector.activeTurnId,
+          filePaths: (toolCallId) => loaded.projector.filePathsOf(toolCallId),
+        }, record);
         return;
       case "question_resolved":
         this.ui.resolved(record);
@@ -356,22 +364,75 @@ export class NativeAppServerClient {
           const name = typeof entry["name"] === "string" && entry["name"].trim() !== "" ? entry["name"] : undefined;
           this.emit({ method: "thread/name/updated", params: name === undefined ? { threadId: loaded.threadId } : { threadId: loaded.threadId, threadName: name } });
         }
+        if (isRecord(entry) && entry["type"] === "custom_message") this.showCustomMessage(loaded, entry);
         return;
       }
+      case "model_changed": {
+        const model = isRecord(record["model"]) ? record["model"] : {};
+        if (typeof model["provider"] !== "string" || typeof model["id"] !== "string") return;
+        const id = `${model["provider"]}/${model["id"]}`;
+        const level = record["thinkingLevel"];
+        const source = typeof record["source"] === "string" ? record["source"] : "set";
+        this.emit({
+          method: "thread/settings/changed",
+          params: { threadId: loaded.threadId, model: id, effort: typeof level === "string" ? (level === "off" ? "none" : level) : null, source },
+        });
+        if (source === "fallback") this.alert(loaded, `fallback:${id}`, "info", "modelFallback", { model: id });
+        return;
+      }
+      case "transcript_write_failed":
+        this.alert(loaded, `transcript:${Date.now()}`, "error", "transcriptWriteFailed", { error: typeof record["errorMessage"] === "string" ? record["errorMessage"] : "unknown error" }, true);
+        return;
+      case "extension_error": {
+        const extension = typeof record["extensionPath"] === "string" ? record["extensionPath"] : "unknown";
+        const event = typeof record["event"] === "string" ? record["event"] : "unknown";
+        const key = `${extension}\u0000${event}`;
+        if (loaded.extensionErrors.has(key)) return;
+        loaded.extensionErrors.add(key);
+        this.alert(loaded, `extension:${key}`, "warning", "extensionError", { extension, event, error: typeof record["error"] === "string" ? record["error"] : "unknown error" });
+        return;
+      }
+      case "commands_changed":
+      case "loaded_surfaces_changed":
+        this.emit({ method: "skills/changed", params: {} });
+        return;
+      case "agent_end":
+        loaded.projector.handle(record);
+        void this.refreshGoal(loaded);
+        return;
+      case "agent_settled":
+        loaded.projector.handle(record);
+        void this.refreshGoal(loaded);
+        this.emit({ method: "mcpServer/startupStatus/updated", params: { threadId: loaded.threadId } });
+        return;
+      case "tool_execution_end":
+        loaded.projector.handle(record);
+        void this.refreshGoal(loaded);
+        return;
       case "session_closed":
       case "session_parked":
         this.forget(loaded);
         this.emit({ method: "thread/status/changed", params: { threadId: loaded.threadId, status: { type: "notLoaded" } } });
         return;
-      case "agent_end":
-      case "agent_settled":
-      case "tool_execution_end":
-        loaded.projector.handle(record);
-        void this.refreshGoal(loaded);
-        return;
       default:
         loaded.projector.handle(record);
     }
+  }
+
+  private alert(loaded: Loaded, key: string, level: "info" | "warning" | "error", code: ThreadAlertCode, params: Record<string, string>, pinned = false): void {
+    this.emit({ method: "thread/alert", params: { threadId: loaded.threadId, key, level, code, params, pinned } });
+  }
+
+  private showCustomMessage(loaded: Loaded, entry: JsonObject): void {
+    const id = entry["id"];
+    const customType = entry["customType"];
+    if (typeof id !== "string" || typeof customType !== "string" || entry["display"] === false || loaded.noticeIds.has(id)) return;
+    loaded.noticeIds.add(id);
+    const content = entry["content"];
+    const text = typeof content === "string" ? content : Array.isArray(content)
+      ? content.map((block) => (isRecord(block) && block["type"] === "text" && typeof block["text"] === "string" ? block["text"] : "")).filter((part) => part !== "").join("\n") : "";
+    const at = typeof entry["timestamp"] === "string" ? Date.parse(entry["timestamp"]) : typeof entry["timestamp"] === "number" ? entry["timestamp"] : Number.NaN;
+    this.emit({ method: "thread/notice/added", params: { threadId: loaded.threadId, notice: { id, customType, display: true, text, timestamp: Number.isFinite(at) ? at : null } } });
   }
 
   private release(loaded: Loaded): void {
@@ -401,6 +462,8 @@ export class NativeAppServerClient {
       projector: new TurnProjector(threadId, cwd, (notification) => this.emit(notification)),
       holding: null,
       goal: null,
+      noticeIds: new Set(),
+      extensionErrors: new Set(),
     };
     this.sessions.set(threadId, loaded);
     this.byHandle.set(handle, loaded);
@@ -411,7 +474,9 @@ export class NativeAppServerClient {
     const data = params(await this.connection.send("open_session", { promptSurface: "app", ...fields }, this.options.startTimeoutMs ?? 60_000));
     const handle = data["sessionId"];
     if (typeof handle !== "string") throw new Error("omo open_session returned no session handle");
-    return this.register(handle, params(data["state"]), fallbackCwd);
+    const loaded = this.register(handle, params(data["state"]), fallbackCwd);
+    this.emit({ method: "mcpServer/startupStatus/updated", params: { threadId: loaded.threadId } });
+    return loaded;
   }
 
   private load(threadId: string): Promise<Loaded> {
@@ -581,7 +646,9 @@ export class NativeAppServerClient {
   private async compact(threadId: string): Promise<Record<string, never>> {
     const loaded = await this.load(threadId);
     this.command(loaded.handle, "compact", {}, PROMPT_TIMEOUT_MS).catch((error: unknown) => {
-      console.warn(`[omo-ui] compaction of ${threadId} failed: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[omo-ui] compaction of ${threadId} failed: ${message}`);
+      this.alert(loaded, `compact:${Date.now()}`, "error", "compactFailed", { error: message });
     });
     return {};
   }
@@ -753,6 +820,8 @@ export class NativeAppServerClient {
     if (loaded === undefined || active === null) return {};
     if (active !== turnId) throw new RpcRequestError(-32600, `Turn id mismatch: expected ${turnId} but active turn is ${active}`);
     loaded.projector.markInterrupted();
+    // A pending auto-retry is cancelled first; abort alone would let omo schedule the next attempt.
+    if (loaded.projector.retryPending) await this.command(loaded.handle, "abort_retry");
     await this.command(loaded.handle, "abort");
     // An aborted run closes its permission dialogs without a record, so their cards are withdrawn here.
     this.ui.dropSession(loaded.handle);
