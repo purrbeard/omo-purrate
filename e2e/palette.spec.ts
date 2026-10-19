@@ -66,6 +66,7 @@ test("the palette Settings command opens settings and yields its modal layer", a
 test("Ctrl+Shift+P opens the palette and arrows change the active command", async () => {
   const { page } = launched;
   await page.keyboard.press(`${modifier}+Shift+p`);
+  await expect(byTestId(page, TESTID.paletteInput)).toBeFocused();
   const options = byTestId(page, TESTID.paletteEntry);
   await expect(options.first()).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("ArrowDown");
