@@ -328,6 +328,20 @@ export interface McpServerStatus {
   toolCount?: number;
 }
 
+/** What one session has spent: `tokens` and `cost` are the whole session, `contextUsage` the live window. */
+export interface SessionStats {
+  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
+  cost: number;
+  /** Absent when omo has no model or context window for the session; `tokens`/`percent` are null right after a compaction. */
+  contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | null;
+}
+
+/** Fast mode is the ChatGPT Subscription `priority` service tier; `serviceTier` is null when no tier applies. */
+export interface FastModeState {
+  enabled: boolean;
+  serviceTier: string | null;
+}
+
 /** A secret-free descriptor of one stored provider account; `name` is the immutable id, `displayName` a label. */
 export interface ProviderAccount {
   name: string;
@@ -347,6 +361,12 @@ export interface ClientRequestMap {
     result: { data: McpServerStatus[]; nextCursor: string | null };
   };
   "thread/goal/get": { params: { threadId: string }; result: { goal: WireGoal | null } };
+  /** omo's `get_session_stats`: the session's tokens, cost and live context-window usage. */
+  "thread/stats": { params: { threadId: string }; result: { stats: SessionStats } };
+  "thread/fastMode/get": { params: { threadId: string }; result: { fastMode: FastModeState } };
+  "thread/fastMode/set": { params: { threadId: string; enabled: boolean }; result: { fastMode: FastModeState } };
+  /** omo writes the session as one HTML file at `outputPath` (its `export_html`). */
+  "thread/export": { params: { threadId: string; outputPath: string }; result: { path: string } };
   "thread/goal/clear": { params: { threadId: string }; result: Record<string, never> };
   "thread/compact/start": { params: { threadId: string }; result: Record<string, never> };
   "thread/goal/set": { params: { threadId: string; objective?: string | null; status?: "active" | "paused" | "complete"; tokenBudget?: number | null }; result: { goal: WireGoal } };
@@ -411,6 +431,10 @@ export const CLIENT_METHODS = [
   "mcpServerStatus/list",
   "thread/goal/get",
   "thread/goal/clear",
+  "thread/stats",
+  "thread/fastMode/get",
+  "thread/fastMode/set",
+  "thread/export",
   "thread/compact/start",
   "thread/goal/set",
   "extension_request",

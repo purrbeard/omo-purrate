@@ -54,6 +54,7 @@ class CommandFailure extends Error {
 class Interrupted extends Error {}
 
 const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+const escapeHtml = (value) => String(value).replace(/[&<>]/g, (char) => (char === "&" ? "&amp;" : char === "<" ? "&lt;" : "&gt;"));
 const nowSec = () => Date.now() / 1000;
 
 function write(frame) {
@@ -453,7 +454,7 @@ function reasoningDelta(turn, delta) {
 function closeAgentMessage(record, turn, item, stopReason) {
   finishItem(turn, item, stopReason);
   const entry = assistantEntry([{ type: "text", text: item.text }], stopReason);
-  if (item.text === "echo: usage-turn") entry.message.usage = { ...zeroUsage(), input: 24000, output: 1000, totalTokens: 25000 };
+  if (item.text === "echo: usage-turn") entry.message.usage = { ...zeroUsage(), input: 24000, output: 1000, totalTokens: 25000, cost: { input: 0.05, output: 0.02, cacheRead: 0, cacheWrite: 0, total: 0.07 } };
   recordEntry(record, entry);
 }
 
@@ -981,6 +982,41 @@ function skillCommands(record) {
   }));
 }
 
+const CONTEXT_WINDOW = 128000;
+
+/** Sums the session file's tokens and cost, like omo's `get_session_stats` over the whole transcript. */
+function sessionUsage(record) {
+  const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: 0 };
+  let used = false;
+  let text = "";
+  try {
+    text = readFileSync(record.thread.path, "utf8");
+  } catch {
+    text = "";
+  }
+  for (const line of text.split("\n")) {
+    if (line.trim() === "") continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const usage = entry?.message?.usage ?? (entry?.type === "compaction" ? entry.usage : undefined);
+    if (!isRecord(usage)) continue;
+    used = true;
+    totals.input += Number(usage.input ?? 0);
+    totals.output += Number(usage.output ?? 0);
+    totals.cacheRead += Number(usage.cacheRead ?? 0);
+    totals.cacheWrite += Number(usage.cacheWrite ?? 0);
+    totals.totalTokens += Number(usage.totalTokens ?? 0);
+    totals.cost += Number(usage.cost?.total ?? 0);
+  }
+  // Like omo: the live window is unknown right after a compaction.
+  const compaction = /"type":"compaction"/.test(text);
+  return { ...totals, contextUsageTokens: used && !compaction ? totals.totalTokens : null };
+}
+
 function sessionState(record) {
   return {
     sessionId: record.thread.id,
@@ -1164,6 +1200,35 @@ async function handleCommand(frame, record, reply) {
     case "get_commands":
       reply({ commands: skillCommands(record) });
       return;
+    case "get_session_stats": {
+      const totals = sessionUsage(record);
+      reply({
+        sessionFile: record.thread.path, sessionId: record.thread.id,
+        tokens: { input: totals.input, output: totals.output, cacheRead: totals.cacheRead, cacheWrite: totals.cacheWrite, total: totals.totalTokens },
+        cost: totals.cost,
+        contextUsage: { tokens: totals.contextUsageTokens, contextWindow: CONTEXT_WINDOW, percent: totals.contextUsageTokens === null ? null : Math.round(totals.contextUsageTokens / CONTEXT_WINDOW * 100) },
+      });
+      return;
+    }
+    case "get_fast_mode":
+      reply({ enabled: record.fastMode === true, serviceTier: record.fastMode === true ? "priority" : null });
+      return;
+    case "set_fast_mode": {
+      if (typeof frame.enabled !== "boolean") throw new CommandFailure("set_fast_mode requires a boolean 'enabled' field.", "invalid_params");
+      // Like omo: only a ChatGPT Subscription model carries the priority tier.
+      if (!record.settings.provider.toLowerCase().includes("chatgpt")) throw new CommandFailure("Fast mode is only available for ChatGPT Subscription models.", "fast_mode_unsupported");
+      record.fastMode = frame.enabled;
+      event(record, "service_tier_changed", { ...(record.fastMode ? { tier: "priority" } : {}), fastMode: record.fastMode });
+      reply({ enabled: record.fastMode, serviceTier: record.fastMode ? "priority" : null, provider: record.settings.provider, modelId: record.settings.modelId });
+      return;
+    }
+    case "export_html": {
+      const target = typeof frame.outputPath === "string" && frame.outputPath !== "" ? frame.outputPath : join(home, "export.html");
+      const title = record.thread.name ?? record.thread.id;
+      writeFileSync(target, `<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body><pre>${escapeHtml(readFileSync(record.thread.path, "utf8"))}</pre></body></html>\n`);
+      reply({ path: target });
+      return;
+    }
     case "get_loaded_surfaces":
       reply({ extensions: [], mcpServers: process.env.FAKE_OMO_MCP_EMPTY === "1" ? [] : [
         { name: "demo-tools", toolCount: 3, status: "connected", authStatus: "unsupported" },

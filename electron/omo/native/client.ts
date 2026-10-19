@@ -7,12 +7,14 @@ import type {
   ClientMethod,
   ClientParams,
   ClientResult,
+  FastModeState,
   McpServerStatus,
   Model,
   ReasoningEffort,
   RequestId,
   RpcNotification,
   RpcServerRequest,
+  SessionStats,
   SkillMetadata,
   Thread,
   ThreadSessionResult,
@@ -102,6 +104,31 @@ function wireModel(model: JsonObject, defaultModel: { provider: string; id: stri
 
 function skillScope(scope: unknown): SkillMetadata["scope"] {
   return scope === "user" ? "user" : scope === "project" ? "repo" : "system";
+}
+
+const count = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+
+/** omo's `get_session_stats` payload; `contextUsage` is dropped when it carries no usable context window. */
+function wireSessionStats(data: JsonObject): SessionStats {
+  const tokens = params(data["tokens"]);
+  const context = data["contextUsage"];
+  const window = isRecord(context) ? context["contextWindow"] : undefined;
+  return {
+    tokens: { input: count(tokens["input"]), output: count(tokens["output"]), cacheRead: count(tokens["cacheRead"]), cacheWrite: count(tokens["cacheWrite"]), total: count(tokens["total"]) },
+    cost: count(data["cost"]),
+    contextUsage: isRecord(context) && typeof window === "number" && window > 0
+      ? {
+        tokens: typeof context["tokens"] === "number" ? context["tokens"] : null,
+        contextWindow: window,
+        percent: typeof context["percent"] === "number" ? context["percent"] : null,
+      }
+      : null,
+  };
+}
+
+/** `get_fast_mode` / `set_fast_mode`: omo reports the tier just recorded, null when none applies. */
+function wireFastMode(data: JsonObject): FastModeState {
+  return { enabled: data["enabled"] === true, serviceTier: typeof data["serviceTier"] === "string" ? data["serviceTier"] : null };
 }
 
 function wireGoal(threadId: string, stored: unknown): WireGoal | null {
@@ -273,6 +300,14 @@ export class NativeAppServerClient {
         return this.compact(requiredString(input, "threadId"));
       case "thread/goal/get":
         return { goal: await this.readGoal(requiredString(input, "threadId")) };
+      case "thread/stats":
+        return this.sessionStats(requiredString(input, "threadId"));
+      case "thread/fastMode/get":
+        return this.fastMode(requiredString(input, "threadId"));
+      case "thread/fastMode/set":
+        return this.setFastMode(requiredString(input, "threadId"), input);
+      case "thread/export":
+        return this.exportThread(requiredString(input, "threadId"), requiredString(input, "outputPath"));
       case "thread/goal/set":
         return this.setGoal(requiredString(input, "threadId"), input);
       case "thread/goal/clear":
@@ -517,6 +552,31 @@ export class NativeAppServerClient {
     const thread = { ...await this.thread(loaded.threadId), ...(name === null ? {} : { name }), forkedFromId: threadId };
     this.emit({ method: "thread/started", params: { thread } });
     return this.sessionResult(loaded, thread);
+  }
+
+  /** omo's `get_session_stats` for one loaded thread: the gauge's tokens, cost and context window. */
+  private async sessionStats(threadId: string): Promise<{ stats: SessionStats }> {
+    const loaded = await this.load(threadId);
+    return { stats: wireSessionStats(params(await this.command(loaded.handle, "get_session_stats"))) };
+  }
+
+  private async fastMode(threadId: string): Promise<{ fastMode: FastModeState }> {
+    const loaded = await this.load(threadId);
+    return { fastMode: wireFastMode(params(await this.command(loaded.handle, "get_fast_mode"))) };
+  }
+
+  private async setFastMode(threadId: string, input: JsonObject): Promise<{ fastMode: FastModeState }> {
+    const enabled = input["enabled"];
+    if (typeof enabled !== "boolean") throw new RpcRequestError(-32602, "Invalid params: enabled must be a boolean");
+    const loaded = await this.load(threadId);
+    return { fastMode: wireFastMode(params(await this.command(loaded.handle, "set_fast_mode", { enabled }))) };
+  }
+
+  /** omo writes the session as one self-contained HTML file; the caller picks the path. */
+  private async exportThread(threadId: string, outputPath: string): Promise<{ path: string }> {
+    const loaded = await this.load(threadId);
+    const data = params(await this.command(loaded.handle, "export_html", { outputPath }, PROMPT_TIMEOUT_MS));
+    return { path: typeof data["path"] === "string" && data["path"] !== "" ? data["path"] : outputPath };
   }
 
   private async setName(threadId: string, name: string): Promise<Record<string, never>> {

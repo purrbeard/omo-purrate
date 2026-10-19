@@ -405,6 +405,42 @@ describe("fake omo Native RPC host through the app's adapter", () => {
     expect(await client.close()).toBe(0);
   });
 
+  it("reports session stats, the fast-mode tier and ChatGPT-only refusals", async () => {
+    const box = await sandbox();
+    const client = await box.launch();
+    const threadId = await client.startThread(box.dir);
+
+    expect(await client.request("thread/stats", { threadId })).toEqual({
+      stats: {
+        tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0,
+        contextUsage: { tokens: null, contextWindow: 128000, percent: null },
+      },
+    });
+    await client.waitTurnCompleted(await client.startTurn(threadId, "usage-turn"));
+    expect(await client.request("thread/stats", { threadId })).toEqual({
+      stats: {
+        tokens: { input: 24000, output: 1000, cacheRead: 0, cacheWrite: 0, total: 25000 }, cost: 0.07,
+        contextUsage: { tokens: 25000, contextWindow: 128000, percent: 20 },
+      },
+    });
+
+    expect(await client.request("thread/fastMode/get", { threadId })).toEqual({ fastMode: { enabled: false, serviceTier: null } });
+    expect(await client.rejection("thread/fastMode/set", { threadId, enabled: true }))
+      .toMatchObject({ message: "Fast mode is only available for ChatGPT Subscription models." });
+    expect(await client.rejection("thread/fastMode/set", { threadId, enabled: "yes" as never })).toMatchObject({ code: -32602 });
+    await client.request("thread/settings/update", { threadId, model: "chatgpt-subscription/gpt-6-sol-fast" });
+    expect(await client.request("thread/fastMode/set", { threadId, enabled: true })).toEqual({ fastMode: { enabled: true, serviceTier: "priority" } });
+    expect(await client.request("thread/fastMode/get", { threadId })).toEqual({ fastMode: { enabled: true, serviceTier: "priority" } });
+    expect(await client.request("thread/fastMode/set", { threadId, enabled: false })).toEqual({ fastMode: { enabled: false, serviceTier: null } });
+
+    const target = join(box.dir, "exported-session.html");
+    expect(await client.request("thread/export", { threadId, outputPath: target })).toEqual({ path: target });
+    const html = await readFile(target, "utf8");
+    expect(html).toContain("<!DOCTYPE html>");
+    expect(html).toContain("echo: usage-turn");
+    expect(await client.close()).toBe(0);
+  });
+
   it("interrupts the slow scenario", async () => {
     const box = await sandbox();
     const client = await box.launch();
