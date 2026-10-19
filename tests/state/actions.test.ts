@@ -302,6 +302,7 @@ class FakeBridge implements OmoBridgeApi {
   async getPreferences(): Promise<Preferences> {
     return this.preferences;
   }
+  async setZoomFactor(): Promise<void> {}
   async setPreferences(patch: Partial<Preferences>): Promise<Preferences> {
     this.preferences = { ...this.preferences, ...patch };
     return this.preferences;

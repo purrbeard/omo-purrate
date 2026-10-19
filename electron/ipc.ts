@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { app, clipboard, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow as ElectronWindow, clipboard, dialog, ipcMain, shell } from "electron";
 import type { BrowserWindow, OpenDialogOptions, SaveDialogOptions } from "electron";
 import { ENV, IPC, PERMISSION_PRESETS } from "../shared/ipc";
 import type { PermissionPreset } from "../shared/ipc";
@@ -488,6 +488,10 @@ export function registerIpc(deps: IpcDeps): () => void {
     }),
     [IPC.getPreferences]: () => prefs.get(),
     [IPC.setPreferences]: (_event, patch) => prefs.set(patch),
+    [IPC.setZoomFactor]: (event, factor) => {
+      if (typeof factor !== "number" || !Number.isFinite(factor) || factor < 0.8 || factor > 1.5) throw new RangeError("factor must be between 0.8 and 1.5");
+      ElectronWindow.fromWebContents(event.sender)?.webContents.setZoomFactor(factor);
+    },
     [IPC.notify]: (_event, payload) => {
       if (!isRecord(payload)) throw new TypeError("payload must be an object");
       const { title, body, threadId } = payload;
