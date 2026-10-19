@@ -28,6 +28,8 @@ import { APP_SHORTCUTS, rendererShortcut, shortcutKeys } from "./ui/shortcuts";
 import { threadTitle } from "./ui/conversation/format";
 import { TESTID } from "./ui/testids";
 import { selectPinnedThreads } from "./state/selectors";
+import { TerminalDrawerSlot } from "./ui/terminal/TerminalDrawerSlot";
+import { toggleTerminal } from "./ui/terminal/terminal-layout";
 import type { ThreadSummary } from "./state";
 
 // Surfaces that are closed at startup load on first use, keeping them out of the entry chunk.
@@ -45,6 +47,7 @@ function MainPane() {
       <ConversationPane />
       <NewThreadBar />
       <Composer />
+      <TerminalDrawerSlot />
     </>
   );
 }
@@ -117,7 +120,7 @@ function Shell() {
       case "toggle-agents": uiState.toggleWork("agents"); break;
       case "toggle-workflow": uiState.toggleWork("graph"); break;
       case "toggle-files": uiState.toggleRightTab("files"); break;
-      case "toggle-terminal": uiState.toggleRightTab("terminal"); break;
+      case "toggle-terminal": toggleTerminal(selectMainThreadId(store.getState())); break;
       case "toggle-side-chat": actions.setSidePanel(shownTab(uiState.get()) !== "btw"); break;
       case "keyboard-shortcuts": uiState.setSettingsOpen(true, "keybindings"); break;
     }
