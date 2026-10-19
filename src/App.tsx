@@ -203,7 +203,9 @@ function Shell() {
       {settingsOpen && <Suspense fallback={null}><SettingsDialog /></Suspense>}
       {paletteOpen && <CommandPalette entries={paletteEntries} onClose={() => setPaletteOpen(false)} />}
       {onboardingOpen && <Suspense fallback={null}><SetupWizard /></Suspense>}
-      {ui.sessionImportOpen && !onboardingOpen && <Suspense fallback={null}><SessionImportDialog /></Suspense>}
+      {/* Candidates come from omo's own sessions folder, which is known only once omo has initialized; loading earlier
+          reads the default folder and the list comes up short. */}
+      {ui.sessionImportOpen && !onboardingOpen && bridgeState === "connected" && <Suspense fallback={null}><SessionImportDialog /></Suspense>}
       <ThreadNotifications />
       <NoticeToasts />
     </>
