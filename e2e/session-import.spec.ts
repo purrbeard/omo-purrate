@@ -98,6 +98,35 @@ test("first launch imports only the sessions a person started, and never adds a 
   } finally { await running.close(); }
 });
 
+test("a thread started in OmO (Alpha) is offered, selected and imported from Alpha's own session store", async () => {
+  const home = tempDir("alpha-import-home"), userData = tempDir("alpha-import-user"), alphaHome = tempDir("alpha-desktop-home");
+  const ours = seedStore(home);
+  const id = "01a15967-97f9-7000-b3ab-24147e1dc9cf";
+  const runtime = path.join(alphaHome, "userdata", "omo-sessions", "omo-23f6353a0c095a66920e90e97a78f060");
+  mkdirSync(runtime, { recursive: true });
+  const header = { type: "session", version: 3, id, timestamp: "2026-10-20T13:02:28.114Z", cwd: path.resolve("/work/lift") };
+  writeFileSync(path.join(runtime, `thread-${id}-hash-1792501324079-1.jsonl`), [header, { type: "model_change", id: "m0", parentId: null, provider: "fake", modelId: "fake-1" }].map(line => JSON.stringify(line)).join("\n") + "\n");
+  writeFileSync(path.join(runtime, `thread-${id}-hash-1792501348101-2.jsonl`), [header,
+    { type: "custom", customType: "rpc_client_message_admission", id: "a0", parentId: null, data: { clientMessageId: "4f1c0e5e-1f1f-4f1f-8f1f-1f1f1f1f1f1f", durableSessionId: id } },
+    { type: "message", id: "u0", parentId: "a0", message: { role: "user", content: [{ type: "text", text: "make an intro animation" }] } },
+  ].map(line => JSON.stringify(line)).join("\n") + "\n");
+  writeFileSync(path.join(userData, "preferences.json"), JSON.stringify({ locale: "en", onboardingCompleted: true, sessionImportCompleted: false }));
+  const running = await launchApp({ omo: "fake", fakeHome: home, userData, extraEnv: { OMO_UI_ALPHA_HOME: alphaHome } });
+  try {
+    const dialog = running.page.getByTestId("session-import-dialog");
+    await expect(dialog).toBeVisible();
+    const rows = dialog.locator(`[data-testid="session-import-row"][data-session-id="${id}"]`);
+    await expect(rows).toHaveCount(1);
+    await expect(rows).toContainText("Started in OmO (Alpha)");
+    await expect(rows.getByRole("checkbox")).toBeChecked();
+    await expect(dialog.locator(`[data-testid="session-import-row"][data-session-id="${ours.tui!.id}"]`).getByRole("checkbox")).toBeChecked();
+    await running.page.getByTestId("session-import-confirm").click();
+    await expect(dialog).toHaveCount(0);
+    const stored = await running.page.evaluate(() => window.omo.getPreferences());
+    expect(stored.managedThreadIds).toContain(id);
+  } finally { await running.close(); }
+});
+
 test("skipping imports nothing, and the import stays reachable from the native sessions dialog", async () => {
   const home = tempDir("import-skip-home"), userData = tempDir("import-skip-user");
   const seeds = seedStore(home);

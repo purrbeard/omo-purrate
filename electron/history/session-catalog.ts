@@ -41,6 +41,7 @@ function evidence(record: SessionRecord): ImportEvidence {
   const first = (record.preview ?? "").trimStart();
   if (record.parentSession !== null || SIDE_CHAT_FIRST_MESSAGE.test(first)) return "child";
   const recorded = record.facts.evidence;
+  if (record.source === "alpha" && (recorded === "other-client" || recorded === null)) return "alpha";
   if (recorded === "terminal" && MACHINE_FIRST_MESSAGES.some((pattern) => pattern.test(first))) return "automation";
   return recorded ?? "terminal";
 }
@@ -63,7 +64,7 @@ export function toCandidate(record: SessionRecord, places: Places): ImportCandid
     defects: [...record.facts.defects],
     location: where,
     importable,
-    recommended: importable && where === null && (kind === "app" || kind === "terminal"),
+    recommended: importable && where === null && (kind === "app" || kind === "alpha" || kind === "terminal"),
   };
 }
 

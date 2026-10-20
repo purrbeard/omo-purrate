@@ -204,7 +204,7 @@ export class NativeAppServerClient {
   constructor(private readonly options: AppServerClientOptions) {
     this.agentDir = options.agentDir ?? path.join(options.cwd, ".omo", "agent");
     this.stateDir = options.stateDir ?? path.join(os.tmpdir(), "omo-ui-native");
-    this.index = new SessionIndex(path.join(this.agentDir, "sessions"));
+    this.index = new SessionIndex(path.join(this.agentDir, "sessions"), options.extraSessionDirs);
     this.connection = new NativeConnection({
       command: options.command,
       args: options.args,

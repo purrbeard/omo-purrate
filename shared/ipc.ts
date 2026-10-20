@@ -106,7 +106,7 @@ export type SendKeyPreference = "enter" | "ctrlEnter";
 export type ThreadOrigin = "user" | "agent" | "dori" | "unknown";
 
 /** Creation evidence for a session offered for import: "app" and "terminal" were opened by a person. */
-export type ImportEvidence = "app" | "terminal" | "automation" | "other-client" | "child" | "empty";
+export type ImportEvidence = "app" | "alpha" | "terminal" | "automation" | "other-client" | "child" | "empty";
 export type ImportLocation = "temp" | "quarantine" | "hidden";
 
 export interface ImportCandidate {
@@ -732,6 +732,8 @@ export const ENV = {
   omoAutoUpdate: "OMO_UI_OMO_AUTO_UPDATE",
   /** omo's agent directory (sessions, goal stores) when it is not `<home>/.omo/agent` (tests and QA). */
   qaAgentDir: "OMO_UI_QA_AGENT_DIR",
+  /** OmO (Alpha)'s data home whose `userdata/omo-sessions` store is listed beside omo's sessions; "" turns it off (tests and QA). */
+  alphaHome: "OMO_UI_ALPHA_HOME",
   /** The ssh client config the Servers panel reads instead of `~/.ssh/config` (tests and QA). */
   sshConfig: "OMO_UI_SSH_CONFIG",
   /** The ssh binary the Servers panel runs instead of `ssh` on PATH; a `.mjs` runs under Electron's Node (tests and QA). */

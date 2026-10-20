@@ -26,6 +26,7 @@ import { loadHeaderLinks } from "./history/thread-links";
 import { loadThreadOrigins } from "./history/thread-origins";
 import { importPage, toCandidate } from "./history/session-catalog";
 import { SessionIndex } from "./omo/native/threads";
+import { alphaSessionRoots } from "./omo/native/alpha-sessions";
 import { SessionHolders } from "./omo/session-holders";
 import { RpcRequestError } from "./omo/app-server-client";
 import { runInstaller } from "./omo/installer";
@@ -101,16 +102,21 @@ function requireString(value: unknown, name: string): string {
   return value;
 }
 
-/** Shared by history:load and the workbench handlers: a renderer-supplied session path must stay inside the omo sessions directory. */
+/**
+ * Shared by history:load and the workbench handlers: a renderer-supplied session path must stay inside the omo sessions
+ * directory or an OmO (Alpha) session store.
+ */
 export function createSessionFileResolver(supervisor: OmoSupervisor, homeDir: string): (sessionPath: unknown) => Promise<string> {
   return async (sessionPath) => {
     const requested = requireString(sessionPath, "sessionPath");
     if (!path.isAbsolute(requested)) throw new Error("sessionPath must be absolute");
     const codexHome = supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent");
-    const root = await realpath(path.join(codexHome, "sessions"));
     const target = await realpath(requested);
-    if (!isInside(root, target)) throw new Error("sessionPath is outside the omo sessions directory");
-    return target;
+    for (const root of [path.join(codexHome, "sessions"), ...alphaSessionRoots(homeDir, process.env)]) {
+      const real = await realpath(root).catch(() => null);
+      if (real !== null && isInside(real, target)) return target;
+    }
+    throw new Error("sessionPath is outside the omo and OmO (Alpha) session directories");
   };
 }
 
@@ -161,7 +167,7 @@ export function registerIpc(deps: IpcDeps): () => void {
   let catalog: SessionIndex | null = null;
   const catalogIndex = (): SessionIndex => {
     const dir = path.join(supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent"), "sessions");
-    if (catalog?.sessionsDir !== dir) catalog = new SessionIndex(dir);
+    if (catalog?.sessionsDir !== dir) catalog = new SessionIndex(dir, () => alphaSessionRoots(homeDir, process.env));
     return catalog;
   };
   const sessionHolders = new SessionHolders({ ownPids: () => [process.pid, supervisor.diagnostics().childPid] });

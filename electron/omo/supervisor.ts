@@ -5,6 +5,7 @@ import type { ClientMethod, ClientParams, ClientResult, RequestId, RpcNotificati
 import { AppServerClient, AppServerStartError, BRIDGE_ERROR_CODES, RpcRequestError } from "./app-server-client";
 import type { AppServerClientOptions, ExitInfo, InitializeResult } from "./app-server-client";
 import { locateOmo } from "./locate";
+import { alphaSessionRoots } from "./native/alpha-sessions";
 import { NativeAppServerClient } from "./native/client";
 import { ensureSharedHost } from "./native/shared-host";
 import type { SharedHost } from "./native/shared-host";
@@ -242,6 +243,7 @@ export class OmoSupervisor {
       clientVersion: this.options.clientVersion,
       // The child env drops OMO_* overrides, so omo itself uses <home>/.omo/agent.
       agentDir: this.options.baseEnv[ENV.qaAgentDir] ?? path.join(this.options.homeDir, ".omo", "agent"),
+      extraSessionDirs: () => alphaSessionRoots(this.options.homeDir, this.options.baseEnv),
       ...(this.options.stateDir === undefined ? {} : { stateDir: this.options.stateDir }),
     };
     let hostNotice: string | null = null;

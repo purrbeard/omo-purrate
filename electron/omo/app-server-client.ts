@@ -51,6 +51,8 @@ export interface AppServerClientOptions {
   spawnImpl?: SpawnImpl;
   /** omo's agent directory (sessions, goal stores); the native client lists threads from it. */
   agentDir?: string;
+  /** OmO (Alpha) session stores listed beside `<agentDir>/sessions`. */
+  extraSessionDirs?: () => readonly string[];
   /** App-owned scratch directory for the native client's utility sessions. */
   stateDir?: string;
   /** Shared omo host socket the native client attaches to instead of spawning its own host. */

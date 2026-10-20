@@ -76,7 +76,7 @@ const GROUP_LABEL = { own: "shell.import.groupOwn", machine: "shell.import.group
 function groupOf(candidate: ImportCandidate): Group {
   if (!candidate.importable) return "damaged";
   if (candidate.location !== null) return "scratch";
-  return candidate.evidence === "app" || candidate.evidence === "terminal" ? "own" : "machine";
+  return candidate.evidence === "app" || candidate.evidence === "alpha" || candidate.evidence === "terminal" ? "own" : "machine";
 }
 
 /**

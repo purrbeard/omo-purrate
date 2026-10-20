@@ -244,6 +244,36 @@ describe("SessionIndex", () => {
     await index.unarchive(source!);
     expect(await index.isArchived(source!)).toBe(false);
   });
+
+  it("lists an OmO (Alpha) store beside omo's sessions, once per id, and never writes into or deletes from it", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "native-index-"));
+    const sessions = path.join(root, "agent", "sessions");
+    const alpha = path.join(root, "desktop", "userdata", "omo-sessions");
+    const runtime = path.join(alpha, "omo-0123");
+    await mkdir(path.join(sessions, "--work--"), { recursive: true });
+    await mkdir(runtime, { recursive: true });
+    await writeFile(path.join(sessions, "--work--", "own.jsonl"), line({ type: "session", id: "own", timestamp: "2026-10-18T00:00:00.000Z", cwd: "/work" }));
+    const header = { type: "session", version: 3, id: "a1", timestamp: "2026-10-20T13:02:04.097Z", cwd: "/lift" };
+    const opening = path.join(runtime, "thread-a1-hash-1792501324079-1.jsonl");
+    const continued = path.join(runtime, "thread-a1-hash-1792501348101-2.jsonl");
+    await writeFile(opening, line(header) + line({ type: "model_change", id: "m1", parentId: null, provider: "p", modelId: "m" }));
+    const conversation = line(header) + line({ type: "message", id: "u1", parentId: null, message: { role: "user", content: [{ type: "text", text: "make an intro" }] } });
+    await writeFile(continued, conversation);
+    const index = new SessionIndex(sessions, () => [alpha]);
+
+    const records = await index.list();
+    expect(records.map((record) => [record.id, record.source ?? "native"]).sort()).toEqual([["a1", "alpha"], ["own", "native"]]);
+    const found = await index.find("a1");
+    expect(found).toMatchObject({ sessionPath: continued, preview: "make an intro", source: "alpha" });
+    expect(index.isExternal(found!)).toBe(true);
+
+    await expect(index.remove(found!)).rejects.toThrow(/archive/);
+    expect(await readFile(continued, "utf8")).toBe(conversation);
+
+    const forked = await index.fork(found!, "/lift", Date.parse("2026-10-20T14:00:00.000Z"));
+    expect(path.dirname(forked)).toBe(path.join(sessions, "---lift--"));
+    expect(JSON.parse((await readFile(forked, "utf8")).split("\n")[0]!)).toMatchObject({ cwd: "/lift", parentSession: continued });
+  });
 });
 
 describe("UiBridge extension dialogs", () => {

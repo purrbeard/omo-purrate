@@ -29,6 +29,8 @@ export interface SessionRecord {
   preview: string | null;
   parentSession: string | null;
   facts: SessionFacts;
+  /** Set for a session read from OmO (Alpha)'s own store rather than omo's sessions directory. */
+  source?: "alpha";
 }
 
 interface CacheEntry {
@@ -55,6 +57,22 @@ function userText(content: unknown): string | null {
   if (!Array.isArray(content)) return null;
   const text = content.flatMap((block) => (isRecord(block) && block["type"] === "text" && typeof block["text"] === "string" ? [block["text"]] : [])).join("\n");
   return text === "" ? null : text;
+}
+
+function inside(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+/** omo's per-cwd session folder name: `P:\\coding\\app` becomes `--P--coding-app--`. */
+export function sessionFolder(cwd: string): string {
+  return `--${cwd.replace(/[\\/:]/g, "-")}--`;
+}
+
+/** OmO (Alpha) writes a header-only file and then a continuation file under one id; the one with the conversation wins. */
+function better(left: SessionRecord, right: SessionRecord): SessionRecord {
+  if (left.facts.userMessages !== right.facts.userMessages) return left.facts.userMessages > right.facts.userMessages ? left : right;
+  return newestFirst(left, right) <= 0 ? left : right;
 }
 
 /** Newest first; equal times order by path so a keyset cursor over the list is total. */
@@ -143,33 +161,42 @@ async function readRange(file: string, start: number, end: number): Promise<stri
 
 /**
  * The thread list the removed app-server served, rebuilt from omo's session files: one record per
- * `<sessionsDir>/<cwd folder>/*.jsonl`, rescanning only the bytes appended since the last listing.
+ * `<sessionsDir>/<cwd folder>/*.jsonl`, rescanning only the bytes appended since the last listing. `extraDirs` adds
+ * OmO (Alpha)'s session stores, read with the same layout; one id appearing in several files is listed once.
  */
 export class SessionIndex {
   private readonly cache = new Map<string, CacheEntry>();
 
-  constructor(readonly sessionsDir: string) {}
+  constructor(readonly sessionsDir: string, private readonly extraDirs: () => readonly string[] = () => []) {}
 
   async list(): Promise<SessionRecord[]> {
     const files = await this.sessionFiles();
     const seen = new Set(files);
     for (const key of this.cache.keys()) if (!seen.has(key)) this.cache.delete(key);
-    const records: SessionRecord[] = [];
+    const byId = new Map<string, SessionRecord>();
     for (const file of files) {
       const record = await this.scan(file);
-      if (record !== null) records.push(record);
+      if (record === null) continue;
+      const current = byId.get(record.id);
+      byId.set(record.id, current === undefined ? record : better(current, record));
     }
-    return records.sort(newestFirst);
+    return [...byId.values()].sort(newestFirst);
   }
 
   async find(threadId: string): Promise<SessionRecord | null> {
-    for (const entry of this.cache.values()) {
+    let found: SessionRecord | null = null;
+    for (const entry of [...this.cache.values()]) {
       if (entry.record?.id === threadId) {
         const fresh = await this.scan(entry.record.sessionPath);
-        if (fresh?.id === threadId) return fresh;
+        if (fresh?.id === threadId) found = found === null ? fresh : better(found, fresh);
       }
     }
-    return (await this.list()).find((record) => record.id === threadId) ?? null;
+    return found ?? (await this.list()).find((record) => record.id === threadId) ?? null;
+  }
+
+  /** A session file outside omo's own sessions directory belongs to another app's store. */
+  isExternal(record: Pick<SessionRecord, "sessionPath">): boolean {
+    return !inside(this.sessionsDir, record.sessionPath);
   }
 
   async isArchived(record: SessionRecord): Promise<boolean> {
@@ -209,6 +236,7 @@ export class SessionIndex {
   }
 
   async remove(record: SessionRecord): Promise<void> {
+    if (this.isExternal(record)) throw new Error("OmO (Alpha) owns this session file; archive the thread instead of deleting it");
     await rm(record.sessionPath + ARCHIVE_SUFFIX, { force: true });
     await rm(record.sessionPath, { force: true });
     this.cache.delete(record.sessionPath);
@@ -224,7 +252,8 @@ export class SessionIndex {
     const id = uuidv7(nowMs);
     const timestamp = new Date(nowMs).toISOString();
     const forked = { ...header, id, timestamp, cwd, parentSession: record.sessionPath };
-    const directory = path.dirname(record.sessionPath);
+    // A fork of an Alpha session is this app's own session: it goes to omo's sessions directory, never into Alpha's store.
+    const directory = this.isExternal(record) ? path.join(this.sessionsDir, sessionFolder(cwd)) : path.dirname(record.sessionPath);
     const target = path.join(directory, `${timestamp.replace(/[:.]/g, "-")}_${id}.jsonl`);
     await mkdir(directory, { recursive: true });
     const handle = await open(target, "wx", 0o600);
@@ -252,9 +281,15 @@ export class SessionIndex {
   }
 
   private async sessionFiles(): Promise<string[]> {
+    const files: string[] = [];
+    for (const root of [this.sessionsDir, ...this.extraDirs()]) files.push(...await this.rootFiles(root));
+    return files;
+  }
+
+  private async rootFiles(root: string): Promise<string[]> {
     let folders: string[];
     try {
-      folders = await readdir(this.sessionsDir);
+      folders = await readdir(root);
     } catch (error) {
       if (errorCode(error) === "ENOENT") return [];
       throw error;
@@ -263,10 +298,10 @@ export class SessionIndex {
     for (const folder of folders) {
       // omo nests sessions under a cwd folder; a session file passed to `--session` may also sit at the top.
       if (folder.endsWith(".jsonl")) {
-        files.push(path.join(this.sessionsDir, folder));
+        files.push(path.join(root, folder));
         continue;
       }
-      const directory = path.join(this.sessionsDir, folder);
+      const directory = path.join(root, folder);
       let names: string[];
       try {
         names = await readdir(directory);
@@ -306,6 +341,7 @@ export class SessionIndex {
     if (record !== null) {
       record.updatedAtMs = info.mtimeMs;
       record.facts.sizeBytes = info.size;
+      if (this.isExternal(record)) record.source = "alpha";
     }
     this.cache.set(file, { size: info.size, mtimeMs: info.mtimeMs, scanned: info.size, tail, record, entryIds });
     return record;

@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { importPage, keysetPage, toCandidate } from "../../electron/history/session-catalog";
 import { SessionIndex } from "../../electron/omo/native/threads";
+import { alphaSessionRoots } from "../../electron/omo/native/alpha-sessions";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -91,6 +92,18 @@ describe("first-run import classification", () => {
     expect(record!.facts.defects).toEqual([]);
   });
 
+  it("recommends a session started in OmO (Alpha) and keeps an automated one out of the default selection", async () => {
+    const { sessions } = store();
+    const alpha = path.join(path.dirname(sessions), "omo-sessions");
+    mkdirSync(path.join(alpha, "--work-project--"), { recursive: true });
+    const started = session(alpha, [(id: string) => admission("4f1c0e5e-1f1f-4f1f-8f1f-1f1f1f1f1f1f", id), user("make an intro")]);
+    const driven = session(alpha, [(id: string) => admission("discord:155727658920", id), user("from Discord")]);
+    const index = new SessionIndex(sessions, () => [alpha]);
+    const byId = new Map((await index.list()).map(record => [record.id, toCandidate(record, places)]));
+    expect([byId.get(started.id)!.evidence, byId.get(started.id)!.recommended]).toEqual(["alpha", true]);
+    expect([byId.get(driven.id)!.evidence, byId.get(driven.id)!.recommended]).toEqual(["automation", false]);
+  });
+
   it("lists every non-empty session once and only counts the empty ones", async () => {
     const { sessions, index } = store();
     const kept = [session(sessions, [user("one")]), session(sessions, [user("two")])];
@@ -99,6 +112,26 @@ describe("first-run import classification", () => {
     expect(page.items.map(item => item.id).sort()).toEqual(kept.map(entry => entry.id).sort());
     expect(page.emptyCount).toBe(1);
     expect(page.nextCursor).toBeNull();
+  });
+});
+
+describe("OmO (Alpha) session stores", () => {
+  function home() {
+    const root = mkdtempSync(path.join(tmpdir(), "omo-ui-alpha-home-"));
+    roots.push(root);
+    return root;
+  }
+
+  it("reads Alpha's default home, follows its data-home pointer, and stays off for isolated QA", () => {
+    const homeDir = home();
+    expect(alphaSessionRoots(homeDir, {})).toEqual([path.join(homeDir, ".omo", "desktop", "userdata", "omo-sessions")]);
+    const moved = path.join(homeDir, "elsewhere");
+    mkdirSync(path.join(homeDir, ".omo", "desktop"), { recursive: true });
+    writeFileSync(path.join(homeDir, ".omo", "desktop", "omo-data-home.json"), JSON.stringify({ kind: "omo-desktop-data-home-pointer", path: moved }));
+    expect(alphaSessionRoots(homeDir, {})).toEqual([path.join(moved, "userdata", "omo-sessions")]);
+    expect(alphaSessionRoots(homeDir, { OMO_UI_QA_AGENT_DIR: path.join(homeDir, "qa") })).toEqual([]);
+    expect(alphaSessionRoots(homeDir, { OMO_UI_QA_AGENT_DIR: path.join(homeDir, "qa"), OMO_UI_ALPHA_HOME: moved })).toEqual([path.join(moved, "userdata", "omo-sessions")]);
+    expect(alphaSessionRoots(homeDir, { OMO_UI_ALPHA_HOME: "" })).toEqual([]);
   });
 });
 
