@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
+import { processStartTimes } from "../electron/omo/session-holders.ts";
 import { launchApp, newSession, send, tempDir, threadRow, openNativeSessions } from "./helpers.ts";
 
 const UUID = /^omo-ui:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -112,5 +113,77 @@ test("skipping imports nothing, and the import stays reachable from the native s
     await running.page.getByTestId("native-sessions-import").click();
     const dialog = running.page.getByTestId("session-import-dialog");
     await expect(dialog.locator(`[data-testid="session-import-row"][data-session-id="${seeds.tui!.id}"]`).getByRole("checkbox")).toBeChecked();
+  } finally { await running.close(); }
+});
+async function seededSessions(home: string, ids: string[]): Promise<string> {
+  const seedFile = path.join(home, "seed.json");
+  writeFileSync(seedFile, JSON.stringify(ids.map(id => ({ id, cwd: tempDir("held-workspace"), name: `Session ${id.slice(-4)}` }))));
+  return seedFile;
+}
+
+test("a session another omo process holds is marked in the sidebar and locks its composer with the holder named", async () => {
+  const home = tempDir("held-home");
+  const held = "0190f0c0-0000-7000-8000-00000000aaa1", stale = "0190f0c0-0000-7000-8000-00000000aaa2";
+  const seedFile = await seededSessions(home, [held, stale]);
+  // This test runner stands in for the foreign omo process: a real pid with its real creation time.
+  const startedAtMs = (await processStartTimes([process.pid])).get(process.pid);
+  expect(startedAtMs).toBeDefined();
+  const record = (id: string, processStartedAtMs: number): void => {
+    const directory = path.join(home, "sessions", "session-holders", id);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(path.join(directory, `${process.pid}.json`), JSON.stringify({ pid: process.pid, bootAtMs: 1, processStartedAtMs, cwd: "P:\\elsewhere" }));
+  };
+  record(held, startedAtMs!);
+  record(stale, startedAtMs! - 3_600_000);
+  const running = await launchApp({
+    omo: "fake", fakeHome: home, managed: [held, stale],
+    extraEnv: { FAKE_OMO_SEED_THREADS: seedFile, FAKE_OMO_HELD: JSON.stringify({ [held]: [{ pid: process.pid, cwd: "P:\\elsewhere" }] }) },
+  });
+  try {
+    const { page } = running;
+    await expect(threadRow(page, held).getByTestId("thread-in-use")).toContainText("In use");
+    await expect(threadRow(page, stale)).toBeVisible();
+    await expect(threadRow(page, stale).getByTestId("thread-in-use")).toHaveCount(0);
+    await threadRow(page, held).click();
+    const input = page.getByTestId("composer-input");
+    await expect(input).toHaveAttribute("data-thread-id", held);
+    await input.fill("hello");
+    await input.press("Enter");
+    const banner = page.getByTestId("composer-held-banner");
+    await expect(banner).toContainText(`This session is open in another omo process (pid ${process.pid}, P:\\elsewhere)`);
+    await expect(input).toBeDisabled();
+    await expect(page.getByTestId("notice-toast")).toHaveCount(0);
+    await expect(page.getByTestId("composer-held-retry")).toBeVisible();
+    await page.getByTestId("composer-held-retry").click();
+    await expect(banner).toBeVisible();
+    // The session of the stale record opens normally.
+    await threadRow(page, stale).click();
+    await expect(input).toHaveAttribute("data-thread-id", stale);
+    await expect(input).toBeEnabled();
+    await expect(banner).toHaveCount(0);
+  } finally { await running.close(); }
+});
+
+test("Settings lists managed sessions that have no session file and removes only those entries", async () => {
+  const home = tempDir("missing-home"), userData = tempDir("missing-user");
+  const present = "0190f0c0-0000-7000-8000-00000000bbb1", gone = "0190f0c0-0000-7000-8000-00000000bbb2", goneToo = "0190f0c0-0000-7000-8000-00000000bbb3";
+  const seedFile = await seededSessions(home, [present]);
+  writeFileSync(path.join(userData, "preferences.json"), JSON.stringify({
+    locale: "en", managedThreadIds: [present, gone, goneToo], pinnedThreadIds: [gone, present], threadParents: { [goneToo]: present },
+  }));
+  const running = await launchApp({ omo: "fake", fakeHome: home, userData, extraEnv: { FAKE_OMO_SEED_THREADS: seedFile } });
+  try {
+    const { page } = running;
+    await page.getByTestId("open-settings").click();
+    await page.getByTestId("settings-dialog").locator('[data-section="import"]').click();
+    const card = page.getByTestId("settings-import-missing");
+    await expect(card).toContainText("2 entries without a session file");
+    await expect(card).toContainText(gone);
+    await expect(card).not.toContainText(present);
+    await page.getByTestId("settings-import-missing-remove").click();
+    await expect(card).toHaveCount(0);
+    const stored = await page.evaluate(() => window.omo.getPreferences());
+    expect([stored.managedThreadIds, stored.pinnedThreadIds, stored.threadParents]).toEqual([[present], [present], {}]);
+    expect(existsSync(path.join(home, "sessions", `${present}.jsonl`))).toBe(true);
   } finally { await running.close(); }
 });

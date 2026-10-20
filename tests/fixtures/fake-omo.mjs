@@ -45,9 +45,10 @@ let nextHandle = 1;
 
 /** A command refused with `success: false`, like omo's response envelope. */
 class CommandFailure extends Error {
-  constructor(message, errorCode) {
+  constructor(message, errorCode, errorData) {
     super(message);
     this.errorCode = errorCode;
+    this.errorData = errorData;
   }
 }
 
@@ -1091,7 +1092,16 @@ function sessionState(record) {
   };
 }
 
+/** FAKE_OMO_HELD holds { "<session id>": [{ pid, cwd? }] }: open_session of such a session is refused with omo's session_held error. */
+function refuseHeldSession(frame) {
+  if (process.env.FAKE_OMO_HELD === undefined || typeof frame.sessionPath !== "string") return;
+  const held = JSON.parse(process.env.FAKE_OMO_HELD);
+  const id = Object.keys(held).find((candidate) => frame.sessionPath.includes(candidate));
+  if (id !== undefined) throw new CommandFailure("Session is held by another process", "session_held", { holders: held[id] });
+}
+
 function openSession(frame) {
+  refuseHeldSession(frame);
   const settings = {
     provider: typeof frame.provider === "string" ? frame.provider : DEFAULT_MODEL.provider,
     modelId: typeof frame.modelId === "string" ? frame.modelId : DEFAULT_MODEL.id,
@@ -1380,7 +1390,7 @@ function onLine(line) {
   const reply = (data) => write({ id: frame.id, type: "response", command: frame.type, success: true, data });
   handleCommand(frame, record, reply).catch((error) => {
     if (!(error instanceof CommandFailure)) process.stderr.write(`fake-omo: ${String(frame.type)} crashed: ${error instanceof Error ? error.stack : String(error)}\n`);
-    write({ id: frame.id, type: "response", command: frame.type, success: false, error: error instanceof Error ? error.message : String(error), ...(error.errorCode ? { errorCode: error.errorCode } : {}) });
+    write({ id: frame.id, type: "response", command: frame.type, success: false, error: error instanceof Error ? error.message : String(error), ...(error.errorCode ? { errorCode: error.errorCode } : {}), ...(error.errorData === undefined ? {} : { errorData: error.errorData }) });
   });
 }
 
