@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, type Plugin } from "vite";
 
 const CONTENT_SECURITY_POLICY =
-  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'";
+  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: omo-media:; media-src 'self' blob: omo-media:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'";
 
 /** Adds the Content-Security-Policy meta tag to index.html in production builds only. */
 function productionCsp(): Plugin {

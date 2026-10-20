@@ -21,6 +21,7 @@ import {
   wrapBlockChildren,
 } from './render'
 import type { MarkdownFileMentions, MarkdownLabels, MarkdownPathImages, MarkdownRenderContext, ReferenceTargets } from './render'
+import { usePathPreview } from '../media/PathPreviewContext'
 import 'katex/dist/katex.min.css'
 import './markdown.css'
 
@@ -32,6 +33,7 @@ function renderSettled(
   labels: MarkdownLabels,
   fileMentions: MarkdownFileMentions | undefined,
   pathImages: MarkdownPathImages | undefined,
+  paths: boolean,
 ): ReactNode[] {
   const root = parseGfmWithMath(text)
   const targets = createReferenceTargets()
@@ -41,6 +43,7 @@ function renderSettled(
     labels,
     fileMentions,
     pathImages,
+    paths,
     targets,
     footnoteOrder: [],
     footnoteCounts: new Map(),
@@ -110,6 +113,7 @@ class StreamingRenderer {
         labels: this.labels,
         fileMentions: undefined,
         pathImages: undefined,
+        paths: false,
         targets: frameTargets,
         footnoteOrder: this.frozenFootnoteOrder,
         footnoteCounts: this.frozenFootnoteCounts,
@@ -129,6 +133,7 @@ class StreamingRenderer {
       labels: this.labels,
       fileMentions: undefined,
       pathImages: undefined,
+      paths: false,
       targets: frameTargets,
       footnoteOrder: [...this.frozenFootnoteOrder],
       footnoteCounts: new Map(this.frozenFootnoteCounts),
@@ -181,19 +186,21 @@ export const MarkdownText = memo(function MarkdownText({
   pathImages?: MarkdownPathImages | undefined
   variant?: 'body' | 'compact'
 }) {
+  // Path chips and media previews apply to settled renders inside a PathPreviewProvider only.
+  const paths = usePathPreview() !== null
   const streamRef = useRef<StreamingRenderer | null>(null)
   const streamLabelsRef = useRef<MarkdownLabels>(labels)
   const children = useMemo(() => {
     if (!streaming) {
       streamRef.current = null
-      return renderSettled(text, labels, fileMentions, pathImages)
+      return renderSettled(text, labels, fileMentions, pathImages, paths)
     }
     if (streamRef.current === null || streamLabelsRef.current !== labels) {
       streamRef.current = new StreamingRenderer(labels)
       streamLabelsRef.current = labels
     }
     return streamRef.current.render(text)
-  }, [text, streaming, labels, fileMentions, pathImages])
+  }, [text, streaming, labels, fileMentions, pathImages, paths])
   return <div className={clsx('omo-markdown', variant === 'compact' && 'omo-markdown-compact')}
-    data-markdown-variant={variant === 'compact' ? variant : undefined}>{children}</div>
+    data-media-scope={paths ? '' : undefined} data-markdown-variant={variant === 'compact' ? variant : undefined}>{children}</div>
 })

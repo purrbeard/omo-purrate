@@ -165,6 +165,18 @@
 
 .md-image-alt { color: var(--muted-foreground); font-style: italic; }
 
+/* Local image rendered in place (Track C): the button opens the lightbox. */
+.md-image-button {
+  display: block;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+}
+.md-image-button .md-image { max-height: 360px; }
+
 .md-image {
   display: block;
   width: auto;

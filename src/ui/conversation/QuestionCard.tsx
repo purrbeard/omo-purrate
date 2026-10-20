@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import { Check, SquarePen } from "lucide-react";
 import type { UserInputQuestion } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { PendingRequest } from "../../state";
 import { useActions } from "../app-context";
+import { PathInline, PathPreviews } from "../content/media/PathText";
 import { Button, focusRing } from "../kit";
 import { TESTID } from "../testids";
 
@@ -161,20 +162,22 @@ function QuestionBlock({
       />
     );
   return (
-    <div className="[&+&]:mt-2 [&+&]:border-0 [&+&]:border-t [&+&]:border-solid [&+&]:border-border">
+    <div className="[&+&]:mt-2 [&+&]:border-0 [&+&]:border-t [&+&]:border-solid [&+&]:border-border" data-media-scope="">
       <div className="px-6 pt-5">
         {header !== "" && <div className="mb-1 text-[11px] leading-4 text-muted-foreground">{header}</div>}
         <h2 className="m-0 text-base font-medium leading-[22px] [overflow-wrap:anywhere]" id={titleId}>
-          {question.question}
+          <PathInline text={question.question} />
         </h2>
+        <PathPreviews text={question.question} compact />
       </div>
       <div className="mt-2 flex flex-col gap-px px-3 py-1" role={multi ? "group" : "radiogroup"} aria-labelledby={titleId}>
         {options.map((option, index) => {
           const selected = draft.selected.includes(option.label);
+          const description = typeof option.description === "string" ? option.description : "";
           return (
+            <Fragment key={`${option.label}-${index}`}>
             <button
               type="button"
-              key={`${option.label}-${index}`}
               className={clsx(
                 "flex w-full min-h-10 shrink-0 items-start gap-2 rounded-md border border-solid py-2 pr-3 pl-2 transition-colors duration-150 motion-reduce:transition-none m-0 cursor-pointer bg-transparent text-left text-inherit [font-family:inherit] hover:not-disabled:bg-accent disabled:cursor-default",
                 selected ? "border-border bg-accent" : "border-transparent",
@@ -198,11 +201,13 @@ function QuestionBlock({
               )}
               <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
                 <span className="text-sm font-medium leading-6">{option.label}</span>
-                {typeof option.description === "string" && option.description.trim() !== "" && (
-                  <span className="text-sm leading-6 text-muted-foreground">{option.description}</span>
+                {description.trim() !== "" && (
+                  <span className="text-sm leading-6 text-muted-foreground"><PathInline text={description} nested /></span>
                 )}
               </span>
             </button>
+            {description.trim() !== "" && <PathPreviews text={description} compact className="mt-0 mb-1 pl-9" />}
+            </Fragment>
           );
         })}
         {freeText &&

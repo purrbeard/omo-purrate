@@ -28,6 +28,14 @@ import { parseFileLink } from './file-link.ts'
 import { renderTexToReact } from './katex.tsx'
 import { LinkIcon, classifyLinkPath } from './link-icon'
 import { useMarkdownDelegate } from './MarkdownDelegate'
+import { mediaKind, mediaUrl } from '../../../../shared/media'
+import { MEDIA_IMAGE_ATTR, MEDIA_PATH_ATTR, useMediaLightbox } from '../media/MediaLightbox'
+import { MediaStrip } from '../media/MediaStrip'
+import { PathToken } from '../media/PathChip'
+import { absolutePathOf, findPathCandidates, inlineCodePath } from '../media/path-detect'
+import { collectParagraphMedia } from '../media/mdast-media'
+import { usePathPreview } from '../media/PathPreviewContext'
+import { renderPathSegments } from '../media/PathText'
 import type { PositionedBlock } from './incremental.ts'
 
 /** Copy-button labels forwarded to fence CodeBlocks (this package is cordis-free, so copy arrives via props). */
@@ -189,6 +197,8 @@ export interface MarkdownRenderContext {
   readonly fileMentions: MarkdownFileMentions | undefined
   /** Local-path image vocabulary; absent wherever no rewriting owner exists. */
   readonly pathImages: MarkdownPathImages | undefined
+  /** Settled pass inside a path-preview scope: bare paths become chips and referenced media previews under the paragraph. */
+  readonly paths: boolean
   /** Inside an anchor's children: interactive mentions must not nest there. */
   readonly inLink?: boolean
   /** Reference targets visible to this pass. */
@@ -250,13 +260,22 @@ function renderBlockEntries(
   const entries: BlockEntry[] = []
   for (const [index, block] of blocks.entries()) {
     if (block.type === 'paragraph') {
-      entries.push({ paragraph: renderChildren(block.children, context) })
+      const strip = paragraphMedia(block, context)
+      const children = renderChildren(block.children, context)
+      entries.push({ paragraph: strip === null ? children : [...children, strip] })
     } else {
       const element = renderNode(block, index, context)
       if (element !== null) entries.push({ element })
     }
   }
   return entries
+}
+
+/** Preview strip for the existing local media a settled paragraph references; null outside a preview scope. */
+function paragraphMedia(node: Md.Paragraph, context: MarkdownRenderContext): ReactNode {
+  if (!context.paths) return null
+  const paths = collectParagraphMedia(node.children)
+  return paths.length === 0 ? null : <MediaStrip key="media" paths={paths} />
 }
 
 function renderChildren(
@@ -268,10 +287,18 @@ function renderChildren(
 
 function renderNode(node: Md.RootContent, key: Key, context: MarkdownRenderContext): ReactNode {
   switch (node.type) {
-    case 'text':
-      return node.value
-    case 'paragraph':
-      return <p key={key}>{renderChildren(node.children, context)}</p>
+    case 'text': {
+      if (!context.paths || context.inLink === true) return node.value
+      const candidates = findPathCandidates(node.value)
+      return candidates.length === 0
+        ? node.value
+        : <Fragment key={key}>{renderPathSegments(node.value, candidates)}</Fragment>
+    }
+    case 'paragraph': {
+      const strip = paragraphMedia(node, context)
+      const paragraph = <p key={key}>{renderChildren(node.children, context)}</p>
+      return strip === null ? paragraph : <Fragment key={key}>{paragraph}{strip}</Fragment>
+    }
     case 'heading':
       return createElement(`h${node.depth}`, { key }, ...renderChildren(node.children, context))
     case 'blockquote':
@@ -323,6 +350,10 @@ function renderNode(node: Md.RootContent, key: Key, context: MarkdownRenderConte
             </button>
           </code>
         )
+      }
+      if (context.paths && context.inLink !== true) {
+        const candidate = inlineCodePath(value)
+        if (candidate !== null) return <code key={key}><PathToken candidate={{ ...candidate, start: 0, end: value.length }} /></code>
       }
       return <code key={key}>{value}</code>
     }
@@ -610,17 +641,46 @@ function inlineCodeHttpUrl(value: string): string | undefined {
 }
 
 function renderImage(url: string, alt: string, key: Key, context: MarkdownRenderContext): ReactNode {
-  return <MarkdownImage key={`${key}:${url}`} destination={url} alt={alt} pathImages={context.pathImages} />
+  return <MarkdownImage key={`${key}:${url}`} destination={url} alt={alt} pathImages={context.pathImages} local={context.paths} />
 }
 
-function MarkdownImage({ destination, alt, pathImages }: {
+function MarkdownImage({ destination, alt, pathImages, local }: {
   destination: string
   alt: string
   pathImages: MarkdownPathImages | undefined
+  local: boolean
 }): ReactNode {
+  const preview = usePathPreview()
   const src = imageSource(destination, pathImages)
-  if (src === undefined) return <span className="md-image-alt">{alt}</span>
+  if (src === undefined) {
+    // A local image path in a settled message is served by the main process and opens in the lightbox.
+    const file = local && preview !== null ? parseFileLink(destination)?.path : undefined
+    const absolute = file === undefined || mediaKind(file) !== 'image' ? null : absolutePathOf(file, preview?.cwd)
+    if (absolute === null) return <span className="md-image-alt">{alt}</span>
+    return <LocalMarkdownImage key={absolute} absolute={absolute} alt={alt} destination={destination} />
+  }
   return <LoadedMarkdownImage key={src} src={src} alt={alt} destination={destination} />
+}
+
+function LocalMarkdownImage({ absolute, alt, destination }: { absolute: string; alt: string; destination: string }): ReactNode {
+  const [failed, setFailed] = useState(false)
+  const lightbox = useMediaLightbox()
+  if (failed) return <span className="md-image-alt">{alt || destination}</span>
+  return (
+    <>
+      <button
+        type="button"
+        className="md-image-button"
+        {...{ [MEDIA_IMAGE_ATTR]: '', [MEDIA_PATH_ATTR]: absolute }}
+        aria-label={alt || absolute}
+        onClick={(event) => { lightbox.show(event.currentTarget, absolute) }}
+      >
+        <img className="md-image" src={mediaUrl(absolute)} alt={alt}
+          onError={() => { setFailed(true) }} loading="lazy" decoding="async" referrerPolicy="no-referrer" />
+      </button>
+      {lightbox.node}
+    </>
+  )
 }
 
 function LoadedMarkdownImage({ src, alt, destination }: { src: string; alt: string; destination: string }): ReactNode {

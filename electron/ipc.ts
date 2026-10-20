@@ -36,6 +36,7 @@ import { createGit } from "./git-info";
 import type { Git } from "./git-info";
 import { showThreadNotification } from "./notifications";
 import { createOpenWorkspace } from "./open-workspace";
+import { openLocalPath, statPaths } from "./path-actions";
 import { createWorkspaceSettings } from "./workspace-settings";
 import type { WorkspaceSettings } from "./workspace-settings";
 import type { OpenWorkspace } from "./open-workspace";
@@ -531,6 +532,13 @@ export function registerIpc(deps: IpcDeps): () => void {
     [IPC.revealPath]: (_event, target) => {
       shell.showItemInFolder(requireString(target, "path"));
     },
+    // Track C: in-chat media and path preview
+    [IPC.statPaths]: (_event, paths) => statPaths(paths),
+    [IPC.openPath]: (_event, target) => openLocalPath(target, {
+      openPath: (value) => shell.openPath(value),
+      showItemInFolder: (value) => shell.showItemInFolder(value),
+      qaLog: process.env[ENV.qaOpenLog] || undefined,
+    }),
     [IPC.openLogsFolder]: async () => {
       const dir = app.getPath("logs");
       await mkdir(dir, { recursive: true });

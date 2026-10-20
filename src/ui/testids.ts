@@ -292,6 +292,19 @@ export const TESTID = {
   workspaceMenu: "workspace-menu",
   workspaceSettings: "workspace-settings",
   workspaceArchive: "workspace-archive",
+  // Track C
+  pathChip: "path-chip",
+  mediaItem: "media-item",
+  mediaThumb: "media-thumb",
+  mediaVideo: "media-video",
+  mediaLightbox: "media-lightbox",
+  mediaLightboxImage: "media-lightbox-image",
+  mediaLightboxPrev: "media-lightbox-prev",
+  mediaLightboxNext: "media-lightbox-next",
+  mediaLightboxClose: "media-lightbox-close",
+  mediaLightboxOpen: "media-lightbox-open",
+  mediaLightboxReveal: "media-lightbox-reveal",
+  mediaLightboxCopy: "media-lightbox-copy",
 } as const;
 
 export type TestId = (typeof TESTID)[keyof typeof TESTID];

@@ -30,6 +30,7 @@ import type { SideStorage } from "../../src/state";
 import type { AppState, AppStore } from "../../src/state";
 import { projectTitleText } from "../../src/ui/conversation/skill-text";
 import { sessionHeldMessage } from "../../shared/session-held";
+import type { OpenPathOutcome, PathInfo } from "../../shared/media";
 import { makeThread, notification } from "./helpers";
 
 type Handlers = { [M in ClientMethod]?: (params: ClientParams<M>) => ClientResult<M> | Promise<ClientResult<M>> };
@@ -320,6 +321,8 @@ class FakeBridge implements OmoBridgeApi {
   async copyText(): Promise<void> {}
   async openExternal(): Promise<void> {}
   async revealPath(): Promise<void> {}
+  async statPaths(): Promise<PathInfo[]> { return []; }
+  async openPath(): Promise<OpenPathOutcome> { return "opened"; }
   async openLogsFolder(): Promise<void> {}
   async listOpenTargets(): Promise<OpenTarget[]> {
     return [{ id: "finder" }];

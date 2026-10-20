@@ -25,6 +25,7 @@ import type { ModelRoutingInput, ModelRoutingSettings } from "./model-routing";
 import type { WorkbenchBridgeApi } from "./workbench";
 import type { BrowserBridgeApi } from "./browser";
 import type { ServersBridgeApi } from "./servers";
+import type { OpenPathOutcome, PathInfo } from "./media";
 
 /** URL of the official omo installer script. */
 export const OMO_INSTALL_SCRIPT_URL = "https://get.omo.dev/install.sh";
@@ -613,6 +614,11 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   readClipboardText(): Promise<string>;
   openExternal(url: string): Promise<void>;
   revealPath(path: string): Promise<void>;
+  // Track C: in-chat media and path preview
+  /** Whether each absolute path exists as a file or directory, in request order (at most 200 per call). */
+  statPaths(paths: string[]): Promise<PathInfo[]>;
+  /** Opens an existing path with the OS default app; executables and scripts are only revealed in their folder. Rejects when the path is missing. */
+  openPath(path: string): Promise<OpenPathOutcome>;
   /** Opens the app's log directory (main.log) in the system file manager. */
   openLogsFolder(): Promise<void>;
   /** Installed Open targets in preference order (editors, Terminal, then Finder). */
@@ -701,6 +707,9 @@ export const IPC = {
   readClipboardText: "app:read-clipboard-text",
   openExternal: "app:open-external",
   revealPath: "app:reveal-path",
+  // Track C: in-chat media and path preview
+  statPaths: "app:stat-paths",
+  openPath: "app:open-path",
   openLogsFolder: "app:open-logs-folder",
   listOpenTargets: "app:list-open-targets",
   openWorkspace: "app:open-workspace",
@@ -747,6 +756,9 @@ export const ENV = {
   sshConfig: "OMO_UI_SSH_CONFIG",
   /** The ssh binary the Servers panel runs instead of `ssh` on PATH; a `.mjs` runs under Electron's Node (tests and QA). */
   sshBin: "OMO_UI_SSH_BIN",
+  // Track C: in-chat media and path preview
+  /** Appends one JSON line per openPath call to this file instead of launching the OS app (tests and QA). */
+  qaOpenLog: "OMO_UI_QA_OPEN_LOG",
 } as const;
 
 declare global {
