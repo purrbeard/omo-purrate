@@ -509,6 +509,8 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   loadImportCandidates(cursor: string | null, limit?: number): Promise<ImportPage>;
   /** Adds the importable sessions among the given paths to the managed list; returns the ids added. */
   importSessions(sessionPaths: string[]): Promise<{ imported: string[] }>;
+  /** Which of the given sessions another omo process holds open, and which have no session file on disk. */
+  inspectSessions(threadIds: string[]): Promise<SessionInspection>;
   readModelRouting(): Promise<ModelRoutingSettings>;
   saveModelRouting(input: ModelRoutingInput): Promise<ModelRoutingSettings>;
   importExistingMcpConfigs(): Promise<{ imported: string[]; sources: number }>;
@@ -627,6 +629,7 @@ export const IPC = {
   loadThreadOrigins: "history:thread-origins",
   loadImportCandidates: "history:import-candidates",
   importSessions: "history:import-sessions",
+  inspectSessions: "history:inspect-sessions",
   readModelRouting: "models:read-routing",
   saveModelRouting: "models:save-routing",
   importExistingMcpConfigs: "mcp:import-existing",
@@ -698,6 +701,12 @@ export const IPC = {
   getPermissionPreset: "workspace:preset:get",
   setPermissionPreset: "workspace:preset:set",
 } as const;
+
+/** What `inspectSessions` found: live foreign holders by session id (unheld sessions are absent) and ids without a session file. */
+export interface SessionInspection {
+  holders: Record<string, import("./session-held").SessionHolder[]>;
+  missing: string[];
+}
 
 /** Result envelope the main process returns from the `omo:request` invoke channel. */
 export type RequestEnvelope<R = unknown> =

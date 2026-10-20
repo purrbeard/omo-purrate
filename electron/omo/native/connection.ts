@@ -4,12 +4,16 @@ import type { SpawnImpl } from "../app-server-client";
 import { JsonlDecoder } from "../jsonl";
 import { ManagedChild } from "../managed-child";
 import type { ExitInfo, StopTimeouts } from "../managed-child";
+import { SESSION_HELD_CODE, sessionHeldMessage } from "../../../shared/session-held";
 import { BRIDGE_ERROR_CODES, describeExit, RpcRequestError } from "../rpc";
 import { connectSharedHost } from "./shared-host";
 
 export type NativeRecord = Record<string, unknown> & { type: string };
 
-/** A native command refused with `success: false`; errorCode/errorData are kept for callers that branch on them. */
+/**
+ * A native command refused with `success: false`; errorCode/errorData are kept for callers that branch on them.
+ * A `session_held` refusal carries its holders in the message, because only the message survives the Electron IPC bridge.
+ */
 export class NativeCommandError extends RpcRequestError {
   constructor(
     readonly command: string,
@@ -17,7 +21,7 @@ export class NativeCommandError extends RpcRequestError {
     readonly errorCode: string | undefined,
     readonly errorData: unknown,
   ) {
-    super(-32600, message, errorCode === undefined ? undefined : { errorCode, errorData });
+    super(-32600, errorCode === SESSION_HELD_CODE ? sessionHeldMessage(errorData) : message, errorCode === undefined ? undefined : { errorCode, errorData });
     this.name = "NativeCommandError";
   }
 }

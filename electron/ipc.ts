@@ -8,7 +8,7 @@ import type { BrowserWindow, OpenDialogOptions, SaveDialogOptions } from "electr
 import { ENV, IPC, PERMISSION_PRESETS } from "../shared/ipc";
 import type { PermissionPreset } from "../shared/ipc";
 import type { WorkspaceFileMatch } from "../shared/workspace";
-import type { BranchResult, Diagnostics, HistoryResult, InstallResult, RequestEnvelope, SessionTreeOperation } from "../shared/ipc";
+import type { BranchResult, Diagnostics, HistoryResult, InstallResult, RequestEnvelope, SessionInspection, SessionTreeOperation } from "../shared/ipc";
 import { CLIENT_METHODS } from "../shared/protocol";
 import type { ClientMethod, ClientParams, RequestId } from "../shared/protocol";
 import { openLogin } from "./accounts/login";
@@ -26,6 +26,7 @@ import { loadHeaderLinks } from "./history/thread-links";
 import { loadThreadOrigins } from "./history/thread-origins";
 import { importPage, toCandidate } from "./history/session-catalog";
 import { SessionIndex } from "./omo/native/threads";
+import { SessionHolders } from "./omo/session-holders";
 import { RpcRequestError } from "./omo/app-server-client";
 import { runInstaller } from "./omo/installer";
 import { unarchiveBySidecar } from "./omo/unarchive-fallback";
@@ -163,6 +164,7 @@ export function registerIpc(deps: IpcDeps): () => void {
     if (catalog?.sessionsDir !== dir) catalog = new SessionIndex(dir);
     return catalog;
   };
+  const sessionHolders = new SessionHolders({ ownPids: () => [process.pid, supervisor.diagnostics().childPid] });
   const sessionWatcher = createSessionWatcher((sessionPath) => send(IPC.historyChanged, sessionPath));
   /** Task stores a view follows, per parent session, with the number of views following it. */
   const taskStoreWatches = new Map<string, { cwd: string; refs: number; watcher: TaskStoreWatcher }>();
@@ -362,6 +364,13 @@ export function registerIpc(deps: IpcDeps): () => void {
     [IPC.loadImportCandidates]: (_event, cursor, limit) => {
       if (cursor !== null && typeof cursor !== "string") throw new Error("Invalid import cursor");
       return importPage(catalogIndex(), cursor, limit, { homeDir, tmpDir: app.getPath("temp") });
+    },
+    [IPC.inspectSessions]: async (_event, threadIds): Promise<SessionInspection> => {
+      if (!Array.isArray(threadIds) || threadIds.length > 5_000 || threadIds.some(id => typeof id !== "string")) throw new Error("Invalid thread ids");
+      const wanted = new Set(threadIds as string[]);
+      const known = new Map((await catalogIndex().list()).map(record => [record.id, record.sessionPath]));
+      const present = [...wanted].flatMap(id => known.has(id) ? [{ id, sessionPath: known.get(id)! }] : []);
+      return { holders: await sessionHolders.lookup(present), missing: [...wanted].filter(id => !known.has(id)) };
     },
     [IPC.importSessions]: async (_event, sessionPaths): Promise<{ imported: string[] }> => {
       if (!Array.isArray(sessionPaths) || sessionPaths.length > 5_000 || sessionPaths.some(file => typeof file !== "string" || !path.isAbsolute(file))) {
