@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_PREFERENCES } from "../shared/ipc";
+import { pruneExpired, sanitizeSnoozed } from "../shared/snooze";
 import { THREAD_STATE_KEYS, ThreadDb } from "./store/thread-db";
 import type { ImportRecord, ThreadState } from "./store/thread-db";
 import type { DiffColorPreference, FollowUpPreference, LocalePreference, ModelProfile, PalettePreference, Preferences, SendKeyPreference, ThemePreference, ThreadCreatorEvidence, ThreadNotificationPreference, ThreadOrigin, TimeFormatPreference } from "../shared/ipc";
@@ -149,6 +150,7 @@ function merge(current: Preferences, patch: unknown): Preferences {
     ...(has("profileModels") ? { profileModels: profileModels(patch["profileModels"], current.profileModels) }
       : current.profileModels === undefined ? {} : { profileModels: current.profileModels }),
     ...appearance(patch, current),
+    snoozedThreads: has("snoozedThreads") ? sanitizeSnoozed(patch["snoozedThreads"], current.snoozedThreads ?? {}) : current.snoozedThreads ?? {},
   };
 }
 
@@ -289,7 +291,9 @@ export class PreferencesStore {
         db.write(threadState(source), { migrated: true });
         if (holdsThreads) this.writeJson(withoutThreadState(preferences));
       }
-      return { ...preferences, ...db.read() };
+      const loaded = { ...preferences, ...db.read() };
+      // Snoozes that ended while the app was closed are dropped: those threads simply return to the list.
+      return { ...loaded, snoozedThreads: pruneExpired(loaded.snoozedThreads, Date.now()) };
     });
   }
 }

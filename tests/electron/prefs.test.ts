@@ -306,4 +306,14 @@ describe("PreferencesStore", () => {
       onboardingCompleted: true,
     });
   });
+  it("validates snoozedThreads and drops snoozes that ended while the app was closed", async () => {
+    const future = Date.now() + 3_600_000;
+    await writeFile(path.join(dir, "preferences.json"), JSON.stringify({ snoozedThreads: { late: future, gone: Date.now() - 1000, bad: "x" } }));
+    const prefs = new PreferencesStore(dir);
+    expect(DEFAULT_PREFERENCES.snoozedThreads).toEqual({});
+    expect(prefs.get().snoozedThreads).toEqual({ late: future });
+    expect(prefs.set({ snoozedThreads: { a: 5, b: Number.NaN, c: "z", "": 1 } }).snoozedThreads).toEqual({ a: 5 });
+    expect(prefs.set({ snoozedThreads: ["a"] }).snoozedThreads).toEqual({ a: 5 });
+    expect(prefs.set({ theme: "dark" }).snoozedThreads).toEqual({ a: 5 });
+  });
 });

@@ -214,6 +214,8 @@ export interface Preferences {
   compactSidebar: boolean;
   /** Turn off interface animations and transitions, in addition to the OS reduced-motion setting. */
   reduceMotion: boolean;
+  /** Track A: snoozed thread id -> wake time (epoch ms); the sidebar hides the thread until then. */
+  snoozedThreads: Record<string, number>;
 }
 
 export type FollowUpPreference = "steer" | "queue";
@@ -255,6 +257,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   diffColors: "red-green",
   compactSidebar: false,
   reduceMotion: false,
+  snoozedThreads: {},
 };
 
 /** One turn reconstructed from a session JSONL file. */
