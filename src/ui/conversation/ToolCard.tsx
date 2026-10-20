@@ -4,6 +4,7 @@ import { Bot, Check, CircleHelp, Code, FileText, Globe, ListChecks, Puzzle, Sear
 import { CodeBlock } from "../content/code/CodeBlock";
 import { DiffBlock } from "../content/DiffBlock";
 import { ImagePreview } from "../content/ImagePreview";
+import { PathInline, PathPreviews } from "../content/media/PathText";
 import { JsonTree } from "../content/JsonTree";
 import { TerminalBlock } from "../content/TerminalBlock";
 import { DisclosureRow, StateDot, TextShimmer } from "../kit";
@@ -84,15 +85,16 @@ function StatusMark({ state, durationMs }: { state: ToolState; durationMs: numbe
   );
 }
 
-function IoCard({ label, text, error = false }: { label: string; text: string; error?: boolean }) {
+function IoCard({ label, text, error = false, paths = false }: { label: string; text: string; error?: boolean; paths?: boolean }) {
   return (
     <div className="flex flex-col rounded-lg border border-solid border-border bg-message-code font-mono text-xs leading-[18px]">
       <div className="grid max-h-[150px] grid-cols-[max-content_1fr] items-baseline gap-x-3.5 overflow-y-auto px-4 py-3">
         <span className="sticky top-0 self-start text-muted-foreground">{label}</span>
         <span className="min-w-0 break-words whitespace-pre-wrap text-message-code-foreground data-[error]:text-destructive-foreground" data-error={error || undefined}>
-          {text}
+          {paths ? <PathInline text={text} /> : text}
         </span>
       </div>
+      {paths && <PathPreviews text={text} compact className="mx-4 mt-0 mb-3" />}
     </div>
   );
 }
@@ -159,7 +161,7 @@ function DynamicToolBody({ item, state }: { item: DynamicToolCallItem; state: To
               </div>
             );
           case "text":
-            return <IoCard key={index} label={t("conversation.tool.output")} text={part.text} error={state === "error"} />;
+            return <IoCard key={index} label={t("conversation.tool.output")} text={part.text} error={state === "error"} paths={state !== "running"} />;
           case "image":
             return <OutputImage key={index} url={part.url} />;
         }
@@ -210,7 +212,7 @@ function McpBody({ item }: { item: McpToolCallItem }) {
   return (
     <>
       <ToolArguments tool={item.tool} args={item.arguments} />
-      {text !== null && <IoCard label={t("conversation.tool.output")} text={text} />}
+      {text !== null && <IoCard label={t("conversation.tool.output")} text={text} paths />}
       {text === null && (isRecord(result) || Array.isArray(result)) && (
         <JsonTree data={result} label={t("conversation.tool.output")} labels={labels.json} className={JSON_CLASS} />
       )}

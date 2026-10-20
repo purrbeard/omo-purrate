@@ -552,6 +552,20 @@ async function runMultiQuestion(record, turn) {
   closeAgentMessage(record, turn, item, "stop");
 }
 
+/** Asks one question that references a local file and confirms the chosen option. */
+async function runPathQuestion(record, turn, filePath) {
+  const response = await askQuestions(turn, {
+    itemId: `question-${turn.itemSeq}`,
+    questions: [{
+      id: "q1", header: "Review", question: `Is this the right screenshot? ${filePath}`, multiSelect: false,
+      options: [{ label: "Keep", description: `Use ${filePath} as is` }, { label: "Redo", description: "Take it again" }],
+    }],
+  });
+  const item = openAgentMessage(turn);
+  appendAgentDelta(turn, item, `Chosen: ${firstAnswer(response)}.`);
+  closeAgentMessage(record, turn, item, "stop");
+}
+
 const FLOOD_TEXT = [
   "## Checking the cart totals\n\n",
   "Totals come from `cartTotals` in `src/lib/cart.ts`: each line adds `price * quantity` in integer cents, ",
@@ -810,6 +824,8 @@ function runScenario(record, turn, text) {
   }
   if (text.includes("SCENARIO:slow")) return runSlow(record, turn);
   if (text.includes("SCENARIO:multi-question")) return runMultiQuestion(record, turn);
+  // SCENARIO:path-question:<path> asks a blocking question that names <path> in its text and in an option description.
+  if (text.includes("SCENARIO:path-question:")) return runPathQuestion(record, turn, /SCENARIO:path-question:(.+)$/m.exec(text)?.[1]?.trim() ?? "");
   if (text.includes("SCENARIO:flood")) return runFlood(record, turn, text);
   return runEcho(record, turn, text);
 }

@@ -4,6 +4,8 @@ import clsx from "clsx";
 import { MarkdownDelegateProvider } from "../content/markdown/MarkdownDelegate";
 import { ArrowDown, CircleAlert } from "lucide-react";
 import { resolveWorkspacePath } from "../content/workspace-path";
+import { PathPreviewProvider } from "../content/media/PathPreviewContext";
+import { usePathActions } from "../content/media/use-path-actions";
 import type { ThreadItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import type { Conversation, ConversationTurn, PendingRequest } from "../../state";
@@ -140,10 +142,11 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
     pending.length === 0 &&
     !turnActive &&
     (conversation?.pendingUserMessages.length ?? 0) === 0;
+  const pathActions = usePathActions();
   const openExternalLink = useCallback((href: string) => void window.omo.openExternal(href), []);
   const openFile = useCallback(
-    (path: string) => void window.omo.revealPath(resolveWorkspacePath(cwd ?? undefined, path)),
-    [cwd],
+    (path: string) => pathActions.open(resolveWorkspacePath(cwd ?? undefined, path)),
+    [cwd, pathActions],
   );
   const { jumpToLatest } = scroll;
   const seenRequests = useRef<ReadonlySet<string>>(new Set());
@@ -166,6 +169,7 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
         role="region"
         aria-label={t("conversation.region")}
       >
+        <PathPreviewProvider cwd={cwd}>
         <div ref={scroll.contentRef} className="mx-auto flex w-full max-w-3xl flex-col gap-6">
           {historyState === "loading" && <HistorySkeleton />}
           {historyState === "error" && <HistoryError threadId={threadId} message={conversation?.historyError ?? null} />}
@@ -186,6 +190,7 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
             </RenderBoundary>
           ))}
         </div>
+        </PathPreviewProvider>
       </div>
       {scroll.showJump && (
         <button

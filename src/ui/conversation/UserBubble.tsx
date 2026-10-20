@@ -7,6 +7,7 @@ import { focusRing } from "../kit";
 import { projectSkillUserText } from "./skill-text";
 import { splitAttachments } from "../composer/attachments";
 import { splitContext } from "../composer/context-draft";
+import { PathText } from "../content/media/PathText";
 
 export interface UserImage {
   key: string;
@@ -120,7 +121,7 @@ export const UserBubble = memo(function UserBubble({
                 ))}
               </div>
             )}
-            {attached.text}
+            <PathText text={attached.text} previews={!sending} />
             {attached.context.length > 0 && <div className="mt-2 whitespace-normal">
               {attached.context.map((entry, index) => <details key={index} className="max-w-full rounded-md bg-accent px-2 py-1 text-xs">
                 <summary className="cursor-pointer [overflow-wrap:anywhere]">{entry.kind === "terminal" ? "WindowsTerminal" : entry.value.replaceAll("\\", "/").split("/").at(-1) || entry.value}</summary>
