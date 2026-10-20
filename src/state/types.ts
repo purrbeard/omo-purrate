@@ -1,5 +1,6 @@
 import type { BridgeStatus, HistoricalTask, HistoryResult, HistoryTurn, MemoryWriteNotice, SessionNotice, TaskWork } from "../../shared/ipc";
 import type { DagActivity, DagHeartbeat, DagRun, LiveTask, TodoPhase, WireGoal } from "../../shared/protocol";
+import type { SessionHolder } from "../../shared/session-held";
 import type { WorkflowTransition } from "../ui/conversation/workflow-activity";
 import type {
   CommandApprovalParams,
@@ -80,6 +81,8 @@ export interface Conversation {
   live: ThreadLiveState;
   /** Memory writes and omo's special messages read from the session file. */
   annotations: SessionAnnotations;
+  /** Other omo processes that refused this app the session (`session_held`); null or absent when it opened. The history stays readable. */
+  held?: readonly SessionHolder[] | null;
 }
 
 export interface SessionAnnotations {
@@ -229,6 +232,7 @@ export type AppEvent =
   | { type: "threads/listed"; threads: Thread[]; nextCursor: string | null; append: boolean }
   | { type: "threads/origins"; origins: Record<string, "agent" | "user" | "dori" | "unknown"> }
   | { type: "thread/opened"; thread: Thread; resumed: boolean; session?: SessionModel }
+  | { type: "thread/held"; threadId: string; holders: readonly SessionHolder[] }
   | { type: "thread/sessionUpdated"; threadId: string; session: SessionModel }
   | { type: "thread/activated"; threadId: string | null }
   | { type: "history/loading"; threadId: string }
@@ -242,6 +246,8 @@ export type AppEvent =
   /** omo no longer runs the thread's active turn (a steer or interrupt was rejected); the turn ends as `status` locally. */
   | { type: "turn/settled"; threadId: string; status: "completed" | "interrupted"; settledAtMs: number }
   | { type: "user/messageSent"; threadId: string; clientId: string; text: string; images?: readonly ImageInput[]; sentAtMs: number }
+  /** The send was refused because the session is held elsewhere: the pending message is withdrawn without a notice. */
+  | { type: "user/messageDropped"; threadId: string; clientId: string }
   | { type: "user/messageFailed"; threadId: string; clientId: string; message: string }
   | { type: "composer/modelSelected"; modelId: string | null; effort: ReasoningEffort | null; profile?: import("../../shared/ipc").ModelProfile | null }
   | { type: "notice/pushed"; notice: Notice }

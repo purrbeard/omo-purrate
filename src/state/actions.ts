@@ -1,4 +1,5 @@
-import type { AccountUsage, BridgeStatus, HistoryResult, ImportPage, OmoBridgeApi } from "../../shared/ipc";
+import type { AccountUsage, BridgeStatus, HistoryResult, ImportPage, OmoBridgeApi, SessionInspection } from "../../shared/ipc";
+import { parseSessionHeld } from "../../shared/session-held";
 import type { ApprovalDecision, ProviderAccount, ReasoningEffort, RequestId, RpcNotification, Thread, ThreadSessionResult } from "../../shared/protocol";
 import { CLIENT_MESSAGE_PREFIX } from "../../shared/session-origin";
 import { messageInput, type ImageInput } from "../ui/composer/attachments";
@@ -117,6 +118,12 @@ export interface AppActions {
   /** Adds the importable sessions among the paths to the managed list, ends the first-run import, and refreshes the sidebar. */
   importSessions(sessionPaths: string[]): Promise<string[]>;
   skipSessionImport(): Promise<void>;
+  /** Which of the sessions another omo process holds, and which have no session file. */
+  inspectSessions(threadIds: string[]): Promise<SessionInspection>;
+  /** Drops the ids from the managed list and any pinned/parent entry that points at them; session files are never touched. */
+  removeMissingSessions(threadIds: string[]): Promise<void>;
+  /** Opens a thread another omo process refused (`session_held`) again; the composer unlocks when it succeeds. */
+  retryHeldThread(threadId: string): Promise<void>;
   linkThread(childId: string, parentId: string | null): Promise<void>;
   /** Sends to the active thread: steers the running turn, otherwise resumes the thread if needed and starts a turn; resolves true when omo accepted the message. */
   sendMessage(text: string, images?: readonly ImageInput[]): Promise<boolean>;
@@ -174,7 +181,16 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
   const notify = (level: "info" | "error", message: string, threadId: string | null = null, code?: NoticeCode, params?: Record<string, string>): void => {
     store.dispatch({ type: "notice/pushed", notice: { id: newId(), level, message, threadId, ...(code === undefined ? {} : { code }), ...(params === undefined ? {} : { params }) } });
   };
-  const fail = (error: unknown, threadId: string | null = null): void => notify("error", errorMessage(error), threadId);
+  /** A `session_held` refusal locks the thread's composer with an inline banner instead of raising a toast; true when it was one. */
+  const markHeld = (error: unknown, threadId: string | null): boolean => {
+    const holders = threadId === null ? null : parseSessionHeld(errorMessage(error));
+    if (threadId === null || holders === null) return false;
+    store.dispatch({ type: "thread/held", threadId, holders });
+    return true;
+  };
+  const fail = (error: unknown, threadId: string | null = null): void => {
+    if (!markHeld(error, threadId)) notify("error", errorMessage(error), threadId);
+  };
   const guarded = async (work: () => Promise<void>, threadId: string | null = null): Promise<void> => {
     try {
       await work();
@@ -605,7 +621,8 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       });
       return true;
     } catch (error) {
-      store.dispatch({ type: "user/messageFailed", threadId, clientId, message: errorMessage(error) });
+      if (markHeld(error, threadId)) store.dispatch({ type: "user/messageDropped", threadId, clientId });
+      else store.dispatch({ type: "user/messageFailed", threadId, clientId, message: errorMessage(error) });
       return false;
     }
   };
@@ -873,6 +890,25 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     },
     async skipSessionImport() {
       uiState.setPreferences(await bridge.setPreferences({ sessionImportCompleted: true }));
+    },
+    inspectSessions(threadIds) {
+      return bridge.inspectSessions(threadIds);
+    },
+    async removeMissingSessions(threadIds) {
+      const gone = new Set(threadIds);
+      const preferences = await bridge.getPreferences();
+      uiState.setPreferences(await bridge.setPreferences({
+        managedThreadIds: preferences.managedThreadIds.filter(id => !gone.has(id)),
+        pinnedThreadIds: preferences.pinnedThreadIds.filter(id => !gone.has(id)),
+        threadParents: Object.fromEntries(Object.entries(preferences.threadParents).filter(([child, parent]) => !gone.has(child) && !gone.has(parent))),
+      }));
+    },
+    async retryHeldThread(threadId) {
+      try {
+        await resumeThread(threadId);
+      } catch (error) {
+        fail(error, threadId);
+      }
     },
     async manageThread(threadId, managed) {
       const preferences = await bridge.getPreferences();

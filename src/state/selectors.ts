@@ -1,12 +1,18 @@
 import type { DagRun, LiveTask, Model, WireGoal } from "../../shared/protocol";
 import type { HistoricalTask } from "../../shared/ipc";
 import type { AppState, Conversation, PendingRequest, SessionModel, SkillCatalog, ThreadSummary, ThreadLiveState } from "./types";
+import type { SessionHolder } from "../../shared/session-held";
 import { EMPTY_SKILL_CATALOG } from "./skills";
 import { isSideThread } from "./btw";
 
 /** Returns a stable idle catalog when this cwd has not been requested. */
 export function selectSkillCatalog(state: AppState, cwd: string): SkillCatalog {
   return state.skillCatalogs[cwd] ?? EMPTY_SKILL_CATALOG;
+}
+
+/** The holders that refused this app the thread's session, or null when it is not known to be held. */
+export function selectHeldHolders(state: AppState, threadId: string | null): readonly SessionHolder[] | null {
+  return threadId === null ? null : state.conversations[threadId]?.held ?? null;
 }
 
 /** Workspace directory of the active main thread; null when no thread is open. */

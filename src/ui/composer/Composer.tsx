@@ -8,6 +8,8 @@ import { parseBtwCommand, selectActiveCwd, selectIsTurnActive, selectSkillCatalo
 import type { SkillCatalog } from "../../state";
 import { useT } from "../../i18n";
 import { useActions, useAppSelector } from "../app-context";
+import { HeldBanner } from "./HeldBanner";
+import { selectHeldHolders } from "../../state";
 import { useAskSide } from "../btw/use-ask-side";
 import { ConversationDock } from "../conversation/ConversationDock";
 import { TESTID } from "../testids";
@@ -106,6 +108,7 @@ export function Composer() {
   const activeThreadId = useAppSelector((state) => state.activeThreadId);
   const turnActive = useAppSelector(selectIsTurnActive);
   const connected = useAppSelector((state) => state.bridge?.state === "connected");
+  const held = useAppSelector((state) => selectHeldHolders(state, state.activeThreadId));
   const lastWorkspace = useUiState().preferences?.lastWorkspace ?? null;
   const preferences = useUiState().preferences;
   const sendKey = preferences?.sendKey ?? "enter";
@@ -415,7 +418,7 @@ export function Composer() {
   }, [fit]);
 
   const blank = text.trim() === "";
-  const canSend = connected && (!blank || images.length > 0 || context.length > 0 || goalDraft !== "") && !busy;
+  const canSend = connected && held === null && (!blank || images.length > 0 || context.length > 0 || goalDraft !== "") && !busy;
   const keywords = useMemo(() => findMagicKeywords(text), [text]);
   const keyword = keywords[0] ?? null;
   const hints = keywordHints(keywords);
@@ -631,6 +634,7 @@ export function Composer() {
             onDismiss={dismissMention}
           />
         )}
+        {held !== null && activeThreadId !== null && <HeldBanner threadId={activeThreadId} holders={held} />}
         <QueueList items={queued} onWithdraw={withdrawQueued} onEdit={editQueued} />
         {dropping && <div className="px-4 text-[13px] text-muted-foreground" role="status">{t("composer.images.drop")}</div>}
         {images.length > 0 && <div className="flex flex-wrap gap-2.5 px-4 py-1">
@@ -686,7 +690,7 @@ export function Composer() {
             placeholder={placeholder}
             rows={1}
             value={text}
-            disabled={!connected}
+            disabled={!connected || held !== null}
             onChange={(event) => edit(event.target.value, event.target.selectionStart)}
             onSelect={onSelect}
             onCompositionStart={() => {

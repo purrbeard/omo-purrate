@@ -21,6 +21,7 @@ import { DeleteThreadDialog } from "./DeleteThreadDialog";
 import { NativeSessionsDialog } from "./NativeSessionsDialog";
 import type { DeleteTarget } from "./DeleteThreadDialog";
 import { ThreadRow, WorkspaceRow } from "./Rows";
+import { SessionHoldersProvider, useSessionHolders } from "./session-holders";
 import { containsThread, filterGroups, isLiveRunning } from "./thread-filter";
 import type { ThreadPeriod } from "./thread-filter";
 import { partitionSettled, type SettleConfig } from "./settle";
@@ -154,6 +155,8 @@ export function Sidebar() {
   const groups = useMemo(() => selectManagedThreadsByWorkspace(state, preferences?.managedThreadIds ?? []), [state.threads, state.threadOrder, state.threadLinks, preferences?.managedThreadIds]);
   const pinned = useMemo(() => selectPinnedThreads(state, preferences?.pinnedThreadIds ?? []), [state.threads, state.threadOrder, state.threadLinks, state.btw, preferences?.pinnedThreadIds]);
   const pinnedIds = new Set(pinned.map(thread => thread.id));
+  const heldIds = useMemo(() => [...(preferences?.managedThreadIds ?? []), ...(preferences?.pinnedThreadIds ?? [])], [preferences?.managedThreadIds, preferences?.pinnedThreadIds]);
+  const holders = useSessionHolders(heldIds);
   const [nativeOpen, setNativeOpen] = useState(false);
   const activeThreadId = useAppSelector((state) => state.activeThreadId);
   const threadsLoaded = useAppSelector((state) => state.threadsLoaded);
@@ -285,6 +288,7 @@ export function Sidebar() {
   };
 
   return (
+    <SessionHoldersProvider value={holders}>
     <nav
       className="box-border flex h-full flex-col bg-sidebar px-2.5 pb-1.5 text-sm text-sidebar-foreground [word-break:keep-all] wrap-break-word in-data-[platform=darwin]:bg-sidebar/55"
       data-testid={TESTID.sidebar}
@@ -477,5 +481,6 @@ export function Sidebar() {
       {nativeOpen && <NativeSessionsDialog onClose={() => setNativeOpen(false)} />}
       <DeleteThreadDialog target={deleteTarget} onClose={() => setDeleteTarget(null)} />
     </nav>
+    </SessionHoldersProvider>
   );
 }

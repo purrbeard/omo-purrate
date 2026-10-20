@@ -5,6 +5,7 @@ import { useActions } from "../app-context";
 import { Badge, Button } from "../kit";
 import { errorMessage } from "./diagnostics";
 import { ImportTable, useImportCandidates } from "./ImportTable";
+import { MissingSessions } from "./MissingSessions";
 import { SectionHeading } from "./SectionHeading";
 import { ErrorText, SettingsCard, SettingsRow, ui } from "./SettingsCard";
 
@@ -71,6 +72,7 @@ export function ImportSection() {
           )}
         </div>
       </SettingsCard>
+      <MissingSessions />
     </section>
   );
 }

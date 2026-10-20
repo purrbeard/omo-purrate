@@ -29,6 +29,7 @@ import {
 import type { SideStorage } from "../../src/state";
 import type { AppState, AppStore } from "../../src/state";
 import { projectTitleText } from "../../src/ui/conversation/skill-text";
+import { sessionHeldMessage } from "../../shared/session-held";
 import { makeThread, notification } from "./helpers";
 
 type Handlers = { [M in ClientMethod]?: (params: ClientParams<M>) => ClientResult<M> | Promise<ClientResult<M>> };
@@ -105,6 +106,7 @@ class FakeBridge implements OmoBridgeApi {
   loadThreadOrigins(): ReturnType<OmoBridgeApi["loadThreadOrigins"]> { return Promise.resolve({}); }
   loadImportCandidates(): ReturnType<OmoBridgeApi["loadImportCandidates"]> { return Promise.resolve({ items: [], nextCursor: null, emptyCount: 0 }); }
   importSessions(): ReturnType<OmoBridgeApi["importSessions"]> { return Promise.resolve({ imported: [] }); }
+  inspectSessions(): ReturnType<OmoBridgeApi["inspectSessions"]> { return Promise.resolve({ holders: {}, missing: [] }); }
   loadContextUsage(): ReturnType<OmoBridgeApi["loadContextUsage"]> { return Promise.resolve({ tokens: null, provider: null, model: null, compacted: false }); }
   exportSession(): ReturnType<OmoBridgeApi["exportSession"]> { return Promise.resolve(null); }
   loadNativeCatalog(): ReturnType<OmoBridgeApi["loadNativeCatalog"]> { return Promise.resolve({ commands: [], contextWindows: {}, error: null }); }
@@ -167,6 +169,8 @@ class FakeBridge implements OmoBridgeApi {
   goal: () => Promise<ClientResult<"thread/goal/get">> = async () => ({ goal: null });
   private readonly notificationListeners = new Set<(notification: RpcNotification) => void>();
   readonly failing = new Set<ClientMethod>();
+  /** A method that fails with this exact message instead of the generic one. */
+  readonly failWith = new Map<ClientMethod, string>();
   skills: (cwds: string[]) => Promise<SkillsListResponse> = async (cwds) => ({
     data: cwds.map((cwd) => ({ cwd, skills: [{
       name: "ulw-loop", description: "Loop", path: "/skills/ulw-loop/SKILL.md", scope: "system", enabled: true,
@@ -226,6 +230,8 @@ class FakeBridge implements OmoBridgeApi {
   async request<M extends ClientMethod>(method: M, params: ClientParams<M>): Promise<ClientResult<M>> {
     this.calls.push({ method, params });
     if (this.failing.has(method)) throw new Error(`-32000: ${method} failed`);
+    const refusal = this.failWith.get(method);
+    if (refusal !== undefined) throw new Error(refusal);
     const handler = this.handlers[method];
     if (handler === undefined) throw new Error(`-32601: unhandled ${method}`);
     return handler(params);
@@ -854,6 +860,43 @@ describe("createActions", () => {
     const state = context.store.getState();
     expect(state.conversations[THREAD_ID]?.pendingUserMessages).toEqual([]);
     expect(state.notices).toMatchObject([{ level: "error", message: "-32000: turn/start failed", threadId: THREAD_ID }]);
+  });
+
+  it("locks the thread instead of raising a toast when another omo process holds the session, and unlocks on retry", async () => {
+    const context = setup();
+    await listThread(context);
+    await context.actions.openThread(THREAD_ID);
+    context.bridge.failWith.set("thread/resume", `-32600: ${sessionHeldMessage({ holders: [{ pid: 4242, cwd: "P:\\work" }] })}`);
+    expect(await context.actions.sendMessage("hello")).toBe(false);
+    const locked = context.store.getState();
+    expect(locked.conversations[THREAD_ID]?.held).toEqual([{ pid: 4242, cwd: "P:\\work" }]);
+    expect(locked.notices).toEqual([]);
+    expect(context.bridge.methods()).not.toContain("turn/start");
+    context.bridge.failWith.delete("thread/resume");
+    await context.actions.retryHeldThread(THREAD_ID);
+    expect(context.store.getState().conversations[THREAD_ID]?.held).toBeNull();
+    expect(await context.actions.sendMessage("hello")).toBe(true);
+  });
+
+  it("keeps the lock and refreshes the holders when a retry is refused again", async () => {
+    const context = setup();
+    await listThread(context);
+    await context.actions.openThread(THREAD_ID);
+    context.bridge.failWith.set("thread/resume", sessionHeldMessage({ holders: [{ pid: 1 }] }));
+    await context.actions.retryHeldThread(THREAD_ID);
+    context.bridge.failWith.set("thread/resume", sessionHeldMessage({ holders: [{ pid: 2 }] }));
+    await context.actions.retryHeldThread(THREAD_ID);
+    expect(context.store.getState().conversations[THREAD_ID]?.held).toEqual([{ pid: 2 }]);
+    expect(context.store.getState().notices).toEqual([]);
+  });
+
+  it("removes only the missing ids from the managed, pinned and parent entries", async () => {
+    const context = setup();
+    context.bridge.preferences = { ...context.bridge.preferences, managedThreadIds: ["gone", "kept"], pinnedThreadIds: ["gone", "kept"], threadParents: { gone: "kept", kept: "gone", other: "kept" } };
+    await context.actions.removeMissingSessions(["gone"]);
+    expect(context.bridge.preferences.managedThreadIds).toEqual(["kept"]);
+    expect(context.bridge.preferences.pinnedThreadIds).toEqual(["kept"]);
+    expect(context.bridge.preferences.threadParents).toEqual({ other: "kept" });
   });
 
   it("answers a user-input request with the wire answer map", async () => {

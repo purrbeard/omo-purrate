@@ -3,7 +3,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useActions, useAppSelector } from "../app-context";
 import type { KeyboardEvent } from "react";
 import clsx from "clsx";
-import { Archive, ChevronDown, Ellipsis, FolderOpen, GitFork, Pencil, Pin, SquarePen, Trash2 } from "lucide-react";
+import { Archive, ChevronDown, Ellipsis, FolderOpen, GitFork, Lock, Pencil, Pin, SquarePen, Trash2 } from "lucide-react";
+import { describeHolder } from "../../../shared/session-held";
 import { StateDot } from "../kit";
 import type { ThreadSummary, WorkspaceGroup } from "../../state";
 import { selectMainThreadId } from "../../state";
@@ -16,6 +17,7 @@ import { TESTID } from "../testids";
 import { useUiState } from "../ui-state";
 import { containsThread, isLiveRunning } from "./thread-filter";
 import { formatRowTime, formatThreadFullTime } from "./thread-time";
+import { useThreadHolders } from "./session-holders";
 import { WorkspaceBadge } from "./WorkspaceBadge";
 
 /** A sidebar row: hover and open-menu share the accent surface; the trailing action fades in over reserved padding. */
@@ -188,6 +190,7 @@ export function ThreadRow({ thread, active, searching = false, nowMs, showWorksp
   const running = useAppSelector(state => isLiveRunning(thread, state));
   const selected = active || currentId === thread.id;
   const pinned = preferences?.pinnedThreadIds.includes(thread.id) ?? false;
+  const holders = useThreadHolders(thread.id);
 
   const rowProps = {
     "data-testid": TESTID.threadRow,
@@ -244,6 +247,15 @@ export function ThreadRow({ thread, active, searching = false, nowMs, showWorksp
             {title}
             {creator !== "unknown" && <span className="block truncate text-xs font-normal leading-4 text-muted-foreground" data-testid="thread-creator-label">{creatorLabel}</span>}
           </span>
+          {holders !== undefined && (
+            <Tooltip.Root>
+              <Tooltip.Trigger render={<span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-xs leading-4 text-muted-foreground" data-testid={TESTID.threadInUse} />}>
+                <Lock className="size-3" aria-hidden />
+                {t("shell.sidebar.inUse")}
+              </Tooltip.Trigger>
+              <Tooltip.Content side="right">{t("shell.sidebar.inUseHint", { holders: holders.map(describeHolder).join("; ") })}</Tooltip.Content>
+            </Tooltip.Root>
+          )}
           {running ? <RunningStatus threadId={thread.id} /> : time}
         </button>
         <span className={clsx(rowActionsClass, (selected || menuOpen) && "opacity-100")}>

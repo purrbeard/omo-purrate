@@ -49,6 +49,7 @@ export {
   selectActiveCwd,
   selectActiveSessionModel,
   selectIsTurnActive,
+  selectHeldHolders,
   selectSkillCatalog,
   selectPendingRequestsForThread,
   selectThreadsByWorkspace,

@@ -176,10 +176,13 @@ export function reduce(state: AppState, event: AppEvent): AppState {
       return updateConversation(releaseHeldThread(opened, event.thread.id), event.thread.id, (conversation) => ({
         ...conversation,
         resumed: event.resumed,
+        ...(event.resumed ? { held: null } : {}),
         live: { ...conversation.live, freshness: event.resumed ? "live" : conversation.live.freshness },
         ...(event.session === undefined ? {} : { session: event.session }),
       }));
     }
+    case "thread/held":
+      return updateConversation(state, event.threadId, (conversation) => ({ ...conversation, held: event.holders }));
     case "thread/sessionUpdated":
       return updateExistingConversation(state, event.threadId, (conversation) => ({ ...conversation, session: event.session }));
     case "thread/activated": {
@@ -250,6 +253,11 @@ export function reduce(state: AppState, event: AppEvent): AppState {
       }));
       return fillEmptyPreview(queued, event.threadId, text);
     }
+    case "user/messageDropped":
+      return updateExistingConversation(state, event.threadId, (conversation) => ({
+        ...conversation,
+        pendingUserMessages: conversation.pendingUserMessages.filter((message) => message.clientId !== event.clientId),
+      }));
     case "user/messageFailed": {
       const withoutPending = updateExistingConversation(state, event.threadId, (conversation) => ({
         ...conversation,
