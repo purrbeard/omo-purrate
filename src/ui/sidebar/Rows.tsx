@@ -3,10 +3,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useActions, useAppSelector } from "../app-context";
 import type { KeyboardEvent, MouseEvent } from "react";
 import clsx from "clsx";
-import { AlarmClock, Archive, Check, ChevronDown, Ellipsis, FolderOpen, GitFork, Lock, Pencil, Pin, SquareCheck, SquarePen, Trash2 } from "lucide-react";
+import { AlarmClock, Archive, Check, ChevronDown, Ellipsis, FolderOpen, GitFork, Lock, Pencil, Pin, Settings2, SquareCheck, SquarePen, Trash2 } from "lucide-react";
 import { SNOOZE_PRESETS, type SnoozePreset } from "../../../shared/snooze";
 import { describeHolder } from "../../../shared/session-held";
 import { StateDot } from "../kit";
+import { ProjectBadge } from "../projects/ProjectBadge";
+import { projectDisplayName } from "../projects/project-style";
 import type { ThreadSummary, WorkspaceGroup } from "../../state";
 import { selectMainThreadId } from "../../state";
 import { useLocale, useT } from "../../i18n";
@@ -15,7 +17,7 @@ import { useElapsedMs } from "../elapsed";
 import { focusRing, InputError, Menu, Tooltip } from "../kit";
 import { errorText } from "../notices/error-text";
 import { TESTID } from "../testids";
-import { useUiState } from "../ui-state";
+import { uiState, useUiState } from "../ui-state";
 import { containsThread, isLiveRunning } from "./thread-filter";
 import { formatRowTime, formatThreadFullTime } from "./thread-time";
 import { useThreadHolders } from "./session-holders";
@@ -53,21 +55,33 @@ interface WorkspaceRowProps {
 
 export function WorkspaceRow({ group, expanded, hidesActiveThread, onToggle, onCreate }: WorkspaceRowProps) {
   const t = useT();
-  const createLabel = t("shell.sidebar.newThreadIn", { name: group.label });
-  const toggleLabel = t(expanded ? "shell.sidebar.collapseGroup" : "shell.sidebar.expandGroup", { name: group.label });
+  const { preferences } = useUiState();
+  const label = projectDisplayName(preferences?.projectSettings, group.cwd);
+  const createLabel = t("shell.sidebar.newThreadIn", { name: label });
+  const toggleLabel = t(expanded ? "shell.sidebar.collapseGroup" : "shell.sidebar.expandGroup", { name: label });
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <div className={clsx(rowClass, "h-8", hidesActiveThread ? "text-sidebar-foreground" : "text-muted-foreground")}>
-      <button type="button" className={clsx(rowMainClass, "gap-1.5 pr-9")} aria-expanded={expanded} aria-label={toggleLabel} title={group.cwd} onClick={onToggle}>
+    <div className={clsx(rowClass, "h-8", (menuOpen) && "bg-sidebar-accent", hidesActiveThread ? "text-sidebar-foreground" : "text-muted-foreground")}>
+      <button type="button" className={clsx(rowMainClass, "gap-1.5 pr-16")} aria-expanded={expanded} aria-label={toggleLabel} title={group.cwd} onClick={onToggle}>
         <span className="inline-flex h-5 w-3.5 shrink-0 items-center justify-center text-muted-foreground">
           <ChevronDown aria-hidden className={clsx("size-3 transition-transform duration-150 motion-reduce:transition-none", !expanded && "-rotate-90")} />
         </span>
-        <WorkspaceBadge cwd={group.cwd} size="sm" />
-        <span className="min-w-0 truncate text-xs font-medium leading-5">{group.label}</span>
+        <ProjectBadge cwd={group.cwd} size="sm" />
+        <span className="min-w-0 truncate text-xs font-medium leading-5" data-testid={TESTID.workspaceName}>{label}</span>
         <span className="shrink-0 text-xs tabular-nums leading-5 text-muted-foreground" aria-label={t("shell.sidebar.threadCount", { count: group.threads.length })}>
           {group.threads.length}
         </span>
       </button>
-      <span className={rowActionsClass}>
+      <span className={clsx(rowActionsClass, "gap-0.5", menuOpen && "opacity-100")}>
+        <Menu.Root open={menuOpen} onOpenChange={setMenuOpen}>
+          <Menu.Trigger className={rowIconButtonClass} data-testid={TESTID.workspaceMenu} aria-label={t("screens.projects.actions", { name: label })}>
+            <Ellipsis aria-hidden />
+          </Menu.Trigger>
+          <Menu.Content align="end" side="bottom">
+            <Menu.Item icon={<Settings2 />} data-testid={TESTID.workspaceSettings} onClick={() => uiState.openProjectSettings(group.cwd)}>{t("screens.projects.settings")}</Menu.Item>
+            <Menu.Item icon={<Archive />} data-testid={TESTID.workspaceArchive} onClick={() => uiState.openArchive(group.cwd)}>{t("screens.projects.archived")}</Menu.Item>
+          </Menu.Content>
+        </Menu.Root>
         <Tooltip.Root>
           <Tooltip.Trigger
             render={<button type="button" className={rowIconButtonClass} data-testid={TESTID.workspaceCompose} aria-label={createLabel} onClick={onCreate} />}

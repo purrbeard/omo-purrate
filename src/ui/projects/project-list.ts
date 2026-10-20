@@ -6,13 +6,15 @@ export interface ProjectEntry {
   cwd: string;
   /** Main threads the sidebar lists for this directory; 0 for a folder known only from the recent workspaces. */
   threadCount: number;
+  /** Newest updatedAt (ms) among the listed threads; null when the folder has none. */
+  lastActivityMs: number | null;
 }
 
 /**
  * Identity of a directory across the two sources that spell it, omo's thread cwd and the folder picker's path:
  * trailing separators are dropped, and a Windows path (drive letter or UNC) also ignores case and separator style.
  */
-function projectKey(cwd: string): string {
+export function projectKey(cwd: string): string {
   const trimmed = cwd.replace(/[/\\]+$/, "");
   return /^[A-Za-z]:[/\\]|^\\\\/.test(cwd) ? trimmed.replaceAll("\\", "/").toLowerCase() : trimmed;
 }
@@ -26,12 +28,16 @@ export function listProjects(groups: readonly WorkspaceGroup[], recentWorkspaces
   for (const group of groups) {
     const key = projectKey(group.cwd);
     const known = projects.get(key);
-    if (known === undefined) projects.set(key, { cwd: group.cwd, threadCount: group.threads.length });
-    else known.threadCount += group.threads.length;
+    const latest = group.threads.reduce<number | null>((max, thread) => (max === null || thread.updatedAt > max ? thread.updatedAt : max), null);
+    if (known === undefined) projects.set(key, { cwd: group.cwd, threadCount: group.threads.length, lastActivityMs: latest });
+    else {
+      known.threadCount += group.threads.length;
+      if (latest !== null && (known.lastActivityMs === null || latest > known.lastActivityMs)) known.lastActivityMs = latest;
+    }
   }
   for (const cwd of recentWorkspaces) {
     const key = projectKey(cwd);
-    if (!projects.has(key)) projects.set(key, { cwd, threadCount: 0 });
+    if (!projects.has(key)) projects.set(key, { cwd, threadCount: 0, lastActivityMs: null });
   }
   return [...projects.values()];
 }

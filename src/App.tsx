@@ -139,10 +139,10 @@ function Shell() {
     }
   };
   const paletteCommands: MenuCommand[] = ["new-session", "open-project", "settings", "toggle-sidebar", "toggle-agents", "toggle-workflow", "toggle-files", "toggle-terminal", "toggle-side-chat", "keyboard-shortcuts"];
-  const paletteEntries = buildPaletteEntries(paletteCommands.map(id => {
+  const paletteEntries = buildPaletteEntries([...paletteCommands.map(id => {
     const shortcut = APP_SHORTCUTS.find(shortcut => shortcut.id === id)!;
     return { id, title: t(shortcut.label), shortcut: [...shortcutKeys(shortcut, window.omo.platform)], run: () => runCommand(id) };
-  }), sessions.map(thread => ({ id: thread.id, title: threadTitle(thread, t("shell.untitledThread")), workspace: thread.cwd })), id => { void actions.openThread(id); });
+  }), { id: "open-archive", title: t("screens.palette.archive"), run: () => { if (!composing.current) uiState.openArchive(); } }], sessions.map(thread => ({ id: thread.id, title: threadTitle(thread, t("shell.untitledThread")), workspace: thread.cwd })), id => { void actions.openThread(id); });
 
   useEffect(() => {
     const root = document.documentElement;

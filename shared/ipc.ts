@@ -2,6 +2,7 @@
  * Contract between the Electron main process, the preload script, and the renderer.
  * The preload script exposes an object satisfying OmoBridgeApi as `window.omo`.
  */
+import type { ProjectSetting } from "./project-settings";
 import type {
   ClientMethod,
   ClientParams,
@@ -216,6 +217,9 @@ export interface Preferences {
   reduceMotion: boolean;
   /** Track A: snoozed thread id -> wake time (epoch ms); the sidebar hides the thread until then. */
   snoozedThreads: Record<string, number>;
+  // Track B: projects
+  /** Per-project display name, icon and color keyed by workspace directory; never renames the folder. */
+  projectSettings: Record<string, ProjectSetting>;
 }
 
 export type FollowUpPreference = "steer" | "queue";
@@ -258,6 +262,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   compactSidebar: false,
   reduceMotion: false,
   snoozedThreads: {},
+  // Track B: projects
+  projectSettings: {},
 };
 
 /** One turn reconstructed from a session JSONL file. */

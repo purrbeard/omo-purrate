@@ -6,6 +6,7 @@ import clsx from "clsx";
 import {
   Archive,
   ArrowLeft,
+  FolderKanban,
   Import,
   Info,
   Keyboard,
@@ -46,6 +47,7 @@ import { KeybindingsSection } from "./KeybindingsSection";
 import { McpSection } from "./McpSection";
 import { ModelSection } from "./ModelSection";
 import { OmoSection } from "./OmoSection";
+import { ProjectsSection } from "./ProjectsSection";
 import { SkillsSection } from "./SkillsSection";
 import { errorMessage } from "./diagnostics";
 import { ErrorText, ui } from "./SettingsCard";
@@ -177,6 +179,14 @@ const GROUPS: readonly SectionGroup[] = [
         keys: ["shell.settings.archived.restore"],
         terms: [],
         render: () => <ArchivedSection />,
+      },
+      {
+        id: "projects",
+        label: "shell.settings.nav.projects",
+        icon: FolderKanban,
+        keys: ["screens.projects.rename", "screens.projects.appearance"],
+        terms: [],
+        render: () => <ProjectsSection />,
       },
       {
         id: "android",

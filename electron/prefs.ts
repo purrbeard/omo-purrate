@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFil
 import path from "node:path";
 import { DEFAULT_PREFERENCES } from "../shared/ipc";
 import { pruneExpired, sanitizeSnoozed } from "../shared/snooze";
+import { sanitizeProjectSettings } from "../shared/project-settings";
 import { THREAD_STATE_KEYS, ThreadDb } from "./store/thread-db";
 import type { ImportRecord, ThreadState } from "./store/thread-db";
 import type { DiffColorPreference, FollowUpPreference, LocalePreference, ModelProfile, PalettePreference, Preferences, SendKeyPreference, ThemePreference, ThreadCreatorEvidence, ThreadNotificationPreference, ThreadOrigin, TimeFormatPreference } from "../shared/ipc";
@@ -151,6 +152,8 @@ function merge(current: Preferences, patch: unknown): Preferences {
       : current.profileModels === undefined ? {} : { profileModels: current.profileModels }),
     ...appearance(patch, current),
     snoozedThreads: has("snoozedThreads") ? sanitizeSnoozed(patch["snoozedThreads"], current.snoozedThreads ?? {}) : current.snoozedThreads ?? {},
+    // Track B: projects
+    projectSettings: has("projectSettings") ? sanitizeProjectSettings(patch["projectSettings"], current.projectSettings ?? {}) : current.projectSettings ?? {},
   };
 }
 

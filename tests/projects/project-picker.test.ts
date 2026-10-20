@@ -20,18 +20,18 @@ describe("listProjects", () => {
   it("lists workspaces with threads in sidebar order, then recent folders without threads", () => {
     const projects = listProjects([group("/w/server", 3), group("/w/client", 1)], ["/w/docs", "/w/client", "/w/tools"]);
     expect(projects).toEqual([
-      { cwd: "/w/server", threadCount: 3 },
-      { cwd: "/w/client", threadCount: 1 },
-      { cwd: "/w/docs", threadCount: 0 },
-      { cwd: "/w/tools", threadCount: 0 },
+      { cwd: "/w/server", threadCount: 3, lastActivityMs: 0 },
+      { cwd: "/w/client", threadCount: 1, lastActivityMs: 0 },
+      { cwd: "/w/docs", threadCount: 0, lastActivityMs: null },
+      { cwd: "/w/tools", threadCount: 0, lastActivityMs: null },
     ]);
   });
 
   it("lists a Windows folder once, under its thread spelling, however the sources spell it", () => {
     const groups = [group("P:\\coding\\omo-ui", 2), group("p:/coding/omo-ui", 1)];
     expect(listProjects(groups, ["P:\\Coding\\omo-ui\\", "P:\\coding\\other"])).toEqual([
-      { cwd: "P:\\coding\\omo-ui", threadCount: 3 },
-      { cwd: "P:\\coding\\other", threadCount: 0 },
+      { cwd: "P:\\coding\\omo-ui", threadCount: 3, lastActivityMs: 0 },
+      { cwd: "P:\\coding\\other", threadCount: 0, lastActivityMs: null },
     ]);
   });
 
