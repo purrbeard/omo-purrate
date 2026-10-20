@@ -125,7 +125,9 @@ export type PendingRequest =
 
 /** Notices the UI translates by code; a notice without a code shows its message as-is (omo's own error text). */
 export type NoticeCode = "noActiveThread" | "steered" | "branchBusy" | "modelSwitch" | "sessionChangedElsewhere" | "sessionReloadBusy"
-  | "modelFallback" | "transcriptWriteFailed" | "extensionError" | "compactFailed";
+  | "modelFallback" | "transcriptWriteFailed" | "extensionError" | "compactFailed"
+  // Track A: bulk tidy
+  | "threadsArchived" | "threadsDone" | "bulkFailed";
 
 export interface Notice {
   id: string;
@@ -138,6 +140,8 @@ export interface Notice {
   threadId: string | null;
   code?: NoticeCode;
   action?: "open-thread";
+  /** Track A: shows an Undo button that reverses a bulk archive or mark-done for exactly these threads. */
+  undo?: { kind: "unarchive" | "unsettle"; threadIds: string[] };
   /** "side" renders the notice inside the side chat panel of `threadId` (its main thread) instead of as a toast. */
   scope?: "side";
 }

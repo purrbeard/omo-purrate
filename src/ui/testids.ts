@@ -250,6 +250,22 @@ export const TESTID = {
   wizardNoProject: "wizard-no-project",
   settingsShowOnboarding: "settings-show-onboarding",
   settingsOpenLogs: "settings-open-logs",
+  // Track A
+  threadCheckbox: "thread-checkbox",
+  threadSelect: "thread-select",
+  threadSnooze: "thread-snooze",
+  threadWake: "thread-wake",
+  threadWoken: "thread-woken",
+  bulkBar: "bulk-bar",
+  bulkCount: "bulk-count",
+  bulkArchive: "bulk-archive",
+  bulkDone: "bulk-done",
+  bulkPin: "bulk-pin",
+  bulkSnooze: "bulk-snooze",
+  bulkClear: "bulk-clear",
+  noticeUndo: "notice-undo",
+  sidebarSnoozed: "sidebar-snoozed",
+  sidebarSnoozedToggle: "sidebar-snoozed-toggle",
 } as const;
 
 export type TestId = (typeof TESTID)[keyof typeof TESTID];

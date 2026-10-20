@@ -13,6 +13,19 @@ export interface SettleConfig {
   unsettledThreads: readonly string[];
 }
 
+/** The two manual settle lists after marking `ids` settled (done) or unsettled; each id ends in exactly one list. */
+export function applySettled(
+  lists: { settledThreads: readonly string[]; unsettledThreads: readonly string[] },
+  ids: readonly string[],
+  settled: boolean,
+): { settledThreads: string[]; unsettledThreads: string[] } {
+  const moved = new Set(ids);
+  const keep = (list: readonly string[]): string[] => list.filter((id) => !moved.has(id));
+  return settled
+    ? { settledThreads: [...keep(lists.settledThreads), ...ids], unsettledThreads: keep(lists.unsettledThreads) }
+    : { settledThreads: keep(lists.settledThreads), unsettledThreads: [...keep(lists.unsettledThreads), ...ids] };
+}
+
 /**
  * Whether a thread reads as settled: manually settled always wins; otherwise auto-settle settles an idle,
  * non-running thread whose last activity is `autoSettleDays` or more ago, unless the user unsettled it.

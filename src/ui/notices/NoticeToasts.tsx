@@ -10,6 +10,7 @@ import { errorText } from "./error-text";
 const ERROR_HOLD_MS = 6000;
 const INFO_HOLD_MS = 3000;
 const ACTION_HOLD_MS = 8000;
+const UNDO_HOLD_MS = 6000;
 
 /**
  * @returns the user-facing heading and body of a notice: coded notices translate by code, RPC failures drop their
@@ -24,6 +25,7 @@ export function noticeContent(notice: Notice, t: Translate): { title: string | n
 
 function holdMs(notice: Notice, openThread: string | null): number {
   if (notice.pinned === true) return 0;
+  if (notice.undo !== undefined) return UNDO_HOLD_MS;
   if (openThread !== null || notice.code === "modelSwitch") return ACTION_HOLD_MS;
   return notice.level === "error" ? ERROR_HOLD_MS : INFO_HOLD_MS;
 }
@@ -60,6 +62,7 @@ function NoticeQueue() {
         {text}
       </span>
     );
+    const undo = notice.undo;
     const common = {
       id: notice.id,
       description,
@@ -68,7 +71,19 @@ function NoticeQueue() {
       timeout: holdMs(notice, openThread),
       priority: "low" as const,
       onClose: () => actions.dismissNotice(notice.id),
-      ...(openThread === null
+      ...(undo !== undefined
+        ? {
+          actionProps: {
+            children: t("notice.action.undo"),
+            "data-testid": TESTID.noticeUndo,
+            onClick: () => {
+              if (undo.kind === "unarchive") void actions.unarchiveThreads(undo.threadIds);
+              else void actions.settleThreads(undo.threadIds, false);
+              toast.close(notice.id);
+            },
+          },
+        }
+        : openThread === null
         ? {}
         : { actionProps: { children: t("notice.action.open"), onClick: () => { void actions.openThread(openThread); toast.close(notice.id); } } }),
     };

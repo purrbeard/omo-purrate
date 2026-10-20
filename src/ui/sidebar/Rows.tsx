@@ -1,9 +1,10 @@
 // Ported from DSH ui-workspace rows/Rows.tsx (MIT, Copyright (c) 2026 DeepSeek).
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useActions, useAppSelector } from "../app-context";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import clsx from "clsx";
-import { Archive, ChevronDown, Ellipsis, FolderOpen, GitFork, Lock, Pencil, Pin, SquarePen, Trash2 } from "lucide-react";
+import { AlarmClock, Archive, Check, ChevronDown, Ellipsis, FolderOpen, GitFork, Lock, Pencil, Pin, SquareCheck, SquarePen, Trash2 } from "lucide-react";
+import { SNOOZE_PRESETS, type SnoozePreset } from "../../../shared/snooze";
 import { describeHolder } from "../../../shared/session-held";
 import { StateDot } from "../kit";
 import type { ThreadSummary, WorkspaceGroup } from "../../state";
@@ -147,6 +148,26 @@ interface ThreadRowProps {
   /** Present (with the current settled state in `settled`) only where the sidebar offers Settle/Unsettle. */
   settled?: boolean;
   onSettle?(threadId: string, settled: boolean): void;
+  /** Track A: multi-select. `picked` is this row's selection state; `selectionActive` shows the checkbox on every row. */
+  picked?: boolean;
+  selectionActive?: boolean;
+  onPick?(threadId: string, mode: "toggle" | "range"): void;
+  /** Archive through the sidebar so the Undo notice appears; without it the row archives silently. */
+  onArchive?(threadId: string): void;
+  onSnooze?(threadId: string, preset: SnoozePreset): void;
+  /** Set on rows of the Snoozed group: when the thread wakes. */
+  wakeAtMs?: number;
+  onWake?(threadId: string): void;
+  /** A snooze ended and the thread has not been opened since. */
+  attention?: boolean;
+}
+
+/** Short wake time for the Snoozed group: weekday, day and clock time, in the user's clock format. */
+function formatWakeTime(wakeAtMs: number, locale: string, timeFormat: "system" | "12h" | "24h"): string {
+  return new Date(wakeAtMs).toLocaleString(locale, {
+    weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+    ...(timeFormat === "system" ? {} : { hour12: timeFormat === "12h" }),
+  });
 }
 
 function RunningStatus({ threadId }: { threadId: string }) {
@@ -165,7 +186,7 @@ function RunningStatus({ threadId }: { threadId: string }) {
   );
 }
 
-export function ThreadRow({ thread, active, searching = false, nowMs, showWorkspace = false, onOpen, onRename, onRequestDelete, onReveal, settled = false, onSettle }: ThreadRowProps) {
+export function ThreadRow({ thread, active, searching = false, nowMs, showWorkspace = false, onOpen, onRename, onRequestDelete, onReveal, settled = false, onSettle, picked = false, selectionActive = false, onPick, onArchive, onSnooze, wakeAtMs, onWake, attention = false }: ThreadRowProps) {
   const t = useT();
   const actions = useActions();
   const currentId = useAppSelector(selectMainThreadId);
@@ -219,6 +240,15 @@ export function ThreadRow({ thread, active, searching = false, nowMs, showWorksp
   const report = (error: unknown): void => setLinkError(errorText(error, t).text);
   const run = (work: Promise<unknown>): void => { void work.catch(report); };
 
+  const onMainClick = (event: MouseEvent): void => {
+    if (onPick !== undefined) {
+      if (event.shiftKey) return onPick(thread.id, "range");
+      if (event.ctrlKey || event.metaKey || selectionActive) return onPick(thread.id, "toggle");
+    }
+    onOpen(thread.id);
+  };
+
+  const wakeLabel = wakeAtMs === undefined ? null : t("shell.snooze.until", { time: formatWakeTime(wakeAtMs, locale, preferences?.timeFormat ?? "system") });
   const time = (
     <Tooltip.Root>
       <Tooltip.Trigger render={<span className="shrink-0 text-xs tabular-nums leading-4 text-muted-foreground" />}>
@@ -234,17 +264,33 @@ export function ThreadRow({ thread, active, searching = false, nowMs, showWorksp
         className={clsx(
           rowClass,
           "min-h-9 text-sidebar-foreground",
-          (selected || menuOpen) && "bg-sidebar-accent",
+          (selected || menuOpen || picked) && "bg-sidebar-accent",
           // The selected row carries the one primary mark in the list.
           selected && "before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-sidebar-primary before:content-['']",
         )}
         {...rowProps}
         data-creator={creator}
+        data-picked={picked ? "true" : undefined}
       >
-        <button type="button" className={clsx(rowMainClass, "pr-9")} onClick={() => onOpen(thread.id)}>
+        <button type="button" className={clsx(rowMainClass, "pr-9")} aria-pressed={selectionActive ? picked : undefined} onClick={onMainClick}>
+          {selectionActive && (
+            <span
+              aria-hidden
+              data-testid={TESTID.threadCheckbox}
+              data-checked={picked ? "true" : "false"}
+              className={clsx(
+                "inline-flex size-4 shrink-0 items-center justify-center rounded-sm border border-solid",
+                picked ? "border-sidebar-primary bg-sidebar-primary text-sidebar-primary-foreground" : "border-sidebar-border bg-background",
+              )}
+            >
+              {picked && <Check className="size-3" />}
+            </span>
+          )}
+          {attention && <span className="size-2 shrink-0 rounded-full bg-sidebar-primary" role="img" aria-label={t("shell.snooze.woken")} title={t("shell.snooze.woken")} data-testid={TESTID.threadWoken} />}
           {showWorkspace && <WorkspaceBadge cwd={thread.cwd} />}
           <span className={clsx("min-w-0 flex-1 truncate py-1 text-sm leading-5", selected ? "font-semibold" : "font-medium")} title={creator === "unknown" ? title : `${title} · ${creatorLabel}`}>
             {title}
+            {wakeLabel !== null && <span className="block truncate text-xs font-normal leading-4 text-muted-foreground" data-testid={TESTID.threadWake}>{wakeLabel}</span>}
             {creator !== "unknown" && <span className="block truncate text-xs font-normal leading-4 text-muted-foreground" data-testid="thread-creator-label">{creatorLabel}</span>}
           </span>
           {holders !== undefined && (
@@ -256,7 +302,7 @@ export function ThreadRow({ thread, active, searching = false, nowMs, showWorksp
               <Tooltip.Content side="right">{t("shell.sidebar.inUseHint", { holders: holders.map(describeHolder).join("; ") })}</Tooltip.Content>
             </Tooltip.Root>
           )}
-          {running ? <RunningStatus threadId={thread.id} /> : time}
+          {running ? <RunningStatus threadId={thread.id} /> : wakeLabel === null ? time : null}
         </button>
         <span className={clsx(rowActionsClass, (selected || menuOpen) && "opacity-100")}>
           <Menu.Root open={menuOpen} onOpenChange={setMenuOpen}>
@@ -264,11 +310,18 @@ export function ThreadRow({ thread, active, searching = false, nowMs, showWorksp
               <Ellipsis aria-hidden />
             </Menu.Trigger>
             <Menu.Content align="end" side="bottom">
+              {onPick !== undefined && !selectionActive && <Menu.Item icon={<SquareCheck />} data-testid={TESTID.threadSelect} onClick={() => onPick(thread.id, "toggle")}>{t("shell.bulk.select")}</Menu.Item>}
               <Menu.Item icon={<Pin />} onClick={() => run(actions.pinThread(thread.id, !pinned))}>{t(pinned ? "shell.sidebar.unpin" : "shell.sidebar.pin")}</Menu.Item>
               <Menu.Item icon={<Pencil />} onClick={() => setRenaming(true)}>{t("shell.sidebar.rename")}</Menu.Item>
               <Menu.Item icon={<GitFork />} onClick={() => run(actions.forkThread(thread.id))}>{t("shell.sidebar.fork")}</Menu.Item>
-              <Menu.Item icon={<Archive />} onClick={() => run(actions.archiveThread(thread.id))}>{t("shell.sidebar.archive")}</Menu.Item>
+              <Menu.Item icon={<Archive />} onClick={() => (onArchive !== undefined ? onArchive(thread.id) : run(actions.archiveThread(thread.id)))}>{t("shell.sidebar.archive")}</Menu.Item>
               {onSettle !== undefined && <Menu.Item onClick={() => onSettle(thread.id, !settled)}>{settled ? t("shell.sidebar.unsettle") : t("shell.sidebar.settle")}</Menu.Item>}
+              {onSnooze !== undefined && SNOOZE_PRESETS.map(preset => (
+                <Menu.Item key={preset} icon={<AlarmClock />} data-testid={TESTID.threadSnooze} data-preset={preset} onClick={() => onSnooze(thread.id, preset)}>
+                  {t("shell.snooze")}: {t(`shell.snooze.${preset}`)}
+                </Menu.Item>
+              ))}
+              {wakeAtMs !== undefined && onWake !== undefined && <Menu.Item icon={<AlarmClock />} onClick={() => onWake(thread.id)}>{t("shell.snooze.wake")}</Menu.Item>}
               <Menu.Item icon={<FolderOpen />} onClick={() => onReveal(thread.cwd)}>{t("shell.sidebar.revealInFinder")}</Menu.Item>
               <Menu.Separator />
               <Menu.Item onClick={() => { void actions.newThread(thread.cwd, thread.id); }}>{t("shell.newRelatedSession")}</Menu.Item>

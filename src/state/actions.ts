@@ -6,6 +6,7 @@ import { messageInput, type ImageInput } from "../ui/composer/attachments";
 import { normalizeModel, resolveEffort } from "../ui/composer/model-groups";
 import { resendOf, storedText } from "../ui/conversation/resend";
 import { uiState } from "../ui/ui-state";
+import { applySettled } from "../ui/sidebar/settle";
 import type { AppStore } from "./store";
 import type { AppState, NoticeCode, SessionModel, SideChat } from "./types";
 import { parseStoredSides, selectSidesOf, sideDraftKey, sideName } from "./btw";
@@ -33,6 +34,12 @@ function historySignature(history: HistoryResult): string {
 
 
 const RECENT_WORKSPACE_LIMIT = 10;
+
+/** Outcome of a bulk thread operation. */
+export interface BulkResult {
+  done: string[];
+  failed: string[];
+}
 
 export interface ActionOptions {
   now?: () => number;
@@ -142,6 +149,14 @@ export interface AppActions {
   listArchivedThreads(): Promise<Thread[]>;
   forkThread(threadId: string): Promise<string>;
   pinThread(threadId: string, pinned: boolean): Promise<void>;
+  /** Track A: archives every id (one failure does not stop the rest) and shows an Undo notice for the ones that worked. */
+  archiveThreads(threadIds: readonly string[]): Promise<BulkResult>;
+  unarchiveThreads(threadIds: readonly string[]): Promise<BulkResult>;
+  pinThreads(threadIds: readonly string[], pinned: boolean): Promise<void>;
+  /** Marks the threads done (settled) or not; marking done shows an Undo notice. */
+  settleThreads(threadIds: readonly string[], settled: boolean): Promise<void>;
+  /** Snoozes the threads until `wakeAtMs`, or wakes them now when null. */
+  snoozeThreads(threadIds: readonly string[], wakeAtMs: number | null): Promise<void>;
   setGoalStatus(threadId: string, status: "active" | "paused"): Promise<void>;
   clearGoal(threadId: string): Promise<void>;
   answerApproval(id: RequestId, decision: ApprovalDecision, reason?: string): Promise<void>;
@@ -180,6 +195,31 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
 
   const notify = (level: "info" | "error", message: string, threadId: string | null = null, code?: NoticeCode, params?: Record<string, string>): void => {
     store.dispatch({ type: "notice/pushed", notice: { id: newId(), level, message, threadId, ...(code === undefined ? {} : { code }), ...(params === undefined ? {} : { params }) } });
+  };
+  /** Runs `work` for every id, collecting which ones failed instead of stopping at the first. */
+  const eachThread = async (threadIds: readonly string[], work: (threadId: string) => Promise<void>): Promise<BulkResult> => {
+    const result: BulkResult = { done: [], failed: [] };
+    for (const threadId of threadIds) {
+      try {
+        await work(threadId);
+        result.done.push(threadId);
+      } catch (error) {
+        console.warn("Bulk thread action failed", threadId, error);
+        result.failed.push(threadId);
+      }
+    }
+    return result;
+  };
+  /** Tells the user what a bulk action did (with Undo when `undo` is given) and how many threads it could not handle. */
+  const announce = (result: BulkResult, code?: "threadsArchived" | "threadsDone", undo?: "unarchive" | "unsettle"): void => {
+    if (code !== undefined && result.done.length > 0) {
+      const count = String(result.done.length);
+      store.dispatch({
+        type: "notice/pushed",
+        notice: { id: newId(), level: "info", message: `${count} threads updated`, threadId: null, code, params: { count }, ...(undo === undefined ? {} : { undo: { kind: undo, threadIds: result.done } }) },
+      });
+    }
+    if (result.failed.length > 0) notify("error", `${result.failed.length} threads could not be updated`, null, "bulkFailed", { count: String(result.failed.length) });
   };
   /** A `session_held` refusal locks the thread's composer with an inline banner instead of raising a toast; true when it was one. */
   const markHeld = (error: unknown, threadId: string | null): boolean => {
@@ -917,6 +957,40 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     async pinThread(threadId, pinned) {
       const preferences = await bridge.getPreferences();
       uiState.setPreferences(await bridge.setPreferences({ pinnedThreadIds: pinned ? [...new Set([...preferences.pinnedThreadIds, threadId])] : preferences.pinnedThreadIds.filter(id => id !== threadId) }));
+    },
+    async archiveThreads(threadIds) {
+      const result = await eachThread(threadIds, async (threadId) => {
+        await bridge.request("thread/archive", { threadId });
+        store.dispatch({ type: "rpc/notification", notification: { method: "thread/archived", params: { threadId } }, receivedAtMs: now() });
+      });
+      announce(result, "threadsArchived", "unarchive");
+      return result;
+    },
+    async unarchiveThreads(threadIds) {
+      const result = await eachThread(threadIds, async (threadId) => { await bridge.request("thread/unarchive", { threadId }); });
+      if (result.done.length > 0) await refreshThreads();
+      announce(result);
+      return result;
+    },
+    async pinThreads(threadIds, pinned) {
+      const preferences = await bridge.getPreferences();
+      const ids = new Set(threadIds);
+      const rest = preferences.pinnedThreadIds.filter(id => !ids.has(id));
+      uiState.setPreferences(await bridge.setPreferences({ pinnedThreadIds: pinned ? [...rest, ...threadIds] : rest }));
+    },
+    async settleThreads(threadIds, settled) {
+      const preferences = await bridge.getPreferences();
+      uiState.setPreferences(await bridge.setPreferences(applySettled(preferences, threadIds, settled)));
+      if (settled) announce({ done: [...threadIds], failed: [] }, "threadsDone", "unsettle");
+    },
+    async snoozeThreads(threadIds, wakeAtMs) {
+      const preferences = await bridge.getPreferences();
+      const snoozedThreads = { ...preferences.snoozedThreads };
+      for (const id of threadIds) {
+        if (wakeAtMs === null) delete snoozedThreads[id];
+        else snoozedThreads[id] = wakeAtMs;
+      }
+      uiState.setPreferences(await bridge.setPreferences({ snoozedThreads }));
     },
     async archiveThread(threadId) {
       await bridge.request("thread/archive", { threadId });

@@ -1,7 +1,8 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, ReactElement, ReactNode } from "react";
 import clsx from "clsx";
-import { ChartNoAxesColumn, ChevronDown, CircleX, Ellipsis, FolderPlus, History, Import, MessagesSquare, PanelLeft, Search, Settings } from "lucide-react";
+import { AlarmClock, Archive, ChartNoAxesColumn, CheckCheck, ChevronDown, CircleX, Ellipsis, FolderPlus, History, Import, MessagesSquare, PanelLeft, Pin, PinOff, Search, Settings, X } from "lucide-react";
+import { nextWake, pruneExpired, SNOOZE_PRESETS, snoozeWakeTime, type SnoozePreset } from "../../../shared/snooze";
 import { StateDot } from "../kit";
 import type { StateDotState } from "../kit";
 import type { BridgeState, BridgeStatus } from "../../../shared/ipc";
@@ -25,6 +26,7 @@ import { SessionHoldersProvider, useSessionHolders } from "./session-holders";
 import { containsThread, filterGroups, isLiveRunning } from "./thread-filter";
 import type { ThreadPeriod } from "./thread-filter";
 import { partitionSettled, type SettleConfig } from "./settle";
+import { pruneSelection, selectRange, toggleId } from "./selection";
 
 const DOT_STATE: Record<BridgeState, StateDotState> = {
   locating: "ongoing",
@@ -37,6 +39,9 @@ const DOT_STATE: Record<BridgeState, StateDotState> = {
 };
 
 const CLOCK_TICK_MS = 30_000;
+/** setTimeout overflows past 2^31-1 ms (about 24 days); longer snoozes re-arm when it fires early. */
+const MAX_TIMER_MS = 2_147_483_647;
+const NO_SNOOZED: Readonly<Record<string, number>> = {};
 
 const PERIODS: readonly Exclude<ThreadPeriod, "any">[] = ["today", "week", "month"];
 
@@ -152,8 +157,20 @@ export function Sidebar() {
   const newProject = useNewSessionFlow({ chooseFolder: true });
   const { preferences } = useUiState();
   const state = useAppSelector(s => s);
-  const groups = useMemo(() => selectManagedThreadsByWorkspace(state, preferences?.managedThreadIds ?? []), [state.threads, state.threadOrder, state.threadLinks, preferences?.managedThreadIds]);
-  const pinned = useMemo(() => selectPinnedThreads(state, preferences?.pinnedThreadIds ?? []), [state.threads, state.threadOrder, state.threadLinks, state.btw, preferences?.pinnedThreadIds]);
+  const snoozedMap = preferences?.snoozedThreads ?? NO_SNOOZED;
+  const allGroups = useMemo(() => selectManagedThreadsByWorkspace(state, preferences?.managedThreadIds ?? []), [state.threads, state.threadOrder, state.threadLinks, preferences?.managedThreadIds]);
+  const allPinned = useMemo(() => selectPinnedThreads(state, preferences?.pinnedThreadIds ?? []), [state.threads, state.threadOrder, state.threadLinks, state.btw, preferences?.pinnedThreadIds]);
+  // Snoozed threads leave the normal list (and the pinned section) until they wake; they live in the Snoozed group.
+  const groups = useMemo(
+    () => allGroups.map(group => ({ ...group, threads: group.threads.filter(thread => snoozedMap[thread.id] === undefined) })).filter(group => group.threads.length > 0),
+    [allGroups, snoozedMap],
+  );
+  const pinned = useMemo(() => allPinned.filter(thread => snoozedMap[thread.id] === undefined), [allPinned, snoozedMap]);
+  const snoozedThreads = useMemo(() => {
+    const byId = new Map<string, ThreadSummary>();
+    for (const thread of [...allGroups.flatMap(group => group.threads), ...allPinned]) if (snoozedMap[thread.id] !== undefined) byId.set(thread.id, thread);
+    return [...byId.values()].sort((a, b) => (snoozedMap[a.id] ?? 0) - (snoozedMap[b.id] ?? 0));
+  }, [allGroups, allPinned, snoozedMap]);
   const pinnedIds = new Set(pinned.map(thread => thread.id));
   const heldIds = useMemo(() => [...(preferences?.managedThreadIds ?? []), ...(preferences?.pinnedThreadIds ?? [])], [preferences?.managedThreadIds, preferences?.pinnedThreadIds]);
   const holders = useSessionHolders(heldIds);
@@ -169,10 +186,17 @@ export function Sidebar() {
   useUnsettleOnActivity();
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
   const [settledOpen, setSettledOpen] = useState(false);
+  const [snoozedOpen, setSnoozedOpen] = useState(false);
+  /** Threads whose snooze ended while the app ran and that were not opened since: shown first in their group with a dot. */
+  const [woken, setWoken] = useState<ReadonlySet<string>>(() => new Set());
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const anchorRef = useRef<string | null>(null);
+  const orderRef = useRef<string[]>([]);
   const [query, setQuery] = useState("");
   const [runningOnly, setRunningOnly] = useState(false);
   const [period, setPeriod] = useState<ThreadPeriod>("any");
   const [loadingMore, setLoadingMore] = useState(false);
+  const [wakeTick, setWakeTick] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const groupsRef = useRef(groups);
   groupsRef.current = groups;
@@ -183,9 +207,10 @@ export function Sidebar() {
       autoSettle: preferences?.autoSettle ?? true,
       autoSettleDays: preferences?.autoSettleDays ?? 3,
       settledThreads: preferences?.settledThreads ?? [],
-      unsettledThreads: preferences?.unsettledThreads ?? [],
+      // A thread that just woke must not vanish into Settled because it slept past the auto-settle age.
+      unsettledThreads: [...(preferences?.unsettledThreads ?? []), ...woken],
     }),
-    [preferences?.autoSettle, preferences?.autoSettleDays, preferences?.settledThreads, preferences?.unsettledThreads, preferences],
+    [preferences?.autoSettle, preferences?.autoSettleDays, preferences?.settledThreads, preferences?.unsettledThreads, preferences, woken],
   );
   const split = useMemo(() => partitionSettled(groups.map(group => ({ ...group, threads: withoutPinned(group.threads, pinnedIds) })).filter(group => group.threads.length > 0), settleConfig, nowMs), [groups, pinned, settleConfig, nowMs]);
   const settledRef = useRef(split.settled);
@@ -197,8 +222,15 @@ export function Sidebar() {
   const visiblePinned = filterGroups([{ cwd: "pinned", label: "", threads: pinned.map(thread => ({ ...thread, children: withoutPinned(thread.children ?? [], pinnedIds) })) }],
     { query, runningOnly, period }, nowMs, thread => threadTitle(thread, fallbackTitle), runningOf)[0]?.threads ?? [];
   const visibleGroups = useMemo(
-    () => filterGroups(split.groups, { query, runningOnly, period }, nowMs, (thread: ThreadSummary) => threadTitle(thread, fallbackTitle), runningOf),
-    [split, query, runningOnly, period, nowMs, fallbackTitle, runningOf],
+    () => filterGroups(split.groups, { query, runningOnly, period }, nowMs, (thread: ThreadSummary) => threadTitle(thread, fallbackTitle), runningOf)
+      .map(group => (group.threads.some(thread => woken.has(thread.id))
+        ? { ...group, threads: [...group.threads.filter(thread => woken.has(thread.id)), ...group.threads.filter(thread => !woken.has(thread.id))] }
+        : group)),
+    [split, query, runningOnly, period, nowMs, fallbackTitle, runningOf, woken],
+  );
+  const visibleSnoozed = useMemo(
+    () => filterGroups([{ cwd: "snoozed", label: "", threads: snoozedThreads }], { query, runningOnly, period }, nowMs, (thread: ThreadSummary) => threadTitle(thread, fallbackTitle), runningOf)[0]?.threads ?? [],
+    [snoozedThreads, query, runningOnly, period, nowMs, fallbackTitle, runningOf],
   );
   const visibleSettled = useMemo(
     () => filterGroups([settledGroup], { query, runningOnly, period }, nowMs, (thread: ThreadSummary) => threadTitle(thread, fallbackTitle), runningOf)[0]?.threads ?? [],
@@ -208,7 +240,8 @@ export function Sidebar() {
   const searching = query.trim() !== "";
   const filtering = runningOnly || period !== "any";
   const settledExpanded = settledOpen || searching;
-  const empty = threadsLoaded && groups.length === 0 && pinned.length === 0;
+  const snoozedExpanded = snoozedOpen || searching;
+  const empty = threadsLoaded && allGroups.length === 0 && allPinned.length === 0;
 
   const expand = (cwd: string): void => {
     setCollapsed((current) => {
@@ -227,6 +260,58 @@ export function Sidebar() {
     });
   };
 
+  // Selection mode: only threads that still exist stay selected.
+  useEffect(() => {
+    const existing = new Set([...allGroups.flatMap(group => group.threads), ...allPinned].map(thread => thread.id));
+    setSelected(current => pruneSelection(current, existing));
+  }, [allGroups, allPinned]);
+
+  // One timer to the nearest wake time, re-armed whenever the snooze map changes (no polling).
+  useEffect(() => {
+    const wake = nextWake(snoozedMap);
+    if (wake === null) return;
+    const timer = window.setTimeout(() => {
+      const nowAt = Date.now();
+      const due = Object.entries(snoozedMap).filter(([, at]) => at <= nowAt).map(([id]) => id);
+      if (due.length === 0) {
+        setWakeTick(tick => tick + 1);
+        return;
+      }
+      setWoken(current => new Set([...current, ...due]));
+      const fresh = uiState.get().preferences?.snoozedThreads ?? snoozedMap;
+      updatePreferences({ snoozedThreads: pruneExpired(fresh, nowAt) }).catch(pushError);
+    }, Math.min(Math.max(wake - Date.now(), 0), MAX_TIMER_MS));
+    return () => window.clearTimeout(timer);
+  }, [snoozedMap, wakeTick]);
+
+  useEffect(() => {
+    if (activeThreadId === null) return;
+    setWoken(current => {
+      if (!current.has(activeThreadId)) return current;
+      const next = new Set(current);
+      next.delete(activeThreadId);
+      return next;
+    });
+  }, [activeThreadId]);
+
+  useEffect(() => {
+    if (selected.size === 0) return;
+    const onKey = (event: globalThis.KeyboardEvent): void => {
+      if (event.isComposing || event.defaultPrevented) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target !== null && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.closest('[role="dialog"]') !== null)) return;
+      if (event.key === "Escape") {
+        // Escape closes an open menu first.
+        if (target?.closest('[role="menu"]') === null || target === null) setSelected(new Set());
+      } else if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        setSelected(new Set(orderRef.current));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected.size > 0]);
+
   useEffect(() => {
     if (activeThreadId === null) return;
     const owner = groupsRef.current.find((group) => group.threads.some((thread) => containsThread(thread, activeThreadId)));
@@ -242,16 +327,45 @@ export function Sidebar() {
   };
 
   const setSettled = (threadId: string, settled: boolean): void => {
-    const preferences = uiState.get().preferences;
-    if (preferences === null) return;
-    const settledThreads = settled
-      ? [...preferences.settledThreads.filter((id) => id !== threadId), threadId]
-      : preferences.settledThreads.filter((id) => id !== threadId);
-    const unsettledThreads = settled
-      ? preferences.unsettledThreads.filter((id) => id !== threadId)
-      : [...preferences.unsettledThreads.filter((id) => id !== threadId), threadId];
-    updatePreferences({ settledThreads, unsettledThreads }).catch(pushError);
+    actions.settleThreads([threadId], settled).catch(pushError);
   };
+
+  const orderIds = (threads: readonly ThreadSummary[]): string[] => threads.map(thread => thread.id);
+  const visibleOrder = [
+    ...orderIds(visiblePinned),
+    ...visibleGroups.flatMap(group => (searching || filtering || !collapsed.has(group.cwd) ? orderIds(group.threads) : [])),
+    ...(settledExpanded ? orderIds(visibleSettled) : []),
+    ...(snoozedExpanded ? orderIds(visibleSnoozed) : []),
+  ];
+  orderRef.current = visibleOrder;
+
+  const pick = (threadId: string, mode: "toggle" | "range"): void => {
+    if (mode === "range") {
+      setSelected(current => selectRange(orderRef.current, anchorRef.current, threadId, current));
+    } else {
+      setSelected(current => toggleId(current, threadId));
+      anchorRef.current = threadId;
+    }
+  };
+
+  /** Runs a bulk action on the selection: everything that worked leaves the selection, failures stay selected. */
+  const runBulk = (work: (ids: string[]) => Promise<{ failed: string[] } | void>): void => {
+    const ids = [...selected];
+    work(ids).then(
+      (result) => setSelected(new Set(result?.failed ?? [])),
+      pushError,
+    );
+  };
+  const allSelectedPinned = selected.size > 0 && [...selected].every(id => preferences?.pinnedThreadIds.includes(id) ?? false);
+  const snoozeAt = (preset: SnoozePreset): number => snoozeWakeTime(preset, Date.now());
+  const bulkRow = (thread: ThreadSummary) => ({
+    picked: selected.has(thread.id),
+    selectionActive: selected.size > 0,
+    attention: woken.has(thread.id),
+    onPick: pick,
+    onArchive: (threadId: string) => void actions.archiveThreads([threadId]),
+    onSnooze: (threadId: string, preset: SnoozePreset) => void actions.snoozeThreads([threadId], snoozeAt(preset)).catch(pushError),
+  });
 
   const loadMore = async (): Promise<void> => {
     setLoadingMore(true);
@@ -368,7 +482,7 @@ export function Sidebar() {
             <section className="flex flex-col gap-0.5" data-testid={TESTID.sidebarPinned} aria-label={t("shell.sidebar.pinned")}>
               <h2 className="m-0 px-2.5 py-2 text-xs font-semibold text-muted-foreground">{t("shell.sidebar.pinned")}</h2>
               {visiblePinned.map(thread => (
-                <ThreadRow key={thread.id} thread={thread} active={thread.id === activeThreadId} nowMs={nowMs} searching={searching} showWorkspace {...rowHandlers} />
+                <ThreadRow key={thread.id} thread={thread} active={thread.id === activeThreadId} nowMs={nowMs} searching={searching} showWorkspace {...bulkRow(thread)} {...rowHandlers} />
               ))}
             </section>
           )}
@@ -411,7 +525,7 @@ export function Sidebar() {
                     }}
                   />
                   {expanded && group.threads.map((thread) => (
-                    <ThreadRow key={thread.id} thread={thread} active={thread.id === activeThreadId} searching={searching} nowMs={nowMs} onSettle={setSettled} {...rowHandlers} />
+                    <ThreadRow key={thread.id} thread={thread} active={thread.id === activeThreadId} searching={searching} nowMs={nowMs} onSettle={setSettled} {...bulkRow(thread)} {...rowHandlers} />
                   ))}
                 </div>
               );
@@ -456,12 +570,90 @@ export function Sidebar() {
                 </span>
               </button>
               {settledExpanded && visibleSettled.map((thread) => (
-                <ThreadRow key={thread.id} thread={thread} active={thread.id === activeThreadId} searching={searching} nowMs={nowMs} settled showWorkspace onSettle={setSettled} {...rowHandlers} />
+                <ThreadRow key={thread.id} thread={thread} active={thread.id === activeThreadId} searching={searching} nowMs={nowMs} settled showWorkspace onSettle={setSettled} {...bulkRow(thread)} {...rowHandlers} />
+              ))}
+            </div>
+          )}
+          {snoozedThreads.length > 0 && (
+            <div className="mx-0.5 mt-3.5 flex shrink-0 flex-col gap-0.5" data-testid={TESTID.sidebarSnoozed}>
+              <button
+                type="button"
+                className={clsx("flex h-7 cursor-pointer items-center gap-1.5 rounded-sm border-0 bg-transparent px-2 text-left text-xs leading-4 text-muted-foreground [font-family:inherit] hover:bg-sidebar-accent hover:text-sidebar-foreground", focusRing)}
+                data-testid={TESTID.sidebarSnoozedToggle}
+                aria-expanded={snoozedExpanded}
+                aria-label={t(snoozedExpanded ? "shell.snooze.collapse" : "shell.snooze.expand")}
+                onClick={() => setSnoozedOpen((open) => !open)}
+              >
+                <ChevronDown aria-hidden className={clsx("size-3 shrink-0 transition-transform duration-150 motion-reduce:transition-none", !snoozedExpanded && "-rotate-90")} />
+                <span className="min-w-0 flex-1 truncate">{t("shell.snooze.group")}</span>
+                <span className="shrink-0 tabular-nums" aria-label={t("shell.snooze.groupCount", { count: visibleSnoozed.length })}>
+                  {visibleSnoozed.length}
+                </span>
+              </button>
+              {snoozedExpanded && visibleSnoozed.map((thread) => (
+                <ThreadRow
+                  key={thread.id}
+                  thread={thread}
+                  active={thread.id === activeThreadId}
+                  searching={searching}
+                  nowMs={nowMs}
+                  showWorkspace
+                  wakeAtMs={snoozedMap[thread.id]}
+                  onWake={(threadId) => void actions.snoozeThreads([threadId], null).catch(pushError)}
+                  {...bulkRow(thread)}
+                  {...rowHandlers}
+                />
               ))}
             </div>
           )}
         </div>
       </div>
+      {selected.size > 0 && (
+        <div
+          className="mx-0.5 mb-1 mt-1 box-border flex shrink-0 flex-col gap-1 rounded-md border border-solid border-sidebar-border bg-background p-1.5"
+          role="toolbar"
+          aria-label={t("shell.bulk.actions")}
+          data-testid={TESTID.bulkBar}
+        >
+          <div className="flex items-center gap-1 pl-1">
+            <span className="min-w-0 flex-1 truncate text-xs font-medium tabular-nums" data-testid={TESTID.bulkCount} role="status">{t("shell.bulk.selected", { count: selected.size })}</span>
+            <Tip label={t("shell.bulk.clear")} side="top" align="end">
+              <button type="button" className={compactIconClass} data-testid={TESTID.bulkClear} aria-label={t("shell.bulk.clear")} onClick={() => setSelected(new Set())}>
+                <X aria-hidden />
+              </button>
+            </Tip>
+          </div>
+          <div className="flex items-center gap-1">
+            <Tip label={t("shell.bulk.archive")} side="top" align="start">
+              <button type="button" className={compactIconClass} data-testid={TESTID.bulkArchive} aria-label={t("shell.bulk.archive")} onClick={() => runBulk(ids => actions.archiveThreads(ids))}>
+                <Archive aria-hidden />
+              </button>
+            </Tip>
+            <Tip label={t("shell.bulk.done")} side="top">
+              <button type="button" className={compactIconClass} data-testid={TESTID.bulkDone} aria-label={t("shell.bulk.done")} onClick={() => runBulk(ids => actions.settleThreads(ids, true))}>
+                <CheckCheck aria-hidden />
+              </button>
+            </Tip>
+            <Tip label={t(allSelectedPinned ? "shell.sidebar.unpin" : "shell.sidebar.pin")} side="top">
+              <button type="button" className={compactIconClass} data-testid={TESTID.bulkPin} aria-label={t(allSelectedPinned ? "shell.sidebar.unpin" : "shell.sidebar.pin")} onClick={() => runBulk(ids => actions.pinThreads(ids, !allSelectedPinned))}>
+                {allSelectedPinned ? <PinOff aria-hidden /> : <Pin aria-hidden />}
+              </button>
+            </Tip>
+            <Menu.Root>
+              <Menu.Trigger className={compactIconClass} data-testid={TESTID.bulkSnooze} aria-label={t("shell.snooze")}>
+                <AlarmClock aria-hidden />
+              </Menu.Trigger>
+              <Menu.Content align="start" side="top">
+                {SNOOZE_PRESETS.map(preset => (
+                  <Menu.Item key={preset} data-testid={TESTID.threadSnooze} data-preset={preset} onClick={() => runBulk(ids => actions.snoozeThreads(ids, snoozeAt(preset)))}>
+                    {t(`shell.snooze.${preset}`)}
+                  </Menu.Item>
+                ))}
+              </Menu.Content>
+            </Menu.Root>
+          </div>
+        </div>
+      )}
       <div className="-mx-0.5 mt-1 flex shrink-0 items-center gap-1">
         <button
           type="button"

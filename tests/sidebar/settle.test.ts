@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadSummary, WorkspaceGroup } from "../../src/state";
-import { isThreadSettled, partitionSettled, type SettleConfig } from "../../src/ui/sidebar/settle";
+import { applySettled, isThreadSettled, partitionSettled, type SettleConfig } from "../../src/ui/sidebar/settle";
 
 const MIN = 60_000;
 const DAY = 24 * 60 * MIN;
@@ -62,5 +62,13 @@ describe("partitionSettled", () => {
     const { groups: active, settled } = partitionSettled(solo, config(), now);
     expect(active).toEqual([]);
     expect(settled.map((entry) => entry.id)).toEqual(["gone"]);
+  });
+});
+
+describe("applySettled", () => {
+  it("moves ids into exactly one list and leaves the others alone", () => {
+    const lists = { settledThreads: ["x", "a"], unsettledThreads: ["b", "y"] };
+    expect(applySettled(lists, ["a", "b"], true)).toEqual({ settledThreads: ["x", "a", "b"], unsettledThreads: ["y"] });
+    expect(applySettled(lists, ["a", "b"], false)).toEqual({ settledThreads: ["x"], unsettledThreads: ["y", "a", "b"] });
   });
 });
