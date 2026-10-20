@@ -43,6 +43,7 @@ import type { AppUpdateStatus } from "../shared/app-update";
 import type { ModelRoutingInput, ModelRoutingSettings } from "../shared/model-routing";
 import type { ContextUsage, NativeCatalog, TerminalChunk, TerminalExit, TerminalSnapshot, WORKBENCH_IPC } from "../shared/workbench";
 import type { DagRun } from "../shared/protocol";
+import type { OpenPathOutcome, PathInfo } from "../shared/media";
 import type { SERVERS_IPC, SshHostState, SshInventory } from "../shared/servers";
 import type { BROWSER_IPC, BrowserColorScheme, BrowserDevice, BrowserRect, BrowserScreenshot, BrowserState, BrowserZoom, LocalServer, PickedElement } from "../shared/browser";
 
@@ -115,6 +116,9 @@ const CHANNELS = {
   readClipboardText: "app:read-clipboard-text",
   openExternal: "app:open-external",
   revealPath: "app:reveal-path",
+  // Track C: in-chat media and path preview
+  statPaths: "app:stat-paths",
+  openPath: "app:open-path",
   openLogsFolder: "app:open-logs-folder",
   listOpenTargets: "app:list-open-targets",
   openWorkspace: "app:open-workspace",
@@ -289,6 +293,9 @@ const api = {
   readClipboardText: (): Promise<string> => invoke(CHANNELS.readClipboardText),
   openExternal: (url: string): Promise<void> => invoke(CHANNELS.openExternal, url),
   revealPath: (target: string): Promise<void> => invoke(CHANNELS.revealPath, target),
+  // Track C: in-chat media and path preview
+  statPaths: (paths: string[]): Promise<PathInfo[]> => invoke(CHANNELS.statPaths, paths),
+  openPath: (target: string): Promise<OpenPathOutcome> => invoke(CHANNELS.openPath, target),
   openLogsFolder: (): Promise<void> => invoke(CHANNELS.openLogsFolder),
   listOpenTargets: (): Promise<OpenTarget[]> => invoke(CHANNELS.listOpenTargets),
   openWorkspace: (cwd: string, target?: OpenTargetId | null): Promise<OpenTargetId> =>

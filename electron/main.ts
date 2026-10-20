@@ -20,6 +20,7 @@ import { createWorkbenchHandlers } from "./workbench/create-handlers";
 import { initLogging } from "./logging";
 import { installApplicationMenu } from "./menu";
 import { OmoSupervisor } from "./omo/supervisor";
+import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { PreferencesStore } from "./prefs";
 
 const QUIT_STOP_TIMEOUT_MS = 5_000;
@@ -28,6 +29,9 @@ const QUIT_STOP_TIMEOUT_MS = 5_000;
 const INSTALL_NAME = "OmO UI Windows";
 app.setName("omo Purrate");
 app.setPath("userData", process.env[ENV.userData] || path.join(app.getPath("appData"), INSTALL_NAME));
+
+// Track C: the media scheme must be registered before the app is ready.
+registerMediaScheme();
 
 const devUrl = process.env[ENV.devUrl] || null;
 const indexPath = path.join(__dirname, "../dist/index.html");
@@ -171,6 +175,7 @@ function run(): void {
   void app.whenReady().then(() => {
     if (!app.isPackaged) app.dock?.setIcon(path.join(__dirname, "../build/icon.png"));
     installApplicationMenu(sendMenuCommand, { openLogs: () => void shell.openPath(logger.dir) });
+    registerMediaProtocol();
     registerIpc({ supervisor, iphone, android, prefs, getWindow: () => mainWindow, homeDir });
     registerWorkbenchIpc(workbench);
     registerBrowserIpc(browser);
