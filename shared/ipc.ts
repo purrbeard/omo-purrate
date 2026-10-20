@@ -2,6 +2,7 @@
  * Contract between the Electron main process, the preload script, and the renderer.
  * The preload script exposes an object satisfying OmoBridgeApi as `window.omo`.
  */
+import type { ProjectSetting } from "./project-settings";
 import type {
   ClientMethod,
   ClientParams,
@@ -214,6 +215,9 @@ export interface Preferences {
   compactSidebar: boolean;
   /** Turn off interface animations and transitions, in addition to the OS reduced-motion setting. */
   reduceMotion: boolean;
+  // Track B: projects
+  /** Per-project display name, icon and color keyed by workspace directory; never renames the folder. */
+  projectSettings: Record<string, ProjectSetting>;
 }
 
 export type FollowUpPreference = "steer" | "queue";
@@ -255,6 +259,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   diffColors: "red-green",
   compactSidebar: false,
   reduceMotion: false,
+  // Track B: projects
+  projectSettings: {},
 };
 
 /** One turn reconstructed from a session JSONL file. */

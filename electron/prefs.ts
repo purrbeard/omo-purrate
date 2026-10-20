@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_PREFERENCES } from "../shared/ipc";
+import { sanitizeProjectSettings } from "../shared/project-settings";
 import { THREAD_STATE_KEYS, ThreadDb } from "./store/thread-db";
 import type { ImportRecord, ThreadState } from "./store/thread-db";
 import type { DiffColorPreference, FollowUpPreference, LocalePreference, ModelProfile, PalettePreference, Preferences, SendKeyPreference, ThemePreference, ThreadCreatorEvidence, ThreadNotificationPreference, ThreadOrigin, TimeFormatPreference } from "../shared/ipc";
@@ -149,6 +150,8 @@ function merge(current: Preferences, patch: unknown): Preferences {
     ...(has("profileModels") ? { profileModels: profileModels(patch["profileModels"], current.profileModels) }
       : current.profileModels === undefined ? {} : { profileModels: current.profileModels }),
     ...appearance(patch, current),
+    // Track B: projects
+    projectSettings: has("projectSettings") ? sanitizeProjectSettings(patch["projectSettings"], current.projectSettings ?? {}) : current.projectSettings ?? {},
   };
 }
 

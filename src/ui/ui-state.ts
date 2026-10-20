@@ -50,7 +50,7 @@ const storedLayout = (): { tabOrder: RightTab[]; dockSide: DockSide } => {
 const saveLayout = (): void => {
   try { window.localStorage.setItem(DOCK_LAYOUT_KEY, JSON.stringify({ tabOrder: state.tabOrder, dockSide: state.dockSide })); } catch { /* storage unavailable */ }
 };
-export type SettingsSection = "general" | "appearance" | "keybindings" | "model" | "skills" | "omo" | "accounts" | "mcp" | "android" | "iphone" | "devices" | "archived" | "import" | "about";
+export type SettingsSection = "general" | "appearance" | "keybindings" | "model" | "skills" | "omo" | "accounts" | "mcp" | "android" | "iphone" | "devices" | "archived" | "projects" | "import" | "about";
 
 export interface UiState {
   rightTab: RightTab | null;
@@ -76,6 +76,11 @@ export interface UiState {
   workflowPanelSize: WorkflowPanelSize;
   settingsOpen: boolean;
   settingsSection: SettingsSection;
+  // Track B: screens
+  /** Project the archive screen opens filtered to; null shows every project. */
+  archiveFilterCwd: string | null;
+  /** Project the projects screen scrolls to when it opens. */
+  projectsFocusCwd: string | null;
   /** First-run wizard visibility; opens on launch until the onboardingCompleted preference is true. */
   onboardingOpen: boolean;
   /** First-run session import; opens after onboarding until the sessionImportCompleted preference is true. */
@@ -108,6 +113,8 @@ let state: UiState = {
   workflowPanelSize: "normal",
   settingsOpen: false,
   settingsSection: "general",
+  archiveFilterCwd: null,
+  projectsFocusCwd: null,
   onboardingOpen: false,
   sessionImportOpen: false,
   sidebarVisible: true,
@@ -179,6 +186,13 @@ export const uiState = {
   subscribe,
   setSettingsOpen: (settingsOpen: boolean, settingsSection?: SettingsSection): void => update({ settingsOpen, ...(settingsSection === undefined ? {} : { settingsSection }) }),
   setSettingsSection: (settingsSection: SettingsSection): void => update({ settingsSection }),
+  // Track B: screens
+  /** Opens Settings > Archived, filtered to one project (or every project with null). */
+  openArchive: (cwd: string | null = null): void => update({ settingsOpen: true, settingsSection: "archived", archiveFilterCwd: cwd }),
+  setArchiveFilter: (archiveFilterCwd: string | null): void => update({ archiveFilterCwd }),
+  /** Opens Settings > Projects scrolled to one project. */
+  openProjectSettings: (cwd: string): void => update({ settingsOpen: true, settingsSection: "projects", projectsFocusCwd: cwd }),
+  clearProjectsFocus: (): void => { if (state.projectsFocusCwd !== null) update({ projectsFocusCwd: null }); },
   setOnboardingOpen: (onboardingOpen: boolean): void => update({ onboardingOpen }),
   setSessionImportOpen: (sessionImportOpen: boolean): void => update({ sessionImportOpen }),
   setSidebarVisible: (sidebarVisible: boolean): void => update({ sidebarVisible }),

@@ -5,6 +5,7 @@ import { byTestId, launchApp, shot } from "./helpers.ts";
 const SECTIONS: ReadonlyArray<{ section: string; label: string }> = [
   { section: "general", label: "General" },
   { section: "archived", label: "Archived sessions" },
+  { section: "projects", label: "Projects" },
   { section: "appearance", label: "Appearance" },
   { section: "keybindings", label: "Keybindings" },
   { section: "model", label: "Model" },
