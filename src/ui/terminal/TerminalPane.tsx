@@ -16,6 +16,13 @@ type TerminalOutputElement = HTMLDivElement & { readonly terminal?: Terminal };
  */
 const EXPOSE_TERMINAL = import.meta.env.DEV || !window.location.pathname.includes("/app.asar/");
 
+/**
+ * A drag-resize settles before the terminal refits. Refitting every frame sent each intermediate size to ConPTY, whose
+ * repaint for one size landed after xterm had already reflowed to the next, overwriting rows (measured 2026-10-21: 59
+ * PTY resizes for four sweeps, a prompt spliced into a command line and two output rows lost).
+ */
+const RESIZE_SETTLE_MS = 120;
+
 /** The bridge rejects longer writes, so a large paste is sent as consecutive slices. */
 const MAX_WRITE = 8000;
 
@@ -135,10 +142,10 @@ export function TerminalPane({ threadId, terminalId, cwd, active, ring, revision
     const resize = terminal.onResize(({ cols, rows }) => {
       if (liveRef.current) window.omo.terminalResize(threadId, terminalId, cols, rows).catch(report);
     });
-    let frame = 0;
+    let settle: ReturnType<typeof setTimeout> | undefined;
     const sizer = new ResizeObserver(() => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => { if (host.clientWidth > 0 && host.clientHeight > 0) fit.fit(); });
+      clearTimeout(settle);
+      settle = setTimeout(() => { if (host.clientWidth > 0 && host.clientHeight > 0) fit.fit(); }, RESIZE_SETTLE_MS);
     });
     sizer.observe(host);
     // Scheme and palette are body attributes; the tokens behind the theme change with them.
@@ -206,7 +213,7 @@ export function TerminalPane({ threadId, terminalId, cwd, active, ring, revision
       liveRef.current = false;
       unsubscribeChunk();
       unsubscribeExit();
-      cancelAnimationFrame(frame);
+      clearTimeout(settle);
       sizer.disconnect();
       themer.disconnect();
       input.dispose();
@@ -235,7 +242,8 @@ export function TerminalPane({ threadId, terminalId, cwd, active, ring, revision
   return (
     <div className="box-border flex size-full min-h-0 min-w-0 rounded-md p-1.5 ring-1 ring-inset ring-transparent data-ring:ring-ring/60" data-testid="terminal-pane" data-terminal-id={terminalId}
       data-active={active || undefined} data-ring={(ring && active) || undefined} data-running={status.running} data-font-size={applied?.fontSize} data-cursor-blink={applied?.cursorBlink} onFocusCapture={() => { if (!active) onActivate(); }} onPointerDown={() => { if (!active) onActivate(); }}>
-      <div ref={outputRef} className="min-h-0 min-w-0 flex-1 overflow-hidden font-terminal leading-tight" data-testid="terminal-output" />
+      <div ref={outputRef} className="min-h-0 min-w-0 flex-1 overflow-hidden font-terminal leading-tight" data-testid="terminal-output"
+        onClick={() => terminalRef.current?.focus()} />
     </div>
   );
 }

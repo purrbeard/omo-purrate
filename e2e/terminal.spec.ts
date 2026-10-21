@@ -99,9 +99,8 @@ test("interactive PTY supports PowerShell colors, prompts, UTF-8, workspace and 
         const check = (): void => {
           const buffer = terminal.buffer.active;
           for (let index = 0; index < buffer.length; index += 1) {
-            // PSReadLine can redraw its continuation prompt onto the answer's row after a resize, so the answer is
-            // matched as a token; the echoed command (`width-$(...)`) never matches digits.
-            const match = /(?:^|\s)width-(\d+)(?:\s|$)/.exec(buffer.getLine(index)?.translateToString(true).trim() ?? "");
+            // The whole row must be the answer: a prompt redrawn onto it after a resize is the garbling this guards.
+            const match = /^width-(\d+)$/.exec(buffer.getLine(index)?.translateToString(true).trim() ?? "");
             if (match === null) continue;
             subscription.dispose(); clearTimeout(timeout); resolve({ reported: Number(match[1]), cols: terminal.cols }); return;
           }
