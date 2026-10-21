@@ -11,6 +11,9 @@ test("native same-parent tasks have one turn owner and settled answers copy thei
   const text = "Recorded final answer";
   writeFileSync(demo, JSON.stringify({ scenes: [{ match: "SCENARIO:turn-roster", steps: [
     { item: { type: "dynamicToolCall", tool: "read", namespace: null, arguments: { path: "src/example.ts" }, status: "completed", success: true, contentItems: null, durationMs: 12 }, ms: 0 },
+    // Tasks are recorded only after the main process has opened the turn, as when a model spawns them; a task
+    // stamped before the turn's start belongs to no turn.
+    { hold: true },
     { tasks: [
       { task_id: "native-running", task_summary: "긴 한국어 제목으로 대화 턴 서브에이전트 목록의 줄바꿈 확인", status: "running", model: "fake/alpha", category: "deep-low" },
       { task_id: "native-error", task_summary: "Inspect error state", status: "error", model: "fake/alpha", error_message: "Fixture error" },
@@ -26,6 +29,12 @@ test("native same-parent tasks have one turn owner and settled answers copy thei
     const roster = page.getByTestId("turn-subagents");
     const arrived = expect(roster).toBeVisible();
     await send(page, "SCENARIO:turn-roster");
+    const opening = byTestId(page, TESTID.turn).first();
+    await expect(opening.getByTestId("turn-work-log")).toBeVisible();
+    await expect(opening.locator('[data-flow="work"] [role="status"]')).toHaveCount(0);
+    await page.evaluate(async threadId => {
+      await window.omo.request("extension_request", { threadId, name: "fake.advance", data: {} });
+    }, id);
     await arrived;
     await expect(roster.locator("li")).toHaveCount(2);
     await expect(roster.locator('[data-task-id="native-running"]')).toHaveAttribute("data-status", "running");
