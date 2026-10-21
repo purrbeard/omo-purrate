@@ -13,7 +13,7 @@ import { selectThreadsByWorkspace, selectUnknownThreadsByWorkspace } from "../..
 import { useLocale, useT } from "../../i18n";
 import type { MessageKey } from "../../i18n";
 import { StoreContext, useActions, useAppSelector } from "../app-context";
-import { resolveEffort } from "../composer/model-groups";
+import { groupModels, modelDisplayName, resolveEffort } from "../composer/model-groups";
 import { BrandMark } from "../glyphs";
 import { formatThreadTime } from "../sidebar/thread-time";
 import { WorkspaceBadge } from "../sidebar/WorkspaceBadge";
@@ -66,6 +66,7 @@ export function SetupWizard() {
   const bridge = useAppSelector((state) => state.bridge);
   const catalog = useAppSelector((state) => state.models);
   const models = useMemo(() => catalog.filter((model) => !model.hidden), [catalog]);
+  const modelGroups = useMemo(() => groupModels(models), [models]);
   const threadsLoaded = useAppSelector((state) => state.threadsLoaded);
   // Sessions imported from native carry no creator record, so they count as projects alongside the ones made here.
   const userGroups = useAppSelector(selectThreadsByWorkspace);
@@ -77,6 +78,13 @@ export function SetupWizard() {
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [added, setAdded] = useState<ReadonlySet<string>>(() => new Set());
   const [groupOpen, setGroupOpen] = useState(true);
+  // Folders holding sessions the user started are the projects they work in; those start selected, once.
+  const preselected = useRef(false);
+  useEffect(() => {
+    if (preselected.current || userGroups.length === 0) return;
+    preselected.current = true;
+    setSelected(new Set(userGroups.map((group) => group.cwd)));
+  }, [userGroups]);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const panel = useRef<HTMLDivElement>(null);
   const primary = useRef<HTMLButtonElement>(null);
@@ -262,7 +270,9 @@ export function SetupWizard() {
               <p className="m-0 py-6 text-center text-[13px] leading-[21px] text-muted-foreground">{t("wizard.model.loading")}</p>
             ) : (
               <div className="flex flex-col gap-1.5" role="radiogroup" aria-label={t("wizard.model.title")}>
-                {models.map((model) => {
+                {modelGroups.map((group) => [
+                  <span key={`group:${group.provider}`} className="mt-2 px-1 text-[11px] leading-4 font-medium tracking-wide text-muted-foreground uppercase first:mt-0" data-testid="wizard-model-group">{group.provider}</span>,
+                  ...group.models.map((model) => {
                   const checked = model.id === modelId;
                   return (
                     <button
@@ -277,13 +287,14 @@ export function SetupWizard() {
                       onClick={() => pickModel(model)}
                     >
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="text-[13px] leading-5 font-medium">{model.displayName}</span>
+                        <span className="text-[13px] leading-5 font-medium">{modelDisplayName(model)}</span>
                         {model.description !== "" && <span className="text-xs leading-[18px] text-muted-foreground">{model.description}</span>}
                       </span>
                       {checked && <Check aria-hidden="true" size={16} className="shrink-0 text-primary" />}
                     </button>
                   );
-                })}
+                  }),
+                ])}
               </div>
             )
           ) : step === "project" ? (
@@ -387,7 +398,7 @@ export function SetupWizard() {
                 {t("wizard.project.noProject")}
               </Button>
               <Button variant="outline" data-testid={TESTID.wizardNewProject} onClick={() => void addProject()}>
-                {t("shell.newProject")}
+                {t("wizard.project.addFolder")}
               </Button>
             </>
           )}

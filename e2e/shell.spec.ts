@@ -106,7 +106,7 @@ test("New project picks a folder and starts a thread there", async () => {
   await expect(group).toBeVisible();
   await expect(group.locator(`[data-testid="${TESTID.threadRow}"][data-thread-id="${threadId}"]`)).toHaveAttribute("aria-current", "page");
   await expect(byTestId(page, TESTID.conversationHeader)).toContainText(path.basename(pickDir));
-  await expect(byTestId(page, TESTID.emptyHero)).toHaveText("Send a message to start the conversation.");
+  await expect(byTestId(page, TESTID.emptyHero)).toContainText("Send a message to start the conversation.");
 });
 
 test("a magic keyword highlights, shows the hint and is sent unchanged", async () => {

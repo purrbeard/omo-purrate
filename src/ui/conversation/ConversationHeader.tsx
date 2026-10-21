@@ -112,7 +112,7 @@ export const ConversationHeader = memo(function ConversationHeader({
         {cwd !== "" && (
           <>
             <WorkspaceBadge cwd={cwd} size="sm" />
-            <span className="min-w-0 max-w-[220px] flex-[0_1_auto] truncate text-muted-foreground" title={cwd}>
+            <span className="min-w-0 max-w-[140px] flex-[0_3_auto] truncate text-muted-foreground" title={cwd}>
               {workspaceName(cwd)}
             </span>
             <span className="flex-none text-muted-foreground/70" aria-hidden>

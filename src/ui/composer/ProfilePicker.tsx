@@ -4,6 +4,7 @@ import type { ModelProfile, Preferences } from "../../../shared/ipc";
 import { useT } from "../../i18n";
 import { TESTID } from "../testids";
 import { laneAt, PROFILE_LANES, resolveProfile } from "./model-profiles";
+import { shortModelName } from "./model-groups";
 
 const FONT: Record<string, string> = {
   A: "01110/10001/10001/11111/10001/10001/10001",
@@ -149,7 +150,7 @@ export function ProfilePicker({
   const configuredModelId = profileModels?.[preview];
   const configuredModelUnavailable = configuredModelId !== undefined && !models.some((model) => !model.hidden && model.id === configuredModelId);
   const name =
-    resolved.model?.displayName.replace(/^Claude\s+/i, "") ??
+    (resolved.model ? shortModelName(resolved.model) : undefined) ??
     t("composer.model.none");
   const title = `${t(`composer.profile.${lane.family}`)} · ${t(`composer.profile.${lane.weight}`)}`;
   const point = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -225,7 +226,7 @@ export function ProfilePicker({
                 data-active={entry.id === preview}
                 data-geeky={entry.family === "geeky"}
               >
-                {resolveProfile(models, entry.id, profileModels).model?.displayName.replace(/^Claude\s+/i, "") ?? entry.name}
+                {((model) => model ? shortModelName(model) : undefined)(resolveProfile(models, entry.id, profileModels).model) ?? entry.name}
               </div>
             ))}
             <button

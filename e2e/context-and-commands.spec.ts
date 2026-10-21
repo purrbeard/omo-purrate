@@ -82,8 +82,9 @@ test("Alt+Enter queues a follow-up for after the turn; queued messages can be ed
     await input.fill("drop this");
     await input.press("Alt+Enter");
     await expect(items).toHaveCount(2);
-    expect(launched.readFakeLog().filter(frame => frame["type"] === "follow_up")).toHaveLength(2);
-    expect(launched.readFakeLog().some(frame => frame["type"] === "steer")).toBe(false);
+    // On Windows the app holds input sent during a run (omo's pending-input fsync fails with EPERM there).
+    const queueCommands = (): string[] => launched.readFakeLog().map(frame => String(frame["type"])).filter(type => ["follow_up", "steer", "dequeue_message", "edit_queued_message"].includes(type));
+    expect(queueCommands()).toEqual([]);
     // A queued message is listed once and is not in the conversation until omo delivers it.
     await expect(page.getByText("later one")).toHaveCount(1);
 
@@ -93,7 +94,7 @@ test("Alt+Enter queues a follow-up for after the turn; queued messages can be ed
     await byTestId(page, TESTID.queueEditInput).fill("edited later");
     await byTestId(page, TESTID.queueEditInput).press("Enter");
     await expect(items.first()).toContainText("edited later");
-    expect(launched.readFakeLog().map(frame => frame["type"])).toEqual(expect.arrayContaining(["dequeue_message", "edit_queued_message"]));
+    expect(queueCommands()).toEqual([]);
 
     // With "Enter while a turn runs: queue", Enter queues and Alt+Enter steers.
     await page.evaluate(() => window.omo.setPreferences({ followUpBehavior: "queue" }));
@@ -102,18 +103,19 @@ test("Alt+Enter queues a follow-up for after the turn; queued messages can be ed
     await expect(byTestId(page, TESTID.steeringHint)).toHaveCount(0);
     await input.press("Enter");
     await expect(items).toHaveCount(2);
-    expect(launched.readFakeLog().filter(frame => frame["type"] === "follow_up")).toHaveLength(3);
     await input.fill("steered by alt");
     await input.press("Alt+Enter");
-    await expect.poll(() => launched.readFakeLog().filter(frame => frame["type"] === "steer")).toHaveLength(1);
-    await expect(items).toHaveCount(2);
+    await expect(items).toHaveCount(3);
+    await expect(items.nth(2)).toContainText("steered by alt");
+    expect(queueCommands()).toEqual([]);
 
     writeFileSync(gate, "");
     await expect(lastTurn(page)).toHaveAttribute("data-status", "completed", { timeout: 20_000 });
     await expect(items).toHaveCount(0);
-    await expect(page.getByText("edited later")).toHaveCount(1);
-    await expect(page.getByText("queued by enter")).toHaveCount(1);
     await expect(page.getByText("drop this")).toHaveCount(0);
+    // The held messages start the next turn as one prompt, in the order they were sent.
+    await expect.poll(() => launched.readFakeLog().filter(frame => frame["type"] === "prompt").map(frame => frame["message"]).at(-1)).toBe("edited later\nqueued by enter\nsteered by alt");
+    expect(queueCommands()).toEqual([]);
   } finally {
     await launched.close();
     rmSync(pickDir, { recursive: true, force: true });

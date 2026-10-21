@@ -20,13 +20,15 @@ test("a silent turn shows how long it has run, and a message sent into it says i
     await expect(detail).toHaveText(/^[2-9]s/, { timeout: 5_000 });
 
     await send(page, "are you still there?");
-    await expect.poll(readFakeLog).toContainEqual(expect.objectContaining({ type: "steer" }));
     await expect(working).toHaveAttribute("data-queued", "true");
+    // Held by the app on Windows, not sent to omo as a steer while the run lasts.
+    expect(readFakeLog().some(frame => frame["type"] === "steer")).toBe(false);
     await expect(detail).toContainText("your message is queued");
     await shot(page, "working-queued");
 
     await expect(lastTurn(page)).toHaveAttribute("data-status", "completed", { timeout: 15_000 });
     await expect(working).toBeHidden();
+    await expect.poll(() => readFakeLog().filter(frame => frame["type"] === "prompt").map(frame => frame["message"]).at(-1)).toBe("are you still there?");
   } finally {
     await launched.close();
     for (const dir of [fakeHome, pickDir]) rmSync(dir, { recursive: true, force: true });

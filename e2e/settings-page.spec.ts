@@ -102,7 +102,6 @@ test("appearance changes the scheme and palette, and restore device defaults res
     const dialog = byTestId(page, TESTID.settingsDialog);
     await dialog.locator('[data-section="appearance"]').click();
     await expect(byTestId(page, TESTID.settingsBreadcrumb)).toHaveText("Settings/Appearance");
-    const omoLightFill = await sidebarFill(page);
     await shot(page, "settings-appearance-light");
 
     await byTestId(page, TESTID.settingsThemeDark).click();
@@ -123,11 +122,12 @@ test("appearance changes the scheme and palette, and restore device defaults res
     await byTestId(page, TESTID.settingsRestoreDefaults).click();
     await byTestId(page, TESTID.settingsRestoreConfirm).click();
     await expect(page.locator("body")).not.toHaveAttribute("data-palette", "classic");
-    await expect(page.locator("body")).not.toHaveAttribute("data-ds-dark-theme", "");
-    await expect(byTestId(page, TESTID.settingsThemeSystem)).toHaveAttribute("aria-pressed", "true");
-    await expect.poll(() => sidebarFill(page)).toBe(omoLightFill);
+    // The device default is the dark noir scheme.
+    await expect(page.locator("body")).toHaveAttribute("data-ds-dark-theme", "");
+    await expect(byTestId(page, TESTID.settingsThemeDark)).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(() => sidebarFill(page)).toBe(darkBefore);
     expect(await page.evaluate(() => window.omo.getPreferences())).toMatchObject({
-      theme: "system",
+      theme: "dark",
       palette: "noir",
       modelId: null,
       lastWorkspace: null,

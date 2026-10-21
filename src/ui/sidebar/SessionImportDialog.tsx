@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { Download } from "lucide-react";
 import { useT } from "../../i18n";
-import { useActions } from "../app-context";
+import { StoreContext, useActions } from "../app-context";
 import { Button } from "../kit";
 import { errorMessage } from "../settings/diagnostics";
 import { ImportTable, useImportCandidates } from "../settings/ImportTable";
@@ -15,14 +15,23 @@ export function SessionImportDialog() {
   const actions = useActions();
   const state = useImportCandidates();
   const [busy, setBusy] = useState(false);
+  const store = useContext(StoreContext);
 
   const finish = async (paths: string[] | null): Promise<void> => {
     setBusy(true);
     state.setError(null);
     try {
-      if (paths === null) await actions.skipSessionImport();
-      else await actions.importSessions(paths);
+      // Say what happened: the sidebar can fill from other sources, so the outcome of this dialog is stated outright.
+      let message: string;
+      if (paths === null) {
+        await actions.skipSessionImport();
+        message = t("shell.import.doneSkipped");
+      } else {
+        const imported = await actions.importSessions(paths);
+        message = t("shell.import.doneImported", { count: imported.length });
+      }
       uiState.setSessionImportOpen(false);
+      store?.dispatch({ type: "notice/pushed", notice: { id: crypto.randomUUID(), level: "info", message, threadId: null } });
     } catch (cause) {
       state.setError(errorMessage(cause));
     } finally {

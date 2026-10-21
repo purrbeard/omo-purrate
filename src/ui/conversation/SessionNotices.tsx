@@ -31,6 +31,19 @@ const NOTICE_LABELS: Record<string, MessageKey> = {
   "senpi.todo-first-turn": "conversation.notice.todo",
 };
 
+/** Harness bookkeeping (tool wake-ups, monitors, usage, injected context): grouped behind one collapsed row per spot. */
+const QUIET_TYPES = new Set([
+  "senpi-monitor:notification", "senpi-terminal:notification", "senpi-terminal:restore-digest", "senpi-codemode:notification",
+  "omo-senpi:wake", "senpi-task.usage", "goal-continuation", "omo-ultrawork:directive", "omo-model-profile:applied",
+  "environment-context", "senpi.todo-first-turn",
+]);
+
+export function isQuietNotice(notice: SessionNotice): boolean {
+  return QUIET_TYPES.has(notice.customType);
+}
+
+const TAG = /<\/?[a-zA-Z][\w-]*(?:\s[^>]*)?>/g;
+
 function kib(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / KIB))}K`;
 }
@@ -108,7 +121,7 @@ export const NoticeRow = memo(function NoticeRow({ notice }: { notice: SessionNo
   const [open, setOpen] = useState(false);
   const key = NOTICE_LABELS[notice.customType];
   const body = noticeBody(notice.text);
-  const first = body.split("\n").find((line) => line.trim() !== "")?.trim() ?? "";
+  const first = body.replace(TAG, " ").split("\n").find((line) => line.trim() !== "")?.replace(/\s+/g, " ").trim() ?? "";
   const summary = first.length > SUMMARY_LIMIT ? `${first.slice(0, SUMMARY_LIMIT)}…` : first;
   return (
     <div className="group/notice my-0.5 text-xs leading-[18px]" data-testid={TESTID.sessionNotice} data-type={notice.customType} data-display={notice.display || undefined} data-flow="notice">
@@ -128,5 +141,29 @@ export const NoticeRow = memo(function NoticeRow({ notice }: { notice: SessionNo
       </button>
       {open && <pre className="mt-1 mr-0 mb-1.5 ml-3.5 max-h-80 overflow-auto rounded-md bg-muted px-2.5 py-2 font-mono text-[11px] leading-4 [overflow-wrap:anywhere] whitespace-pre-wrap text-muted-foreground">{body}</pre>}
     </div>
+  );
+});
+
+/** Notices at one spot of a turn: meaningful ones as rows, harness bookkeeping folded into one "system notices" row. */
+export const NoticeList = memo(function NoticeList({ notices }: { notices: readonly SessionNotice[] }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  if (notices.length === 0) return null;
+  const quiet = notices.filter(isQuietNotice);
+  const shown = notices.filter((notice) => !isQuietNotice(notice));
+  return (
+    <>
+      {shown.map((notice) => <NoticeRow key={notice.id} notice={notice} />)}
+      {quiet.length > 0 && (
+        <div className="my-0.5 text-xs leading-[18px]" data-testid="session-notice-group" data-count={quiet.length} data-flow="notice">
+          <button type="button" className={clsx("m-0 flex cursor-pointer items-center gap-1.5 rounded-sm border-0 bg-transparent px-0 py-0.5 text-xs leading-[18px] text-muted-foreground/70 hover:text-foreground [font-family:inherit]", focusRing)}
+            aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+            <ChevronRight className={clsx("size-3 flex-none transition-transform duration-150 motion-reduce:transition-none", open && "rotate-90")} aria-hidden />
+            <span>{t("conversation.notice.group", { count: quiet.length })}</span>
+          </button>
+          {open && <div className="ml-3.5">{quiet.map((notice) => <NoticeRow key={notice.id} notice={notice} />)}</div>}
+        </div>
+      )}
+    </>
   );
 });

@@ -40,6 +40,8 @@ function restore(parentId: string): WorkspaceState {
 }
 
 const OPEN_TAB_EVENT = "omo-ui:agent-tab";
+/** Finished agents that keep a tab; older ones stay in the all-agents menu. */
+const RECENT_TABS = 12;
 
 /** Selects `taskId` in the agent workspace of `parentId`, reopening a closed tab; a workspace mounted later starts on it. */
 export function openAgentTab(parentId: string, taskId: string): void {
@@ -102,7 +104,11 @@ function Workspace({ parentId, placement }: { parentId: string; placement: "dock
     for (const work of live?.taskWork ?? []) roster.set(work.task.task_id, work.task);
     return [...roster.values()];
   }, [live?.historicalTasks, live?.tasks, live?.taskWork]);
-  const open = tasks.filter(task => !state.closed.includes(task.task_id));
+  // A long session keeps hundreds of finished agents; tabs show the running ones, the latest few and the selected one,
+  // and the all-agents menu reaches the rest.
+  const notClosed = tasks.filter(task => !state.closed.includes(task.task_id));
+  const recent = new Set(notClosed.slice(-RECENT_TABS).map(task => task.task_id));
+  const open = notClosed.filter(task => recent.has(task.task_id) || task.status === "running" || task.status === "pending" || task.task_id === state.selected);
   // Native child sessions linked to this parent without a task record have no task transcript; they open in the main column.
   const taskSessions = new Set(tasks.flatMap(task => {
     const id = ("child_session_id" in task ? task.child_session_id : undefined) ?? threadLinks.find(link => link.taskId === task.task_id)?.childId;

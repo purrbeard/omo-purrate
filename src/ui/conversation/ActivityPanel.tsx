@@ -120,15 +120,17 @@ export function ActivityToggle({ threadId, open, controlsId, onToggle }: {
   const hasStoredWork = useAppSelector(state => state.threadLinks.some(link => link.parentId === threadId && link.taskId !== undefined));
   const { done, failed, running, total } = workSummary(runs, tasks, freshness === "live");
   if (total === 0 && runs.length === 0 && !hasStoredWork) return null;
+  // Failures of a session that is no longer live are history, not an alarm; the panel itself still lists them.
+  const alarm = failed > 0 && freshness === "live";
   const label = [t("activity.chipDone", { done, total }), ...(failed > 0 ? [t("activity.chipFailed", { failed })] : [])].join(" · ");
   return (
     <button type="button" className={C.toggle} data-testid={TESTID.omoActivityToggle} data-freshness={freshness}
       data-open={open ? "" : undefined} aria-expanded={open} aria-controls={open ? controlsId : undefined}
       aria-label={`${t("activity.region")}: ${label}`} onClick={onToggle}>
       <GitBranch className={C.toggleIcon} aria-hidden />
-      <span>{t("activity.toggle")}</span>
+      <span className="sr-only">{t("activity.toggle")}</span>
       <span className={C.toggleCount}>{t("activity.chipDone", { done, total })}</span>
-      {failed > 0 && <span className={C.failureCount}>{t("activity.chipFailed", { failed })}</span>}
+      {alarm && <span className={C.failureCount}>{t("activity.chipFailed", { failed })}</span>}
       {running > 0 && <StateDot state="ongoing" size={10} />}
     </button>
   );

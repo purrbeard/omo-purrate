@@ -11,7 +11,7 @@ import { TESTID } from "../testids";
 import { AssistantMessage } from "./AssistantMessage";
 import { AnswerFooter } from "./AnswerFooter";
 import { SubagentRow } from "./SubagentRow";
-import { MemoryWriteCard, NoticeRow } from "./SessionNotices";
+import { isQuietNotice, MemoryWriteCard, NoticeList } from "./SessionNotices";
 import { EditMessageButton, EditMessageForm, RegenerateButton, userRowClass, type BranchAt } from "./BranchControls";
 import { EditedFilesCard } from "./EditedFilesCard";
 import { editedFiles } from "./edited-files";
@@ -372,7 +372,7 @@ export const TurnView = memo(function TurnView({
         const write = memoryWrites[entry.item.id];
         return (
           <Fragment key={entry.item.id}>
-            {notices.filter((notice) => notice.afterItems === index).map((notice) => <NoticeRow key={notice.id} notice={notice} />)}
+            <NoticeList notices={notices.filter((notice) => notice.afterItems === index && !isQuietNotice(notice))} />
             {write !== undefined && <MemoryWriteCard write={write} />}
             {entry === work[0] && <WorkLog entries={work} turn={turn} cwd={cwd} memoryWrites={memoryWrites} />}
             {!workIds.has(entry.item.id) && memoryWrites[entry.item.id] === undefined && <ItemView entry={entry} cwd={cwd} branch={turnBranch} />}
@@ -385,7 +385,8 @@ export const TurnView = memo(function TurnView({
           </Fragment>
         );
       })}
-      {notices.filter((notice) => notice.afterItems >= turn.items.length).map((notice) => <NoticeRow key={notice.id} notice={notice} />)}
+      {/* Harness bookkeeping of the whole turn folds into one row at its end. */}
+      <NoticeList notices={notices.filter((notice) => notice.afterItems >= turn.items.length || isQuietNotice(notice))} />
       {answer === null && files.length > 0 && <EditedFilesCard files={files} turnId={turn.id} />}
       {subagents.length > 0 && (
         <section className="min-w-0 rounded-lg border border-solid border-border px-3 py-2 text-xs leading-5" data-testid="turn-subagents" aria-label={t("conversation.subagents.title")}>

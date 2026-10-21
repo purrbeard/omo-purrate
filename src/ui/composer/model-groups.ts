@@ -12,6 +12,11 @@ export function modelDisplayName(model: Pick<Model, "displayName">): string {
   return separator === -1 ? model.displayName : model.displayName.slice(separator + 3);
 }
 
+/** A label that fits a small cell: no owner prefix, no route path, no leading "Claude ". */
+export function shortModelName(model: Pick<Model, "displayName">): string {
+  return (modelDisplayName(model).split("/").at(-1) ?? model.displayName).replace(/^Claude\s+/i, "");
+}
+
 export function providerOf(id: string): string {
   const slash = id.indexOf("/");
   return slash === -1 ? id : id.slice(0, slash);

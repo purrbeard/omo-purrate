@@ -114,7 +114,7 @@ test("first run steps through the wizard and remembers the choices", async () =>
   await expect(stepOf(page, "ready")).toHaveAttribute("data-state", "current");
   await expect(wizard).toContainText("Fake Beta");
   await expect(wizard).toContainText(path.basename(projA));
-  await expect(wizard).toContainText("OmO UI collects no telemetry.");
+  await expect(wizard).toContainText("omo Purrate collects no telemetry.");
   await shot(page, "ONB4-ready-light");
 
   await byTestId(page, TESTID.wizardStart).click();

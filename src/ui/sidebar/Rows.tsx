@@ -311,7 +311,7 @@ export function ThreadRow({ thread, active, searching = false, nowMs, showWorksp
             <Tooltip.Root>
               <Tooltip.Trigger render={<span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-xs leading-4 text-muted-foreground" data-testid={TESTID.threadInUse} />}>
                 <Lock className="size-3" aria-hidden />
-                {t("shell.sidebar.inUse")}
+                <span className="sr-only">{t("shell.sidebar.inUse")}</span>
               </Tooltip.Trigger>
               <Tooltip.Content side="right">{t("shell.sidebar.inUseHint", { holders: holders.map(describeHolder).join("; ") })}</Tooltip.Content>
             </Tooltip.Root>

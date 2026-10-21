@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { SessionNotice } from "../../../shared/ipc";
 import clsx from "clsx";
 import { MarkdownDelegateProvider } from "../content/markdown/MarkdownDelegate";
@@ -24,10 +24,12 @@ import { RenderBoundary } from "./RenderBoundary";
 import { TurnView, type BranchContext } from "./TurnView";
 import { userMessageParts, UserBubble } from "./UserBubble";
 import { useStickToBottom } from "./use-stick-to-bottom";
+import { useQueuedMessages } from "../composer/queue";
 import { durationParts, QUIET_AFTER_MS, workingStatus } from "./working-status";
 
 const NO_TURNS: readonly ConversationTurn[] = [];
-
+/** Turns a transcript renders at first and adds per "show earlier" press. */
+const TURN_WINDOW = 40;
 function requestKey(request: PendingRequest): string {
   return `${request.kind}:${String(request.id)}`;
 }
@@ -66,14 +68,16 @@ function HistoryError({ threadId, message }: { threadId: string; message: string
   );
 }
 
-function WorkingIndicator({ turn }: { turn: ConversationTurn | null }) {
+/** `steerQueued`: a message sent into the run waits in the queue list (on Windows the app holds it until the run settles). */
+function WorkingIndicator({ turn, steerQueued }: { turn: ConversationTurn | null; steerQueued: boolean }) {
   const t = useT();
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  const status = turn === null ? null : workingStatus(turn, nowMs);
+  const measured = turn === null ? null : workingStatus(turn, nowMs);
+  const status = measured === null ? null : { ...measured, queuedMessage: measured.queuedMessage || steerQueued };
   const format = (ms: number): string => {
     const { minutes, seconds } = durationParts(ms);
     return minutes > 0 ? t("conversation.duration.minutes", { minutes, seconds }) : t("conversation.duration.seconds", { seconds });
@@ -120,6 +124,21 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
   const pending = useAppSelector((state) => selectPendingRequestsForThread(state, threadId));
   const scroll = useStickToBottom();
   const turns = conversation?.turns ?? NO_TURNS;
+  // Long sessions render only their latest turns; earlier ones load a window at a time, keeping the reading position.
+  const [earlier, setEarlier] = useState(0);
+  const firstShown = Math.max(0, turns.length - TURN_WINDOW - earlier);
+  const anchor = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const element = scroll.scrollRef.current;
+    if (anchor.current === null || element === null) return;
+    element.scrollTop = element.scrollHeight - anchor.current;
+    anchor.current = null;
+  }, [earlier, scroll.scrollRef]);
+  const showEarlier = useCallback(() => {
+    const element = scroll.scrollRef.current;
+    anchor.current = element === null ? null : element.scrollHeight - element.scrollTop;
+    setEarlier((value) => value + TURN_WINDOW);
+  }, [scroll.scrollRef]);
   const annotations = conversation?.annotations;
   const noticesByTurn = useMemo(() => {
     const byTurn = new Map<number, SessionNotice[]>();
@@ -133,6 +152,7 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
   );
   const streaming = activeTurn?.items.some((entry) => entry.streaming) ?? false;
   const showWorking = turnActive && !streaming && pending.length === 0;
+  const steerQueued = useQueuedMessages(threadId).some((item) => item.mode === "steer");
   const historyState = conversation?.historyState ?? "idle";
   const branchIdle = !turnActive && (conversation?.pendingUserMessages.length ?? 0) === 0;
   const branch = useMemo<BranchContext | null>(() => (hasPath ? { threadId, idle: branchIdle } : null), [hasPath, threadId, branchIdle]);
@@ -174,16 +194,22 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
           {historyState === "loading" && <HistorySkeleton />}
           {historyState === "error" && <HistoryError threadId={threadId} message={conversation?.historyError ?? null} />}
           <MarkdownDelegateProvider openExternalLink={openExternalLink} openFile={openFile}>
-            {turns.map((turn, index) => (
-              <TurnView key={turn.id} turn={turn} cwd={cwd} branch={branch} last={index === turns.length - 1}
-                notices={noticesByTurn.get(index)} memoryWrites={annotations?.memoryWrites} tasks={tasks} turns={turns}
+            {firstShown > 0 && (
+              <button type="button" className={clsx("m-0 self-center cursor-pointer rounded-full border border-solid border-border bg-transparent px-3.5 py-1 text-xs leading-5 text-muted-foreground hover:bg-accent hover:text-foreground [font-family:inherit]", focusRing)}
+                data-testid="show-earlier-turns" onClick={showEarlier}>
+                {t("conversation.showEarlier", { count: firstShown })}
+              </button>
+            )}
+            {turns.slice(firstShown).map((turn, offset) => (
+              <TurnView key={turn.id} turn={turn} cwd={cwd} branch={branch} last={firstShown + offset === turns.length - 1}
+                notices={noticesByTurn.get(firstShown + offset)} memoryWrites={annotations?.memoryWrites} tasks={tasks} turns={turns}
                 tasksLive={conversation?.live.freshness === "live"} />
             ))}
           </MarkdownDelegateProvider>
           {conversation?.pendingUserMessages.map((message) => (
             <UserBubble key={message.clientId} text={message.text} images={userMessageParts(message.images ?? []).images} sending />
           ))}
-          {showWorking && <WorkingIndicator turn={activeTurn} />}
+          {showWorking && <WorkingIndicator turn={activeTurn} steerQueued={steerQueued} />}
           {pending.map((request) => (
             <RenderBoundary key={requestKey(request)} label={`a ${request.kind} request`} resetKey={request}>
               <PendingRequestCard request={request} conversation={conversation} cwd={cwd} />
@@ -238,7 +264,8 @@ export function ConversationPane() {
       <ConversationHeader active={threadId !== null} thread={thread} running={turnActive} activity={activity} panels={threadId === null ? null : <>
         {mainId !== null && threadId !== mainId && <Button variant="outline" size="sm" data-testid="agent-header-return-main" onClick={() => void actions.openThread(mainId)}>{t("activity.returnMain")}</Button>}
       </>} />
-      {threadId !== null && <SessionBranches key={threadId} threadId={threadId} />}
+      {/* Its key must differ from the Transcript sibling's: two siblings sharing a key left the previous thread's branch bar in the DOM. */}
+      {threadId !== null && <SessionBranches key={`branches:${threadId}`} threadId={threadId} />}
       {threadId === null ? (
         <EmptyHero />
       ) : (

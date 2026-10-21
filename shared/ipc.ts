@@ -234,7 +234,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   threadOrigins: {},
   threadCreators: {},
   omoAutoUpdate: true,
-  theme: "system",
+  theme: "dark",
   locale: "system",
   palette: "noir",
   lastWorkspace: null,

@@ -40,11 +40,12 @@ export function SessionBranches({ threadId }: { threadId: string }) {
     void bridge.sessionTree(threadId, { type: "list" }).then(value => { if (!cancelled) setTree(value); }, () => { if (!cancelled) setTree(null); });
     return () => { cancelled = true; };
   }, [bridge, threadId, loaded, lastTurn?.id, lastTurn?.status, revision]);
-  if (!tree || tree.branches.length < 2) return null;
+  // A session with no turns has no answers to branch; never show a tree read before this thread had any.
+  if (!tree || tree.branches.length < 2 || lastTurn === undefined) return null;
   return (
     <label className="flex min-w-0 items-center gap-2 px-4 py-2 text-xs leading-5 text-muted-foreground">
       <span>{t("conversation.branch.versions")}</span>
-      <select className={clsx("m-0 min-w-0 max-w-[min(480px,70%)] truncate rounded-md border border-solid border-input bg-background px-2 py-1 text-xs leading-5 text-foreground [font-family:inherit]", focusRing)} data-testid="session-branches" aria-label={t("conversation.branch.versions")} disabled={running || busy}
+      <select className={clsx("m-0 min-w-0 max-w-[min(480px,70%)] truncate rounded-md border border-solid border-input bg-background px-2 py-1 text-xs leading-5 text-foreground [font-family:inherit]", focusRing)} data-testid="session-branches" data-thread-id={threadId} aria-label={t("conversation.branch.versions")} disabled={running || busy}
         value={tree.branches.find(branch => branch.active)?.entryId ?? ""}
         onChange={event => {
           setBusy(true);
