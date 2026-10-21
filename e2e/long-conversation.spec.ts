@@ -118,11 +118,12 @@ test("a new session opens promptly while an answer streams fast into a long conv
   const clicked = probe.evaluate((p) => p.clicked);
   const opened = probe.evaluate((p) => p.opened);
 
-  await send(page, "SCENARIO:flood:2000:2");
+  // 7,500 deltas remain after the click (15 s at the nominal rate), well beyond the slowest CI open seen (7.6 s).
+  await send(page, "SCENARIO:flood:8000:2");
   await reached;
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   expect(await clicked).toEqual({ onCompose: true, streaming: true });
-  // The stream still has about 1,500 deltas to go when the click lands. A renderer that lays out per delta opens the new
+  // The stream still has about 7,500 deltas to go when the click lands. A renderer that lays out per delta opens the new
   // session only after the stream drained; a responsive one opens it mid-stream on any machine, however slow.
   const { afterMs, longStillRunning } = await opened;
   test.info().annotations.push({ type: "opened-after-ms", description: String(Math.round(afterMs)) });
