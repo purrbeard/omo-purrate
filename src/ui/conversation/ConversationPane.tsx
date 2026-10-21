@@ -22,6 +22,7 @@ import { EmptyHero } from "./EmptyHero";
 import { QuestionCard } from "./QuestionCard";
 import { RenderBoundary } from "./RenderBoundary";
 import { TimelineMinimap, type TimelineItem } from "./TimelineMinimap";
+import { previewText } from "./timeline-position";
 import { TurnView, type BranchContext } from "./TurnView";
 import { userMessageParts, UserBubble } from "./UserBubble";
 import { useStickToBottom } from "./use-stick-to-bottom";
@@ -48,7 +49,7 @@ function timelineItem(turn: ConversationTurn): TimelineItem | null {
     if (item?.type === "agentMessage" && item.text.trim() !== "") { answer = item.text; break; }
   }
   const entry = prompt?.type === "userMessage"
-    ? { turnId: turn.id, userText: (userMessageParts(prompt.content).text.trim().split("\n")[0] ?? "").slice(0, 200), assistantText: answer.slice(0, 400) }
+    ? { turnId: turn.id, userText: (userMessageParts(prompt.content).text.trim().split("\n")[0] ?? "").slice(0, 200), assistantText: previewText(answer.slice(0, 2_000)).slice(0, 400) }
     : null;
   timelineCache.set(turn, entry);
   return entry;

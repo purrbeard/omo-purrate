@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { itemAtPointer, tickPercent } from "../../src/ui/conversation/timeline-position";
+import { itemAtPointer, previewText, tickPercent } from "../../src/ui/conversation/timeline-position";
+
+describe("timeline preview text", () => {
+  it("shows an answer's markdown as plain text", () => {
+    expect(previewText("## Summary\n\n- **Fixed** the `parser` in [notes](https://x.test/a)\n> quoted\n1. one ~~two~~"))
+      .toBe("Summary Fixed the parser in notes quoted one two");
+  });
+
+  it("leaves code blocks' content and drops their fences and images", () => {
+    expect(previewText("Run:\n```bash\nnpm test\n```\n![shot](a.png) done __now__")).toBe("Run: npm test done now");
+  });
+});
 
 describe("timeline rail positions", () => {
   it("spreads ticks from the top to the bottom edge", () => {
