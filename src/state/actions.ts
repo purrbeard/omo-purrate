@@ -480,6 +480,18 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     return threads;
   };
 
+  /** Terminal sessions started since setup join the sidebar; one outside the listed page is read in like a remembered one. */
+  const adoptNewSessions = async (nextCursor: string | null): Promise<void> => {
+    const { adopted } = await bridge.adoptNewSessions();
+    if (adopted.length === 0) return;
+    uiState.setPreferences(await bridge.getPreferences());
+    for (const threadId of adopted) {
+      if (store.getState().threads[threadId] !== undefined) continue;
+      const { thread } = await bridge.request("thread/read", { threadId, includeTurns: false });
+      store.dispatch({ type: "threads/listed", threads: [thread], nextCursor, append: true });
+    }
+  };
+
   const refreshThreads = (append = false): Promise<void> =>
     guarded(async () => {
       const cursor = store.getState().threadsCursor;
@@ -509,6 +521,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         }
         store.dispatch({ type: "threads/listed", threads: [thread], nextCursor, append: true });
       }
+      if (!append) await adoptNewSessions(nextCursor);
       const paths = Object.values(store.getState().threads).flatMap(thread => thread.path === null ? [] : [thread.path]);
       const links = await bridge.loadThreadLinks([...new Set(Object.values(store.getState().threads).map(thread => thread.cwd))], paths);
       const related = Object.entries(preferences.threadParents).map(([childId, parentId]) => ({ childId, parentId, title: "" }));

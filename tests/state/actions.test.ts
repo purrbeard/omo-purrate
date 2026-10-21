@@ -108,6 +108,7 @@ class FakeBridge implements OmoBridgeApi {
   loadThreadOrigins(): ReturnType<OmoBridgeApi["loadThreadOrigins"]> { return Promise.resolve({}); }
   loadImportCandidates(): ReturnType<OmoBridgeApi["loadImportCandidates"]> { return Promise.resolve({ items: [], nextCursor: null, emptyCount: 0 }); }
   importSessions(): ReturnType<OmoBridgeApi["importSessions"]> { return Promise.resolve({ imported: [] }); }
+  adoptNewSessions(): ReturnType<OmoBridgeApi["adoptNewSessions"]> { return Promise.resolve({ adopted: [] }); }
   inspectSessions(): ReturnType<OmoBridgeApi["inspectSessions"]> { return Promise.resolve({ holders: {}, missing: [] }); }
   loadContextUsage(): ReturnType<OmoBridgeApi["loadContextUsage"]> { return Promise.resolve({ tokens: null, provider: null, model: null, compacted: false }); }
   exportSession(): ReturnType<OmoBridgeApi["exportSession"]> { return Promise.resolve(null); }

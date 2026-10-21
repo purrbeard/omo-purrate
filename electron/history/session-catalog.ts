@@ -10,6 +10,8 @@ const MACHINE_FIRST_MESSAGES: readonly RegExp[] = [
   /^\{"owner_message":/u,
   /^Set the requested goal and work until/u,
   /^DORI_PROBE\b/u,
+  /^DORI_REQUEST:/u,
+  /^internal event, not an owner request/u,
 ];
 const SIDE_CHAT_FIRST_MESSAGE = /^\[OmO UI side chat background\]/u;
 const DEFAULT_PAGE = 100;
@@ -66,6 +68,15 @@ export function toCandidate(record: SessionRecord, places: Places): ImportCandid
     importable,
     recommended: importable && where === null && (kind === "app" || kind === "alpha" || kind === "terminal"),
   };
+}
+
+/**
+ * Sessions a person started in a terminal after `sinceMs` (when setup's import finished) that the sidebar lists without
+ * another import. `known` holds every id the app already manages or once added, so a session removed from the sidebar
+ * stays removed.
+ */
+export function sessionsToAdopt(candidates: readonly ImportCandidate[], known: ReadonlySet<string>, sinceMs: number): ImportCandidate[] {
+  return candidates.filter((candidate) => candidate.recommended && candidate.evidence === "terminal" && candidate.createdAtMs >= sinceMs && !known.has(candidate.id));
 }
 
 interface Cursor {

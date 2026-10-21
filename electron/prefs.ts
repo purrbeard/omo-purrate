@@ -98,6 +98,14 @@ function settleDays(value: unknown, current: number): number {
   return Math.min(MAX_SETTLE_DAYS, Math.max(MIN_SETTLE_DAYS, Math.round(value)));
 }
 
+/** An explicit time wins; otherwise the first completion of the first-run import stamps the current time, once. */
+function adoptSince(patch: Record<string, unknown>, current: Preferences): Pick<Preferences, "adoptSessionsSinceMs"> {
+  const value = patch["adoptSessionsSinceMs"];
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) return { adoptSessionsSinceMs: value };
+  if (current.adoptSessionsSinceMs !== undefined) return { adoptSessionsSinceMs: current.adoptSessionsSinceMs };
+  return patch["sessionImportCompleted"] === true && current.sessionImportCompleted !== true ? { adoptSessionsSinceMs: Date.now() } : {};
+}
+
 /** Applies every valid field of patch to current; invalid or unknown values keep the current value. */
 function merge(current: Preferences, patch: unknown): Preferences {
   if (!isRecord(patch)) return current;
@@ -140,6 +148,7 @@ function merge(current: Preferences, patch: unknown): Preferences {
     unsettledThreads: has("unsettledThreads") ? threadIds(patch["unsettledThreads"], current.unsettledThreads) : current.unsettledThreads,
     ...(typeof patch["sessionImportCompleted"] === "boolean" ? { sessionImportCompleted: patch["sessionImportCompleted"] }
       : current.sessionImportCompleted === undefined ? {} : { sessionImportCompleted: current.sessionImportCompleted }),
+    ...adoptSince(patch, current),
     ...(typeof patch["sharedHost"] === "boolean" ? { sharedHost: patch["sharedHost"] }
       : current.sharedHost === undefined ? {} : { sharedHost: current.sharedHost }),
     ...(Array.isArray(patch["hiddenSshHosts"])

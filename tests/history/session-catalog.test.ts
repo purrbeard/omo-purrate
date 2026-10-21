@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { importPage, keysetPage, toCandidate } from "../../electron/history/session-catalog";
+import { importPage, keysetPage, sessionsToAdopt, toCandidate } from "../../electron/history/session-catalog";
 import { SessionIndex } from "../../electron/omo/native/threads";
 import { alphaSessionRoots } from "../../electron/omo/native/alpha-sessions";
 
@@ -102,6 +102,24 @@ describe("first-run import classification", () => {
     const byId = new Map((await index.list()).map(record => [record.id, toCandidate(record, places)]));
     expect([byId.get(started.id)!.evidence, byId.get(started.id)!.recommended]).toEqual(["alpha", true]);
     expect([byId.get(driven.id)!.evidence, byId.get(driven.id)!.recommended]).toEqual(["automation", false]);
+  });
+
+  it("adds a person's terminal session started after setup, never one already known, older, automated or in a scratch folder", async () => {
+    const { sessions, index } = store();
+    const since = Date.parse("2026-10-10T00:00:00Z");
+    const after = { header: { timestamp: "2026-10-16T02:51:05Z" } };
+    const fresh = session(sessions, [user("현재 프로젝트를 분석해")], after);
+    const removed = session(sessions, [user("typed, then removed from the sidebar")], after);
+    const older = session(sessions, [user("before setup")], { header: { timestamp: "2026-10-03T00:00:00Z" } });
+    const dori = session(sessions, [user("DORI_REQUEST:a0bce6ecfd72af384e3cdc27dd7")], after);
+    const event = session(sessions, [user("internal event, not an owner request\n{...}")], after);
+    const app = session(sessions, [{ type: "custom", customType: "omo-ui.origin", data: { createdBy: "omo-ui" } }, (id: string) => admission(`omo-ui:${"a".repeat(8)}-aaaa-4aaa-8aaa-${"a".repeat(12)}`, id), user("hello")], after);
+    const scratch = session(sessions, [user("fixture")], { ...after, cwd: path.join(places.tmpDir, "qa") });
+    const candidates = (await index.list()).map(record => toCandidate(record, places));
+    expect(candidates.find(candidate => candidate.id === dori.id)!.evidence).toBe("automation");
+    expect(candidates.find(candidate => candidate.id === event.id)!.evidence).toBe("automation");
+    expect(sessionsToAdopt(candidates, new Set([removed.id]), since).map(candidate => candidate.id)).toEqual([fresh.id]);
+    expect([older, app, scratch].every(entry => !sessionsToAdopt(candidates, new Set(), since).some(candidate => candidate.id === entry.id))).toBe(true);
   });
 
   it("lists every non-empty session once and only counts the empty ones", async () => {

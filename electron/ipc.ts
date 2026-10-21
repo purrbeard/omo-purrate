@@ -24,7 +24,7 @@ import { loadPersistedDagRuns } from "./workbench/dag-runs";
 import { threadId as validThreadId, workspace as validWorkspace } from "./workbench/validation";
 import { loadHeaderLinks } from "./history/thread-links";
 import { loadThreadOrigins } from "./history/thread-origins";
-import { importPage, toCandidate } from "./history/session-catalog";
+import { importPage, sessionsToAdopt, toCandidate } from "./history/session-catalog";
 import { SessionIndex } from "./omo/native/threads";
 import { alphaSessionRoots } from "./omo/native/alpha-sessions";
 import { SessionHolders } from "./omo/session-holders";
@@ -400,6 +400,29 @@ export function registerIpc(deps: IpcDeps): () => void {
       const current = prefs.get();
       prefs.set({ managedThreadIds: [...new Set([...current.managedThreadIds, ...imported])], sessionImportCompleted: true });
       return { imported };
+    },
+    [IPC.adoptNewSessions]: async (): Promise<{ adopted: string[] }> => {
+      const current = prefs.get();
+      if (current.sessionImportCompleted !== true) return { adopted: [] };
+      const index = catalogIndex();
+      const records = await index.list();
+      const candidates = records.map(record => toCandidate(record, { homeDir, tmpDir: app.getPath("temp") }));
+      // An install that finished its import before this time was recorded starts from its oldest managed session.
+      const managedCreated = candidates.filter(candidate => current.managedThreadIds.includes(candidate.id)).map(candidate => candidate.createdAtMs);
+      const sinceMs = current.adoptSessionsSinceMs ?? (managedCreated.length > 0 ? Math.min(...managedCreated) : Date.now());
+      const known = new Set([...current.managedThreadIds, ...current.pinnedThreadIds, ...Object.keys(current.threadParents), ...prefs.imports().map(entry => entry.threadId)]);
+      const byId = new Map(records.map(record => [record.id, record]));
+      const chosen = [];
+      for (const candidate of sessionsToAdopt(candidates, known, sinceMs)) if (!(await index.isArchived(byId.get(candidate.id)!))) chosen.push(candidate);
+      const importedAtMs = Date.now();
+      prefs.recordImports(chosen.map(candidate => ({
+        threadId: candidate.id, sessionPath: candidate.sessionPath, sizeBytes: candidate.sizeBytes, mtimeMs: candidate.updatedAtMs, evidence: candidate.evidence, importedAtMs,
+      })));
+      const adopted = chosen.map(candidate => candidate.id);
+      if (adopted.length > 0 || current.adoptSessionsSinceMs === undefined) {
+        prefs.set({ managedThreadIds: [...new Set([...prefs.get().managedThreadIds, ...adopted])], adoptSessionsSinceMs: sinceMs });
+      }
+      return { adopted };
     },
     [IPC.loadTaskWork]: (_event, cwd, parentSessionId) => loadTaskWork(
       supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent"),

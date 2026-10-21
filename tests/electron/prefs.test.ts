@@ -29,6 +29,16 @@ describe("PreferencesStore", () => {
     });
     expect(prefs.set({ managedThreadIds: [] }).managedThreadIds).toEqual([]);
   });
+  it("stamps when the first-run import completed, once, as the start of sessions the sidebar adds on its own", () => {
+    const prefs = new PreferencesStore(dir);
+    expect(prefs.get().adoptSessionsSinceMs).toBeUndefined();
+    const before = Date.now();
+    const stamped = prefs.set({ sessionImportCompleted: true }).adoptSessionsSinceMs!;
+    expect(stamped).toBeGreaterThanOrEqual(before);
+    expect(prefs.set({ sessionImportCompleted: true, adoptSessionsSinceMs: "later" }).adoptSessionsSinceMs).toBe(stamped);
+    expect(new PreferencesStore(dir).get().adoptSessionsSinceMs).toBe(stamped);
+    expect(prefs.set({ adoptSessionsSinceMs: 1_000 }).adoptSessionsSinceMs).toBe(1_000);
+  });
   it("persists explicit related-session ownership without changing other preferences", () => {
     const prefs = new PreferencesStore(dir);
     prefs.set({ threadParents: { child: "main", self: "self", invalid: 2 }, settledThreads: ["old"] });

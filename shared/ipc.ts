@@ -187,6 +187,8 @@ export interface Preferences {
   unsettledThreads: string[];
   /** True once the first-run session import was confirmed or skipped. */
   sessionImportCompleted?: boolean;
+  /** Terminal sessions created at or after this time join the sidebar on their own; set when the first-run import completes. */
+  adoptSessionsSinceMs?: number;
   /** Attach to omo's shared host instead of starting a private one; omitted means off. */
   sharedHost?: boolean;
   /** ssh config aliases the Servers panel folds into its Hidden group. */
@@ -534,6 +536,8 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   loadImportCandidates(cursor: string | null, limit?: number): Promise<ImportPage>;
   /** Adds the importable sessions among the given paths to the managed list; returns the ids added. */
   importSessions(sessionPaths: string[]): Promise<{ imported: string[] }>;
+  /** Adds terminal sessions started since setup to the managed list; returns the ids added. */
+  adoptNewSessions(): Promise<{ adopted: string[] }>;
   /** Which of the given sessions another omo process holds open, and which have no session file on disk. */
   inspectSessions(threadIds: string[]): Promise<SessionInspection>;
   readModelRouting(): Promise<ModelRoutingSettings>;
@@ -664,6 +668,7 @@ export const IPC = {
   loadThreadOrigins: "history:thread-origins",
   loadImportCandidates: "history:import-candidates",
   importSessions: "history:import-sessions",
+  adoptNewSessions: "history:adopt-new-sessions",
   inspectSessions: "history:inspect-sessions",
   readModelRouting: "models:read-routing",
   saveModelRouting: "models:save-routing",
