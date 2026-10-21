@@ -148,7 +148,11 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
   const pending = useAppSelector((state) => selectPendingRequestsForThread(state, threadId));
   const scroll = useStickToBottom();
   const turns = conversation?.turns ?? NO_TURNS;
+  const actions = useActions();
   // Long sessions render only their latest turns; earlier ones load a window at a time, keeping the reading position.
+  // Turns before `fullFrom` were read as outlines, so they are read whole before they render.
+  const fullFrom = conversation?.historyFullFrom ?? 0;
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [earlier, setEarlier] = useState(0);
   const firstShown = Math.max(0, turns.length - TURN_WINDOW - earlier);
   const anchor = useRef<number | null>(null);
@@ -158,11 +162,17 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
     element.scrollTop = element.scrollHeight - anchor.current;
     anchor.current = null;
   }, [earlier, scroll.scrollRef]);
-  const showEarlier = useCallback(() => {
+  const showEarlier = useCallback(async () => {
+    const next = Math.max(0, turns.length - TURN_WINDOW - earlier - TURN_WINDOW);
+    if (next < fullFrom) {
+      setLoadingEarlier(true);
+      await actions.loadFullHistory(threadId, next);
+      setLoadingEarlier(false);
+    }
     const element = scroll.scrollRef.current;
     anchor.current = element === null ? null : element.scrollHeight - element.scrollTop;
     setEarlier((value) => value + TURN_WINDOW);
-  }, [scroll.scrollRef]);
+  }, [scroll.scrollRef, turns.length, earlier, fullFrom, actions, threadId]);
   const timeline = useMemo(() => turns.flatMap((turn) => timelineItem(turn) ?? []), [turns]);
   const { unpin } = scroll;
   const scrollToTurn = useCallback((turnId: string) => {
@@ -180,17 +190,19 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
   }, [scroll.scrollRef, unpin]);
   // A jump to a turn outside the rendered window first widens the window to start at that turn, then scrolls once it is laid out.
   const pendingJump = useRef<string | null>(null);
-  const jumpToMessage = useCallback((index: number) => {
+  const jumpToMessage = useCallback(async (index: number) => {
     const target = timeline[index];
     if (target === undefined) return;
-    const needed = turns.length - TURN_WINDOW - turns.findIndex((turn) => turn.id === target.turnId);
+    const at = turns.findIndex((turn) => turn.id === target.turnId);
+    if (at < fullFrom) await actions.loadFullHistory(threadId, at);
+    const needed = turns.length - TURN_WINDOW - at;
     if (needed > earlier) {
       pendingJump.current = target.turnId;
       setEarlier(needed);
       return;
     }
     scrollToTurn(target.turnId);
-  }, [timeline, turns, earlier, scrollToTurn]);
+  }, [timeline, turns, earlier, scrollToTurn, fullFrom, actions, threadId]);
   useLayoutEffect(() => {
     const turnId = pendingJump.current;
     if (turnId === null) return;
@@ -254,7 +266,7 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
           <MarkdownDelegateProvider openExternalLink={openExternalLink} openFile={openFile}>
             {firstShown > 0 && (
               <button type="button" className={clsx("m-0 self-center cursor-pointer rounded-full border border-solid border-border bg-transparent px-3.5 py-1 text-xs leading-5 text-muted-foreground hover:bg-accent hover:text-foreground [font-family:inherit]", focusRing)}
-                data-testid="show-earlier-turns" onClick={showEarlier}>
+                data-testid="show-earlier-turns" disabled={loadingEarlier} aria-busy={loadingEarlier || undefined} onClick={() => void showEarlier()}>
                 {t("conversation.showEarlier", { count: firstShown })}
               </button>
             )}
@@ -276,7 +288,7 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
         </div>
         </PathPreviewProvider>
       </div>
-      {!empty && <TimelineMinimap items={timeline} scrollRef={scroll.scrollRef} onSelect={jumpToMessage} />}
+      {!empty && <TimelineMinimap items={timeline} scrollRef={scroll.scrollRef} onSelect={(index) => void jumpToMessage(index)} />}
       {scroll.showJump && (
         <button
           type="button"

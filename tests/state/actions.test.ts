@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_PREFERENCES, OMO_INSTALL_COMMAND } from "../../shared/ipc";
-import type { AccountUsage, BranchPoint, BranchResult, BridgeStatus, HistoryResult, HistoryTurn, OmoBridgeApi, OpenTarget, OpenTargetId, Preferences } from "../../shared/ipc";
+import type { AccountUsage, BranchPoint, BranchResult, BridgeStatus, HistoryResult, HistoryTurn, HistoryUpdate, OmoBridgeApi, OpenTarget, OpenTargetId, Preferences } from "../../shared/ipc";
+import { HistoryUpdates } from "../../electron/history/history-updates";
 import type {
   ClientMethod,
   ClientParams,
@@ -277,6 +278,14 @@ class FakeBridge implements OmoBridgeApi {
   loadHistory(sessionPath: string): Promise<HistoryResult> {
     this.historyLoads.push(sessionPath);
     return this.history();
+  }
+  readonly historyUpdates: Array<{ since: string | null; from: number }> = [];
+  private readonly updates = new HistoryUpdates();
+  async loadHistoryUpdate(sessionPath: string, since: string | null, fullFrom?: number): Promise<HistoryUpdate> {
+    this.historyLoads.push(sessionPath);
+    const update = this.updates.update(sessionPath, await this.history(), since, fullFrom);
+    this.historyUpdates.push({ since, from: update.from });
+    return update;
   }
   usageRows: () => Promise<AccountUsage[]> = async () => [];
   readonly logins: string[] = [];
@@ -1547,6 +1556,76 @@ describe("account actions", () => {
   });
 });
 
+describe("long sessions", () => {
+  const longTurn = (index: number): HistoryTurn => ({
+    id: `t${index}`, status: "completed", error: null, startedAt: 1, completedAt: 2,
+    items: [
+      { type: "userMessage", id: `u${index}`, clientId: null, content: [{ type: "text", text: `question ${index}`, text_elements: [] }] },
+      { type: "commandExecution", id: `c${index}`, command: "cat log", cwd: "/", status: "completed", aggregatedOutput: "x".repeat(5_000), exitCode: 0, durationMs: 1 },
+    ],
+  });
+  const output = (context: ReturnType<typeof setup>, index: number): number => {
+    const item = context.store.getState().conversations[THREAD_ID]?.turns[index]?.items[1]?.item;
+    return item?.type === "commandExecution" ? item.aggregatedOutput?.length ?? 0 : -1;
+  };
+
+  it("opens with only the latest 40 turns whole and reads earlier ones whole on request, keeping the rest", async () => {
+    const context = setup();
+    await listThread(context);
+    context.bridge.history = async () => historyOf(Array.from({ length: 45 }, (_, index) => longTurn(index)));
+    await context.actions.openThread(THREAD_ID);
+    expect(context.store.getState().conversations[THREAD_ID]?.historyFullFrom).toBe(5);
+    expect([output(context, 4), output(context, 5)]).toEqual([2_001, 5_000]);
+    const latest = context.store.getState().conversations[THREAD_ID]?.turns[44];
+    await context.actions.loadFullHistory(THREAD_ID, 2);
+    expect(context.store.getState().conversations[THREAD_ID]?.historyFullFrom).toBe(2);
+    expect([output(context, 1), output(context, 2)]).toEqual([2_001, 5_000]);
+    expect(context.store.getState().conversations[THREAD_ID]?.turns[44]).toBe(latest);
+    expect(context.bridge.historyUpdates.at(-1)).toEqual({ since: expect.any(String), from: 2 });
+  });
+});
+
+describe("inactive conversations", () => {
+  const ids = ["s1", "s2", "s3", "s4", "s5"];
+  const turn: HistoryTurn = {
+    id: "t1", status: "completed", error: null, startedAt: 1, completedAt: 2,
+    items: [{ type: "userMessage", id: "t1-user", clientId: null, content: [{ type: "text", text: "hello", text_elements: [] }] }],
+  };
+
+  async function listed() {
+    const context = setup();
+    const disconnect = context.actions.connect();
+    context.bridge.threadList = () => ({ data: ids.map((id) => makeThread(id, { path: `/sessions/${id}.jsonl` })), nextCursor: null });
+    context.bridge.history = async () => historyOf([turn]);
+    await listThread(context);
+    const historyState = (id: string) => context.store.getState().conversations[id]?.historyState;
+    return { ...context, disconnect, historyState };
+  }
+
+  it("keeps the history of the three most recent sessions and reloads an older one when it opens again", async () => {
+    const context = await listed();
+    for (const id of ids) await context.actions.openThread(id);
+    expect(ids.map(context.historyState)).toEqual(["idle", "idle", "loaded", "loaded", "loaded"]);
+    expect(context.store.getState().conversations["s1"]?.turns).toEqual([]);
+    context.bridge.historyLoads.length = 0;
+    await context.actions.openThread("s1");
+    expect(context.historyState("s1")).toBe("loaded");
+    expect(context.store.getState().conversations["s1"]?.turns.map((entry) => entry.id)).toEqual(["t1"]);
+    expect(context.bridge.historyLoads).toEqual(["/sessions/s1.jsonl"]);
+    context.disconnect();
+  });
+
+  it("keeps a session whose turn is running, however long ago it was opened", async () => {
+    const context = await listed();
+    await context.actions.openThread("s1");
+    context.bridge.emitNotification("turn/started", { threadId: "s1", turn: runningTurn });
+    for (const id of ids.slice(1)) await context.actions.openThread(id);
+    expect(context.historyState("s1")).toBe("loaded");
+    expect(context.historyState("s2")).toBe("idle");
+    context.disconnect();
+  });
+});
+
 describe("sessions changed by another omo process", () => {
   const userTurn = (id: string, text: string): HistoryTurn => ({
     id, status: "completed", error: null, startedAt: 1, completedAt: 2,
@@ -1598,6 +1677,17 @@ describe("sessions changed by another omo process", () => {
       && next.notices.some((notice) => notice.code === "sessionChangedElsewhere"));
     context.disconnect();
     expect(context.bridge.watched.at(-1)).toBeNull();
+  });
+
+  it("patches in only the turns another process appended, keeping the earlier turns as they were", async () => {
+    const context = await opened();
+    const first = context.store.getState().conversations[THREAD_ID]?.turns[0];
+    context.bridge.history = async () => historyOf([userTurn("t1", "first"), userTurn("t2", "from the terminal")]);
+    context.bridge.emitHistoryChanged(SESSION_PATH);
+    await waitForState(context.store, (next) => next.conversations[THREAD_ID]?.turns.length === 2);
+    expect(context.store.getState().conversations[THREAD_ID]?.turns[0]).toBe(first);
+    expect(context.bridge.historyUpdates.at(-1)).toEqual({ since: expect.any(String), from: 1 });
+    context.disconnect();
   });
 
   it("takes what its own turn wrote as its own, then follows outside changes again", async () => {

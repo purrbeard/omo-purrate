@@ -203,14 +203,34 @@ export function reduce(state: AppState, event: AppEvent): AppState {
         annotations: { notices: event.notices, memoryWrites: event.memoryWrites },
       }));
     case "history/replaced":
-      return updateExistingConversation(state, event.threadId, () => ({
-        ...mergeHistory(emptyConversation(event.threadId), event.turns),
-        annotations: { notices: event.notices ?? [], memoryWrites: event.memoryWrites ?? {} },
-        live: { ...emptyConversation(event.threadId).live, historicalTasks: event.tasks ?? [], todo: event.todo == null ? null : { ...event.todo, source: "history" } },
-      }));
+    case "history/patched":
+      return updateExistingConversation(state, event.threadId, (conversation) => {
+        const loaded = mergeHistory(emptyConversation(event.threadId), event.turns);
+        const patched = event.type === "history/patched";
+        return {
+          ...loaded,
+          // Unchanged turns keep their objects, so their memoized views do not render again.
+          ...(patched ? { turns: [...conversation.turns.slice(0, event.from), ...loaded.turns, ...conversation.turns.slice(event.from + event.removed)] } : {}),
+          ...(event.fullFrom ? { historyFullFrom: event.fullFrom } : {}),
+          annotations: { notices: event.notices ?? [], memoryWrites: event.memoryWrites ?? {} },
+          live: { ...emptyConversation(event.threadId).live, historicalTasks: event.tasks ?? [], todo: event.todo == null ? null : { ...event.todo, source: "history" } },
+        };
+      });
+    case "history/evicted": {
+      let conversations = state.conversations;
+      for (const threadId of event.threadIds) {
+        const conversation = conversations[threadId];
+        if (conversation === undefined || conversation.historyState !== "loaded" || conversation.activeTurnId !== null
+          || conversation.pendingUserMessages.length > 0 || state.pendingRequests.some((request) => request.threadId === threadId)) continue;
+        const { historyFullFrom: _dropped, ...kept } = conversation;
+        conversations = { ...conversations, [threadId]: { ...kept, turns: [], historyState: "idle", annotations: emptyConversation(threadId).annotations } };
+      }
+      return conversations === state.conversations ? state : { ...state, conversations };
+    }
     case "history/loaded":
-      return updateExistingConversation(state, event.threadId, (conversation) => ({
+      return updateExistingConversation(state, event.threadId, ({ historyFullFrom: _previous, ...conversation }) => ({
         ...mergeHistory(conversation, event.turns),
+        ...(event.fullFrom ? { historyFullFrom: event.fullFrom } : {}),
         annotations: event.notices === undefined && event.memoryWrites === undefined ? conversation.annotations
           : { notices: event.notices ?? [], memoryWrites: event.memoryWrites ?? {} },
         live: { ...conversation.live,

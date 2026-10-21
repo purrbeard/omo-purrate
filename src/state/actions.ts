@@ -1,4 +1,4 @@
-import type { AccountUsage, BridgeStatus, HistoryResult, ImportPage, OmoBridgeApi, SessionInspection } from "../../shared/ipc";
+import type { AccountUsage, BridgeStatus, HistoryResult, HistoryUpdate, ImportPage, OmoBridgeApi, SessionInspection } from "../../shared/ipc";
 import { parseSessionHeld } from "../../shared/session-held";
 import type { ApprovalDecision, ProviderAccount, ReasoningEffort, RequestId, RpcNotification, Thread, ThreadSessionResult } from "../../shared/protocol";
 import { CLIENT_MESSAGE_PREFIX } from "../../shared/session-origin";
@@ -27,13 +27,16 @@ function effortOf(level: string | null): ReasoningEffort | null {
   return level !== null && EFFORTS.has(level) ? level as ReasoningEffort : null;
 }
 
-function historySignature(history: HistoryResult): string {
-  const last = history.turns.at(-1);
-  return JSON.stringify([history.turns.length, last?.id ?? null, last?.items.length ?? 0, last?.status ?? null]);
+function historySignature(total: number, last: { id: string; items: readonly unknown[]; status: string } | undefined): string {
+  return JSON.stringify([total, last?.id ?? null, last?.items.length ?? 0, last?.status ?? null]);
 }
 
 
 const RECENT_WORKSPACE_LIMIT = 10;
+/** Opened sessions whose history stays loaded; a long session's history holds hundreds of megabytes in the renderer. */
+const LOADED_CONVERSATIONS = 3;
+/** Latest turns an opened session reads whole, as many as its transcript first renders; earlier ones arrive as outlines. */
+const FULL_TURNS = 40;
 
 /** Outcome of a bulk thread operation. */
 export interface BulkResult {
@@ -118,6 +121,8 @@ export interface AppActions {
   ensureSkills(cwd: string): Promise<void>;
   /** Activates the thread and loads its session history when not yet loaded; never resumes it. */
   openThread(threadId: string): Promise<void>;
+  /** Reads the thread's turns from `fullFrom` on whole when they were loaded as outlines; resolves once they are. */
+  loadFullHistory(threadId: string, fullFrom: number): Promise<void>;
   /** Starts and activates a thread in `cwd`; resolves its id, or null on failure. */
   newThread(cwd: string, parentId?: string): Promise<string | null>;
   manageThread(threadId: string, managed: boolean): Promise<void>;
@@ -327,12 +332,17 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
   const ownWrites = new Set<string>();
   // Sessions this app created whose file has not been read yet: the first read is taken as the baseline, not a change.
   const adoptBaseline = new Set<string>();
+  // The last read of each open session, so a reread of an outside change receives only the turns that changed.
+  const historyReads = new Map<string, { token: string; total: number }>();
+  // Sessions opened in this window, most recent first; only the first few keep their history loaded.
+  let recentThreads: string[] = [];
   const rememberHistory = (threadId: string, history: HistoryResult): void => {
-    historySignatures.set(threadId, historySignature(history));
+    historySignatures.set(threadId, historySignature(history.turns.length, history.turns.at(-1)));
     fileModels.set(threadId, history.model === undefined ? null : JSON.stringify(history.model));
   };
   const replaceHistory = (threadId: string, history: HistoryResult): void => {
     rememberHistory(threadId, history);
+    historyReads.delete(threadId);
     store.dispatch({ type: "history/replaced", threadId, ...history });
   };
   /** Shows the model the session file names when it differs from the one shown; false when nothing changed. */
@@ -365,6 +375,15 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     }
     if (syncAgain.delete(threadId)) await syncExternal(threadId);
   };
+  // Asks only for what changed while the turns shown are exactly the session's turns as last read; else for every turn.
+  const readUpdate = async (threadId: string, path: string, fullFrom: number): Promise<HistoryUpdate> => {
+    const known = historyReads.get(threadId);
+    const shown = store.getState().conversations[threadId]?.turns ?? [];
+    const since = known !== undefined && shown.length === known.total && shown.every((turn) => turn.origin === "history") ? known.token : null;
+    const update = await bridge.loadHistoryUpdate(path, since, fullFrom);
+    historyReads.set(threadId, { token: update.token, total: update.total });
+    return update;
+  };
   const syncOnce = async (threadId: string): Promise<void> => {
     const state = store.getState();
     const path = state.threads[threadId]?.path;
@@ -375,23 +394,32 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       return;
     }
     try {
-      const history = await bridge.loadHistory(path);
+      const { token: _token, base, from, removed, total, fullFrom, ...history } = await readUpdate(threadId, path, state.conversations[threadId]?.historyFullFrom ?? 0);
       if (selectIsTurnActive(store.getState(), threadId)) {
         deferredSyncs.add(threadId);
         return;
       }
+      const patch = base !== null;
+      const signature = patch ? null : historySignature(total, history.turns.at(-1));
       if (adoptBaseline.delete(threadId)) {
         ownWrites.delete(threadId);
-        rememberHistory(threadId, history);
+        if (signature !== null) historySignatures.set(threadId, signature);
+        fileModels.set(threadId, history.model === undefined ? null : JSON.stringify(history.model));
         return;
       }
-      const turnsChanged = !ownWrites.delete(threadId) && historySignature(history) !== historySignatures.get(threadId);
+      const turnsChanged = !ownWrites.delete(threadId) && (signature === null
+        ? history.turns.length > 0 || removed > 0
+        : signature !== historySignatures.get(threadId));
       const modelChanged = history.model !== undefined && JSON.stringify(history.model) !== fileModels.get(threadId);
       const session = store.getState().conversations[threadId]?.session;
-      rememberHistory(threadId, history);
+      if (signature !== null) historySignatures.set(threadId, signature);
+      fileModels.set(threadId, history.model === undefined ? null : JSON.stringify(history.model));
       const firstChange = !changedElsewhere.has(threadId);
       if (turnsChanged) {
-        store.dispatch({ type: "history/replaced", threadId, ...history });
+        store.dispatch(patch
+          ? { type: "history/patched", threadId, from, removed, fullFrom, ...history }
+          : { type: "history/replaced", threadId, fullFrom, ...history });
+        if (patch) historySignatures.set(threadId, historySignature(total, store.getState().conversations[threadId]?.turns.at(-1)));
         if (session !== undefined) store.dispatch({ type: "thread/sessionUpdated", threadId, session });
         changedElsewhere.add(threadId);
         void readGoal(threadId);
@@ -870,6 +898,15 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
 
     async openThread(threadId) {
       store.dispatch({ type: "thread/activated", threadId });
+      recentThreads = [threadId, ...recentThreads.filter((id) => id !== threadId)];
+      const older = recentThreads.slice(LOADED_CONVERSATIONS);
+      if (older.length > 0) {
+        store.dispatch({ type: "history/evicted", threadIds: older });
+        for (const id of older) historyReads.delete(id);
+        // A session the reducer kept (a turn still running) stays a candidate for the next open.
+        const conversations = store.getState().conversations;
+        recentThreads = recentThreads.filter((id, index) => index < LOADED_CONVERSATIONS || conversations[id]?.historyState === "loaded");
+      }
       const state = store.getState();
       const historyState = state.conversations[threadId]?.historyState ?? "idle";
       const cwd = state.threads[threadId]?.cwd;
@@ -878,8 +915,15 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       store.dispatch({ type: "history/loading", threadId });
       const path = state.threads[threadId]?.path ?? null;
       try {
-        const history = path === null ? { turns: [], todo: null, tasks: [] } : await bridge.loadHistory(path);
-        store.dispatch({ type: "history/loaded", threadId, ...history });
+        let history: HistoryResult = { turns: [], todo: null, tasks: [] };
+        let fullFrom = 0;
+        if (path !== null) {
+          const update = await bridge.loadHistoryUpdate(path, null, -FULL_TURNS);
+          historyReads.set(threadId, { token: update.token, total: update.total });
+          history = update;
+          fullFrom = update.fullFrom;
+        }
+        store.dispatch({ type: "history/loaded", threadId, ...history, fullFrom });
         rememberHistory(threadId, history);
       } catch (error) {
         store.dispatch({ type: "history/failed", threadId, message: errorMessage(error) });
@@ -894,6 +938,20 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
           const runs = await bridge.loadDagRuns(cwd, threadId);
           store.dispatch({ type: "dagRuns/loaded", threadId, runs, generation: live.generation, revision: live.dagRevision });
         }, threadId);
+      }
+    },
+
+    async loadFullHistory(threadId, fullFrom) {
+      const state = store.getState();
+      const path = state.threads[threadId]?.path;
+      if (path == null || (state.conversations[threadId]?.historyFullFrom ?? 0) <= fullFrom) return;
+      try {
+        const { token: _token, base, from, removed, total: _total, fullFrom: loaded, ...history } = await readUpdate(threadId, path, fullFrom);
+        store.dispatch(base !== null
+          ? { type: "history/patched", threadId, from, removed, fullFrom: loaded, ...history }
+          : { type: "history/loaded", threadId, ...history, fullFrom: loaded });
+      } catch (error) {
+        fail(error, threadId);
       }
     },
 

@@ -72,6 +72,8 @@ export interface Conversation {
   historyState: "idle" | "loading" | "loaded" | "error";
   historyError: string | null;
   turns: ConversationTurn[];
+  /** Turns before this index were read as outlines, their long strings cut; absent when every turn is whole. */
+  historyFullFrom?: number;
   activeTurnId: string | null;
   /** True once this app-server process has loaded the thread through thread/start or thread/resume. */
   resumed: boolean;
@@ -240,8 +242,12 @@ export type AppEvent =
   | { type: "thread/sessionUpdated"; threadId: string; session: SessionModel }
   | { type: "thread/activated"; threadId: string | null }
   | { type: "history/loading"; threadId: string }
-  | ({ type: "history/replaced"; threadId: string } & HistoryResult)
-  | { type: "history/loaded"; threadId: string; turns: HistoryTurn[]; todo?: HistoryResult["todo"]; tasks?: HistoricalTask[]; notices?: SessionNotice[]; memoryWrites?: Record<string, MemoryWriteNotice> }
+  | ({ type: "history/replaced"; threadId: string; fullFrom?: number } & HistoryResult)
+  /** Like history/replaced for a splice of the turns shown: turns `from` to `from + removed` become `turns`, the rest keep their objects. */
+  | ({ type: "history/patched"; threadId: string; from: number; removed: number; fullFrom: number } & HistoryResult)
+  /** Drops the loaded history of conversations nothing is waiting on; opening one again reloads it from the session file. */
+  | { type: "history/evicted"; threadIds: string[] }
+  | { type: "history/loaded"; threadId: string; turns: HistoryTurn[]; fullFrom?: number; todo?: HistoryResult["todo"]; tasks?: HistoricalTask[]; notices?: SessionNotice[]; memoryWrites?: Record<string, MemoryWriteNotice> }
   | { type: "history/annotated"; threadId: string; notices: SessionNotice[]; memoryWrites: Record<string, MemoryWriteNotice> }
   | { type: "goal/loaded"; threadId: string; goal: WireGoal | null; generation: number; revision: number }
   | { type: "todo/loaded"; threadId: string; todo: HistoryResult["todo"]; generation: number; revision: number }

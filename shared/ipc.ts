@@ -336,6 +336,21 @@ export interface HistoryResult {
   notices?: SessionNotice[];
 }
 
+/** A session read as a splice of the reader's previous read: its turns `from` to `from + removed` become `turns`. */
+export interface HistoryUpdate extends Omit<HistoryResult, "turns"> {
+  /** Names this read; passed back as `since`, the next read sends only what changed after it. */
+  token: string;
+  /** The read this splice applies to (the `since` asked with); null when it was unknown and `turns` is the whole session. */
+  base: string | null;
+  from: number;
+  removed: number;
+  turns: HistoryTurn[];
+  /** Turn count of the whole session. */
+  total: number;
+  /** Turns before this index are outlines without their work items. */
+  fullFrom: number;
+}
+
 /** Read-only child work from native task records and each child's active session branch. */
 export interface TaskWork {
   parentSessionId: string;
@@ -570,6 +585,11 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   exportSession(threadId: string): Promise<{ path: string } | null>;
   /** Parses the session JSONL at sessionPath, which must resolve inside the omo sessions directory. */
   loadHistory(sessionPath: string): Promise<HistoryResult>;
+  /**
+   * Like loadHistory, but sends only the turns that changed since the read `since` names (a token it returned). Turns
+   * before `fullFrom` arrive as outlines (prompt and final answer); a negative `fullFrom` counts from the end.
+   */
+  loadHistoryUpdate(sessionPath: string, since: string | null, fullFrom?: number): Promise<HistoryUpdate>;
   /** Follows one session file for writes by another omo process; null stops. Changes arrive through onHistoryChanged. */
   watchHistory(sessionPath: string | null): Promise<void>;
   onHistoryChanged(listener: (sessionPath: string) => void): () => void;
@@ -680,6 +700,7 @@ export const IPC = {
   install: "omo:install",
   installLog: "omo:install-log",
   loadHistory: "history:load",
+  loadHistoryUpdate: "history:load-update",
   exportSession: "session:export",
   watchHistory: "history:watch",
   historyChanged: "history:changed",
