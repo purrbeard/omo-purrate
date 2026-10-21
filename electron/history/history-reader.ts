@@ -1,18 +1,15 @@
-import { readFile } from "node:fs/promises";
 import { Worker } from "node:worker_threads";
 import type { HistoryResult, HistoryUpdate } from "../../shared/ipc";
-import { HistoryUpdates } from "./history-updates";
-import { parseSessionJsonl } from "./session-jsonl";
-
-type Job = { kind: "full"; file: string } | { kind: "update"; file: string; since: string | null; fullFrom: number | undefined };
+import type { SessionTreeResult } from "../omo/session-tree";
+import { HistoryJobs, type Job, type JobResult } from "./history-jobs";
 
 export type HistoryJob = Job & { id: number };
 
-export type HistoryReply = { id: number; result: HistoryResult | HistoryUpdate } | { id: number; error: string };
+export type HistoryReply = { id: number; result: JobResult } | { id: number; error: string };
 
 interface Pending {
   job: Job;
-  resolve(result: HistoryResult | HistoryUpdate): void;
+  resolve(result: JobResult): void;
   reject(error: Error): void;
 }
 
@@ -25,7 +22,7 @@ export class HistoryReader {
   private broken = false;
   private nextId = 1;
   private readonly pending = new Map<number, Pending>();
-  private readonly inline = new HistoryUpdates();
+  private readonly inline = new HistoryJobs();
 
   constructor(private readonly workerPath: string) {}
 
@@ -37,6 +34,10 @@ export class HistoryReader {
     return this.run({ kind: "update", file, since, fullFrom }) as Promise<HistoryUpdate>;
   }
 
+  tree(file: string): Promise<SessionTreeResult> {
+    return this.run({ kind: "tree", file }) as Promise<SessionTreeResult>;
+  }
+
   async close(): Promise<void> {
     const worker = this.worker;
     this.worker = null;
@@ -44,19 +45,14 @@ export class HistoryReader {
     if (worker !== null) await worker.terminate();
   }
 
-  private run(job: Job): Promise<HistoryResult | HistoryUpdate> {
+  private run(job: Job): Promise<JobResult> {
     const worker = this.started();
-    if (worker === null) return this.runInline(job);
+    if (worker === null) return this.inline.run(job);
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { job, resolve, reject });
       worker.postMessage({ ...job, id } satisfies HistoryJob);
     });
-  }
-
-  private async runInline(job: Job): Promise<HistoryResult | HistoryUpdate> {
-    const history = parseSessionJsonl(await readFile(job.file, "utf8"));
-    return job.kind === "full" ? history : this.inline.update(job.file, history, job.since, job.fullFrom);
   }
 
   private started(): Worker | null {
@@ -90,6 +86,6 @@ export class HistoryReader {
     this.worker = null;
     const waiting = [...this.pending.values()];
     this.pending.clear();
-    for (const entry of waiting) this.runInline(entry.job).then(entry.resolve, entry.reject);
+    for (const entry of waiting) this.inline.run(entry.job).then(entry.resolve, entry.reject);
   }
 }

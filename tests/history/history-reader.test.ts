@@ -1,3 +1,4 @@
+import * as fsPromises from "node:fs/promises";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -5,6 +6,12 @@ import { build } from "esbuild";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HistoryReader } from "../../electron/history/history-reader";
 import { parseSessionJsonl } from "../../electron/history/session-jsonl";
+import { parseSessionTree } from "../../electron/omo/session-tree";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, readFile: vi.fn(actual.readFile) };
+});
 
 const lines = (count: number): string => {
   const out = [JSON.stringify({ type: "session", version: 3, id: "s", timestamp: "2026-10-21T00:00:00Z", cwd: "/w" })];
@@ -47,7 +54,23 @@ describe("HistoryReader", () => {
     await writeFile(file, lines(6));
     const next = await reader.update(file, first.token, -2);
     expect([next.base, next.total, next.from, next.removed, next.turns.map((turn) => turn.id)]).toEqual([first.token, 6, 5, 0, parseSessionJsonl(lines(6)).turns.slice(5).map((turn) => turn.id)]);
+    expect(await reader.tree(file)).toEqual(parseSessionTree(lines(6)));
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("serves an open's branch tree from the history read of the same file and rereads it only after the file changes", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const reader = new HistoryReader(path.join(tmpdir(), "missing-history-worker.cjs"));
+    readers.push(reader);
+    const { file, text } = await session(4);
+    const reads = vi.mocked(fsPromises.readFile);
+    reads.mockClear();
+    await reader.update(file, null, -2);
+    expect(await reader.tree(file)).toEqual(parseSessionTree(text));
+    expect(reads.mock.calls.filter(([target]) => target === file)).toHaveLength(1);
+    await writeFile(file, lines(5));
+    expect(await reader.tree(file)).toEqual(parseSessionTree(lines(5)));
+    expect(reads.mock.calls.filter(([target]) => target === file)).toHaveLength(2);
   });
 
   it("reads in-process with the same results when the worker cannot start", async () => {

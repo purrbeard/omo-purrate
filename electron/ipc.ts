@@ -14,7 +14,7 @@ import type { ClientMethod, ClientParams, RequestId } from "../shared/protocol";
 import { openLogin } from "./accounts/login";
 import { readAccountUsage } from "./accounts/usage";
 import { branchSession, retryEntryId } from "./history/branch-session";
-import { runSessionTree, readSessionTree } from "./omo/session-tree";
+import { runSessionTree } from "./omo/session-tree";
 import type { ModelRung } from "../shared/ipc";
 import { HistoryReader } from "./history/history-reader";
 import { createSessionWatcher } from "./history/session-watch";
@@ -212,7 +212,7 @@ export function registerIpc(deps: IpcDeps): () => void {
       if (!["list", "retry", "navigate"].includes(request.type)) throw new TypeError("invalid session tree operation");
       if (request.type === "list") {
         const { thread } = await supervisor.request("thread/read", { threadId, includeTurns: false });
-        return readSessionTree(await sessionFile(thread.path));
+        return historyReader.tree(await sessionFile(thread.path));
       }
       if (treeBusy) throw new Error("session tree navigation is already in progress");
       treeBusy = true;
