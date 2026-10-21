@@ -217,6 +217,8 @@ function WorkLog({ entries, turn, cwd, memoryWrites }: {
   memoryWrites: Readonly<Record<string, MemoryWriteNotice>>;
 }) {
   const t = useT();
+  /** The rows mount on the first open and stay mounted; a long thread's folded logs cost only their summaries. */
+  const [opened, setOpened] = useState(false);
   const models = useMemo(() => {
     const byId = new Map<string, ToolRowModel>();
     for (const entry of entries) {
@@ -232,7 +234,7 @@ function WorkLog({ entries, turn, cwd, memoryWrites }: {
   const errors = all.filter((model) => model.state === "error").length;
   const current = active.at(-1);
   const duration = elapsedMs(turn.startedAtMs, turn.completedAtMs);
-  const segments = workSegments(entries, models, memoryWrites, title);
+  const segments = opened ? workSegments(entries, models, memoryWrites, title) : [];
   const renderEntry = (entry: ConversationItem): ReactNode => {
     const write = entry.item.type === "dynamicToolCall" && entry.item.tool === "memory" ? memoryWrites[entry.item.id] : undefined;
     return (
@@ -253,7 +255,7 @@ function WorkLog({ entries, turn, cwd, memoryWrites }: {
           </span>
         </div>
       )}
-      <details data-testid="turn-work-log" className="group/work min-w-0">
+      <details data-testid="turn-work-log" className="group/work min-w-0" onToggle={(event) => { if (event.currentTarget.open) setOpened(true); }}>
         <summary
           className={clsx(
             "flex w-fit max-w-full cursor-pointer list-none flex-wrap items-center gap-x-1.5 gap-y-1 rounded-md py-1 pr-1.5",
@@ -272,7 +274,7 @@ function WorkLog({ entries, turn, cwd, memoryWrites }: {
           )}
           <ChevronRight className="size-3.5 shrink-0 transition-transform duration-150 group-open/work:rotate-90 motion-reduce:transition-none" aria-hidden />
         </summary>
-        <div className="mt-1 ml-1.5 flex min-w-0 flex-col gap-1.5 border-0 border-l border-solid border-border pl-3">
+        {opened && <div className="mt-1 ml-1.5 flex min-w-0 flex-col gap-1.5 border-0 border-l border-solid border-border pl-3">
           {segments.map((segment) =>
             segment.kind === "item" ? renderEntry(segment.entry) : (
               <div key={segment.key} className="flex min-w-0 flex-col gap-0.5" role="group" data-testid="work-log-group"
@@ -284,7 +286,7 @@ function WorkLog({ entries, turn, cwd, memoryWrites }: {
               </div>
             ),
           )}
-        </div>
+        </div>}
       </details>
     </div>
   );

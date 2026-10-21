@@ -128,6 +128,8 @@ test("restored memory receipts stay outside the fold and unknown answer clocks r
     expect(await receipt.evaluate(element => element.closest('[data-testid="turn-work-log"]'))).toBeNull();
     await expect(page.getByTestId("answer-footer")).toBeVisible();
     await expect(page.getByTestId("answer-completed-at")).toHaveCount(0);
+    // A folded work log mounts its rows only when it is first opened.
+    await expect(log.getByTestId(TESTID.reasoning)).toHaveCount(0);
     await log.locator(":scope > summary").click();
     await expect(byTestId(page, TESTID.reasoning)).toBeVisible();
   } finally { await launched.close(); }
