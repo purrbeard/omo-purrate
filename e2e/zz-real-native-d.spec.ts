@@ -10,7 +10,7 @@ test.setTimeout(20 * 60_000);
 
 const EXE = "C:/Users/truek/AppData/Local/Programs/OmO UI Windows/OmO UI Windows.exe";
 const RUN = process.env["OMO_UI_REAL_RUN"] ?? path.join(os.tmpdir(), "omo-ui-real-native", "run");
-const MODEL = "opencodex/opencode-go/deepseek-v4.1-flash";
+const MODEL = process.env["OMO_UI_QA_MODEL"] ?? "opencodex/command-code/deepseek-deepseek-v4.1-flash";
 const RESULTS = path.join(RUN, "results-D.json");
 const results: Record<string, { pass: boolean; ui?: string; native?: string; error?: string }> = {};
 const save = (): void => { mkdirSync(RUN, { recursive: true }); writeFileSync(RESULTS, JSON.stringify(results, null, 2)); };

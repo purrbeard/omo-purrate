@@ -11,7 +11,7 @@ test.skip(process.env["OMO_UI_README_REAL"] !== "1", "set OMO_UI_README_REAL=1")
 test.setTimeout(10 * 60_000);
 
 const EXE = path.join(process.env["LOCALAPPDATA"] ?? "", "Programs", "OmO UI Windows", "OmO UI Windows.exe");
-const MODEL = process.env["OMO_UI_README_MODEL"] ?? "opencodex/opencode-go/deepseek-v4.1-flash";
+const MODEL = process.env["OMO_UI_README_MODEL"] ?? process.env["OMO_UI_QA_MODEL"] ?? "opencodex/command-code/deepseek-deepseek-v4.1-flash";
 const OUT = path.resolve(import.meta.dirname, "..", "docs", "media", "real-omo.png");
 
 test("README real-omo capture", async () => {

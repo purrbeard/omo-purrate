@@ -14,7 +14,7 @@ const RUN = process.env["OMO_UI_REAL_RUN"] ?? path.join(os.tmpdir(), "omo-ui-rea
 const PROJECT = process.env["OMO_UI_REAL_PROJECT"]!;
 const THREAD = process.env["OMO_UI_REAL_THREAD"]!;
 const SESSION = process.env["OMO_UI_REAL_SESSION"]!;
-const MODEL = "opencodex/opencode-go/deepseek-v4.1-flash";
+const MODEL = process.env["OMO_UI_QA_MODEL"] ?? "opencodex/command-code/deepseek-deepseek-v4.1-flash";
 const RESULTS = path.join(RUN, "results-B.json");
 const results: Record<string, { pass: boolean; ui?: string; native?: string; error?: string }> = {};
 const save = (): void => { mkdirSync(RUN, { recursive: true }); writeFileSync(RESULTS, JSON.stringify(results, null, 2)); };
