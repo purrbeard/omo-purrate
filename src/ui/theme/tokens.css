@@ -58,6 +58,7 @@
   --color-terminal-selection: var(--terminal-selection);
   --font-sans: var(--dsw-font-family);
   --font-mono: var(--ds-font-family-code);
+  --font-terminal: 'Geist Mono', 'Terminal Hangul', var(--ds-font-family-code);
 }
 
 /* Noir is the fallback, including before preferences arrive. Theme and palette

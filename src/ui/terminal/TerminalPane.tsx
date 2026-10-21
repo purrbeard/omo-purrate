@@ -144,7 +144,9 @@ export function TerminalPane({ threadId, terminalId, cwd, active, ring, revision
     // Scheme and palette are body attributes; the tokens behind the theme change with them.
     const themer = new MutationObserver(() => { terminal.options.theme = readTerminalTheme(host); });
     themer.observe(document.body, { attributes: true, attributeFilter: ["data-ds-dark-theme", "data-palette"] });
-    void document.fonts.load(`${font.fontSize}px ${font.fontFamily}`).then(() => {
+    // The Hangul face is unicode-range limited, so it loads only for Hangul text; load it too before xterm re-measures.
+    const fontSpec = `${font.fontSize}px ${font.fontFamily}`;
+    void Promise.all([document.fonts.load(fontSpec), document.fonts.load(fontSpec, "\uAC00")]).then(() => {
       if (terminalRef.current !== terminal) return;
       // xterm measures its cell only when a font option changes, so a web font that finishes loading after open needs one.
       terminal.options.fontFamily = "monospace";
@@ -233,7 +235,7 @@ export function TerminalPane({ threadId, terminalId, cwd, active, ring, revision
   return (
     <div className="box-border flex size-full min-h-0 min-w-0 rounded-md p-1.5 ring-1 ring-inset ring-transparent data-ring:ring-ring/60" data-testid="terminal-pane" data-terminal-id={terminalId}
       data-active={active || undefined} data-ring={(ring && active) || undefined} data-running={status.running} data-font-size={applied?.fontSize} data-cursor-blink={applied?.cursorBlink} onFocusCapture={() => { if (!active) onActivate(); }} onPointerDown={() => { if (!active) onActivate(); }}>
-      <div ref={outputRef} className="min-h-0 min-w-0 flex-1 overflow-hidden font-mono leading-tight" data-testid="terminal-output" />
+      <div ref={outputRef} className="min-h-0 min-w-0 flex-1 overflow-hidden font-terminal leading-tight" data-testid="terminal-output" />
     </div>
   );
 }
