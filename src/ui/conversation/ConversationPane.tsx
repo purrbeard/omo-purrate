@@ -21,6 +21,7 @@ import { SessionBranches } from "./BranchControls";
 import { EmptyHero } from "./EmptyHero";
 import { QuestionCard } from "./QuestionCard";
 import { RenderBoundary } from "./RenderBoundary";
+import { TimelineMinimap, type TimelineItem } from "./TimelineMinimap";
 import { TurnView, type BranchContext } from "./TurnView";
 import { userMessageParts, UserBubble } from "./UserBubble";
 import { useStickToBottom } from "./use-stick-to-bottom";
@@ -30,6 +31,29 @@ import { durationParts, QUIET_AFTER_MS, workingStatus } from "./working-status";
 const NO_TURNS: readonly ConversationTurn[] = [];
 /** Turns a transcript renders at first and adds per "show earlier" press. */
 const TURN_WINDOW = 40;
+/** Space kept above a message the timeline jumps to, so it does not sit flush against the top edge. */
+const JUMP_OFFSET_PX = 24;
+const JUMP_HIGHLIGHT_MS = 1600;
+
+/** Timeline entries are cached per turn object: a streamed delta replaces only the live turn, so older ones are reused. */
+const timelineCache = new WeakMap<ConversationTurn, TimelineItem | null>();
+
+function timelineItem(turn: ConversationTurn): TimelineItem | null {
+  const cached = timelineCache.get(turn);
+  if (cached !== undefined) return cached;
+  const prompt = turn.items.find((entry) => entry.item.type === "userMessage")?.item;
+  let answer = "";
+  for (let index = turn.items.length - 1; index >= 0; index -= 1) {
+    const item = turn.items[index]?.item;
+    if (item?.type === "agentMessage" && item.text.trim() !== "") { answer = item.text; break; }
+  }
+  const entry = prompt?.type === "userMessage"
+    ? { turnId: turn.id, userText: (userMessageParts(prompt.content).text.trim().split("\n")[0] ?? "").slice(0, 200), assistantText: answer.slice(0, 400) }
+    : null;
+  timelineCache.set(turn, entry);
+  return entry;
+}
+
 function requestKey(request: PendingRequest): string {
   return `${request.kind}:${String(request.id)}`;
 }
@@ -139,6 +163,40 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
     anchor.current = element === null ? null : element.scrollHeight - element.scrollTop;
     setEarlier((value) => value + TURN_WINDOW);
   }, [scroll.scrollRef]);
+  const timeline = useMemo(() => turns.flatMap((turn) => timelineItem(turn) ?? []), [turns]);
+  const { unpin } = scroll;
+  const scrollToTurn = useCallback((turnId: string) => {
+    const scroller = scroll.scrollRef.current;
+    const element = scroller?.querySelector<HTMLElement>(`[data-turn-id="${CSS.escape(turnId)}"]`) ?? null;
+    if (scroller === null || element === null) return;
+    unpin();
+    const top = element.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - JUMP_OFFSET_PX;
+    const far = Math.abs(top - scroller.scrollTop) > scroller.clientHeight * 2;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    scroller.scrollTo({ top, behavior: far || reduced ? "auto" : "smooth" });
+    element.dataset["jumpTarget"] = "true";
+    if (!reduced) element.animate([{ outline: "2px solid var(--ring)", outlineOffset: "6px" }, { outline: "2px solid transparent", outlineOffset: "6px" }], { duration: JUMP_HIGHLIGHT_MS, easing: "ease-out" });
+    window.setTimeout(() => { delete element.dataset["jumpTarget"]; }, JUMP_HIGHLIGHT_MS);
+  }, [scroll.scrollRef, unpin]);
+  // A jump to a turn outside the rendered window first widens the window to start at that turn, then scrolls once it is laid out.
+  const pendingJump = useRef<string | null>(null);
+  const jumpToMessage = useCallback((index: number) => {
+    const target = timeline[index];
+    if (target === undefined) return;
+    const needed = turns.length - TURN_WINDOW - turns.findIndex((turn) => turn.id === target.turnId);
+    if (needed > earlier) {
+      pendingJump.current = target.turnId;
+      setEarlier(needed);
+      return;
+    }
+    scrollToTurn(target.turnId);
+  }, [timeline, turns, earlier, scrollToTurn]);
+  useLayoutEffect(() => {
+    const turnId = pendingJump.current;
+    if (turnId === null) return;
+    pendingJump.current = null;
+    scrollToTurn(turnId);
+  }, [earlier, scrollToTurn]);
   const annotations = conversation?.annotations;
   const noticesByTurn = useMemo(() => {
     const byTurn = new Map<number, SessionNotice[]>();
@@ -218,6 +276,7 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
         </div>
         </PathPreviewProvider>
       </div>
+      {!empty && <TimelineMinimap items={timeline} scrollRef={scroll.scrollRef} onSelect={jumpToMessage} />}
       {scroll.showJump && (
         <button
           type="button"

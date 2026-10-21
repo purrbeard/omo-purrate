@@ -9,6 +9,8 @@ export interface StickToBottom {
   contentRef: RefObject<HTMLDivElement | null>;
   showJump: boolean;
   jumpToLatest: () => void;
+  /** Stops pinning before a programmatic scroll away from the bottom, so the next resize does not pull it back. */
+  unpin: () => void;
 }
 
 function isEditable(target: EventTarget | null): boolean {
@@ -101,5 +103,11 @@ export function useStickToBottom(): StickToBottom {
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? "smooth" : "auto" });
   }, []);
 
-  return { scrollRef, contentRef, showJump, jumpToLatest };
+  const unpin = useCallback(() => {
+    jumping.current = false;
+    pinned.current = false;
+    setShowJump(true);
+  }, []);
+
+  return { scrollRef, contentRef, showJump, jumpToLatest, unpin };
 }
