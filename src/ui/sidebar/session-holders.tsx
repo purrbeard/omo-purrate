@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { SessionHolder } from "../../../shared/session-held";
-import { useActions } from "../app-context";
+import { useActions, useAppSelector } from "../app-context";
 
 type HolderMap = Readonly<Record<string, readonly SessionHolder[]>>;
 
@@ -16,13 +16,15 @@ export function useThreadHolders(threadId: string): readonly SessionHolder[] | u
 }
 
 /**
- * Looks up which of the sessions another omo process holds open: when the id set changes and whenever the window
- * regains focus (no timer; the main process caches process lookups for a few seconds).
+ * Looks up which of the sessions another omo process holds open: when the id set changes, when one of them gets or
+ * changes its session file (a lookup before omo listed it finds no record), and whenever the window regains focus
+ * (no timer; the main process caches process lookups for a few seconds).
  */
 export function useSessionHolders(threadIds: readonly string[]): HolderMap {
   const actions = useActions();
   const key = useMemo(() => [...new Set(threadIds)].sort().join(","), [threadIds]);
   const [holders, setHolders] = useState<HolderMap>(NO_HOLDERS);
+  const paths = useAppSelector(state => key === "" ? "" : key.split(",").map(id => state.threads[id]?.path ?? "").join("\n"));
   useEffect(() => {
     if (key === "") { setHolders(NO_HOLDERS); return; }
     let current = true;
@@ -35,6 +37,6 @@ export function useSessionHolders(threadIds: readonly string[]): HolderMap {
     refresh();
     window.addEventListener("focus", refresh);
     return () => { current = false; window.removeEventListener("focus", refresh); };
-  }, [actions, key]);
+  }, [actions, key, paths]);
   return holders;
 }
