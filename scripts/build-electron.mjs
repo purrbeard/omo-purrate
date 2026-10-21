@@ -17,6 +17,7 @@ try {
     build({ ...common, format: "esm", entryPoints: ["electron/omo/task-message-extension.ts"], outfile: "dist-electron/task-message-extension.js" }),
     build({ ...common, entryPoints: ["electron/main.ts"], outfile: "dist-electron/main.cjs" }),
     build({ ...common, entryPoints: ["electron/preload.ts"], outfile: "dist-electron/preload.cjs" }),
+    build({ ...common, entryPoints: ["electron/history/history-worker.ts"], outfile: "dist-electron/history-worker.cjs" }),
     build({ ...common, entryPoints: ["scripts/smoke-bridge.ts"], outfile: "dist-electron/smoke-bridge.cjs" }),
   ]);
 } catch (error) {

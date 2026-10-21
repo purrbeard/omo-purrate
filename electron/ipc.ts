@@ -16,8 +16,7 @@ import { readAccountUsage } from "./accounts/usage";
 import { branchSession, retryEntryId } from "./history/branch-session";
 import { runSessionTree, readSessionTree } from "./omo/session-tree";
 import type { ModelRung } from "../shared/ipc";
-import { parseSessionJsonl } from "./history/session-jsonl";
-import { HistoryUpdates } from "./history/history-updates";
+import { HistoryReader } from "./history/history-reader";
 import { createSessionWatcher } from "./history/session-watch";
 import { loadTaskWork, readTaskLinks, taskStore } from "./history/task-work";
 import { watchTaskStore, type TaskStoreWatcher } from "./history/task-store-watch";
@@ -173,7 +172,8 @@ export function registerIpc(deps: IpcDeps): () => void {
     return catalog;
   };
   const sessionHolders = new SessionHolders({ ownPids: () => [process.pid, supervisor.diagnostics().childPid] });
-  const historyUpdates = new HistoryUpdates();
+  // The worker file is unpacked from the asar archive, where a worker thread cannot load it.
+  const historyReader = new HistoryReader(path.join(__dirname, "history-worker.cjs").replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`));
   const sessionWatcher = createSessionWatcher((sessionPath) => send(IPC.historyChanged, sessionPath));
   /** Task stores a view follows, per parent session, with the number of views following it. */
   const taskStoreWatches = new Map<string, { cwd: string; refs: number; watcher: TaskStoreWatcher }>();
@@ -338,13 +338,11 @@ export function registerIpc(deps: IpcDeps): () => void {
       })();
       return installing;
     },
-    [IPC.loadHistory]: async (_event, sessionPath): Promise<HistoryResult> =>
-      parseSessionJsonl(await readFile(await sessionFile(sessionPath), "utf8")),
+    [IPC.loadHistory]: async (_event, sessionPath): Promise<HistoryResult> => historyReader.full(await sessionFile(sessionPath)),
     [IPC.loadHistoryUpdate]: async (_event, sessionPath, since, fullFrom): Promise<HistoryUpdate> => {
       if (since !== null && typeof since !== "string") throw new TypeError("since must be a string or null");
       if (fullFrom !== undefined && !Number.isInteger(fullFrom)) throw new TypeError("fullFrom must be an integer");
-      const file = await sessionFile(sessionPath);
-      return historyUpdates.update(file, parseSessionJsonl(await readFile(file, "utf8")), since, fullFrom as number | undefined);
+      return historyReader.update(await sessionFile(sessionPath), since, fullFrom as number | undefined);
     },
     // The session's own export: omo writes the HTML, the save dialog only picks the path.
     [IPC.exportSession]: async (_event, threadId): Promise<{ path: string } | null> => {
