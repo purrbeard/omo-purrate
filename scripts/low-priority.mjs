@@ -10,6 +10,9 @@ if (command === undefined) {
   process.exit(2);
 }
 os.setPriority(os.constants.priority.PRIORITY_BELOW_NORMAL);
-const child = spawn(command, args, { stdio: "inherit", shell: process.platform === "win32" });
+// The Windows shell (needed for npm/npx .cmd shims) splits on spaces, so an argument such as an exe path is quoted.
+const quote = (value) => (/[\s"]/.test(value) ? `"${value.replace(/"/g, '\\"')}"` : value);
+const windows = process.platform === "win32";
+const child = spawn(windows ? quote(command) : command, windows ? args.map(quote) : args, { stdio: "inherit", shell: windows });
 child.on("exit", (code) => process.exit(code ?? 1));
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill(signal));
