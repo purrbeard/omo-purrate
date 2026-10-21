@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +12,21 @@ const host = vi.hoisted(() => ({
   listeners: new Set<(record: Record<string, unknown> & { type: string }) => void>(),
   failures: new Map<string, Error>(),
   opened: false,
+  sessionFile: null as string | null,
+  /** When set, the next goal-store read waits until the test releases it with the text it returns. */
+  holdGoalRead: null as ((release: (text: string) => void) => void) | null,
 }));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:fs/promises")>();
+  const readFile = ((file: string, ...rest: unknown[]) => {
+    const hold = host.holdGoalRead;
+    if (hold === null || !String(file).includes(`${path.sep}goal${path.sep}`)) return (original.readFile as (...args: unknown[]) => unknown)(file, ...rest);
+    host.holdGoalRead = null;
+    return new Promise<string>((resolve) => hold(resolve));
+  }) as typeof original.readFile;
+  return { ...original, readFile, default: { ...original, readFile } };
+});
 
 vi.mock("../../electron/omo/native/connection", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../electron/omo/native/connection")>();
@@ -29,7 +43,7 @@ vi.mock("../../electron/omo/native/connection", async (importOriginal) => {
       if (failure !== undefined) throw failure;
       if (command === "open_session") {
         host.opened = true;
-        return { sessionId: "handle-1", state: { sessionId: "thread-1", cwd: "/work/project" } };
+        return { sessionId: "handle-1", state: { sessionId: "thread-1", cwd: "/work/project", ...(host.sessionFile === null ? {} : { sessionFile: host.sessionFile }) } };
       }
       return {};
     }
@@ -50,6 +64,8 @@ afterEach(() => {
   host.listeners.clear();
   host.failures.clear();
   host.opened = false;
+  host.sessionFile = null;
+  host.holdGoalRead = null;
   vi.restoreAllMocks();
 });
 
@@ -109,6 +125,34 @@ describe("NativeAppServerClient records", () => {
     expect(methods(seen, "mcpServer/startupStatus/updated")).toMatchObject([{ params: { threadId: "thread-1" } }]);
     deliver({ type: "agent_settled" });
     expect(methods(seen, "mcpServer/startupStatus/updated")).toHaveLength(2);
+  });
+
+  it("publishes only the latest goal-store read, so a slow read of a goal never lands after its clear", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "native-goal-"));
+    host.sessionFile = path.join(dir, "thread-1.jsonl");
+    const store = path.join(dir, "extensions", "goal", "thread-1.json");
+    await mkdir(path.dirname(store), { recursive: true });
+    const text = JSON.stringify({ version: 1, goal: { id: "g", threadId: "thread-1", objective: "Ship", status: "active", tokenBudget: null, tokensUsed: 0, timeUsedSeconds: 0, createdAt: 1, updatedAt: 1 } });
+    await writeFile(store, text);
+    const { client, seen } = await open();
+    const next = () => new Promise<string>((resolve) => client.onNotification((n) => { if (n.method.startsWith("thread/goal/")) resolve(n.method); }));
+    const published = next();
+    deliver({ type: "agent_end" });
+    expect(await published).toBe("thread/goal/updated");
+
+    let release: (text: string) => void = () => {};
+    const held = new Promise<void>((resolve) => { host.holdGoalRead = (resume) => { release = resume; resolve(); }; });
+    deliver({ type: "tool_execution_end" });
+    await held;
+    await rm(store);
+    const cleared = next();
+    deliver({ type: "agent_end" });
+    expect(await cleared).toBe("thread/goal/cleared");
+    release(text);
+    // The released read resumes on microtasks only; one macrotask turn lets it finish before the assertion.
+    await new Promise((resolve) => setImmediate(resolve));
+    const goals = seen.filter((n) => n.method.startsWith("thread/goal/")).map((n) => n.method);
+    expect(goals).toEqual(["thread/goal/updated", "thread/goal/cleared"]);
   });
 
   it("emits skills/changed for commands_changed and loaded_surfaces_changed", async () => {

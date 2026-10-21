@@ -49,6 +49,8 @@ interface Loaded {
   projector: TurnProjector;
   holding: NativeRecord[] | null;
   goal: string | null;
+  /** Goal-store reads started; a read that finishes after a later one started is stale and publishes nothing. */
+  goalReads: number;
   /** Ids of custom_message entries already shown live, so one entry never produces two notices. */
   noticeIds: Set<string>;
   /** `extensionPath\0event` pairs already reported, so a failing extension warns once. */
@@ -547,6 +549,7 @@ export class NativeAppServerClient {
       projector: new TurnProjector(threadId, cwd, (notification) => this.emit(notification)),
       holding: null,
       goal: null,
+      goalReads: 0,
       noticeIds: new Set(),
       extensionErrors: new Set(),
       nativeQueue: [],
@@ -790,8 +793,10 @@ export class NativeAppServerClient {
   }
 
   private async refreshGoal(loaded: Loaded): Promise<void> {
+    const read = ++loaded.goalReads;
     try {
       const goal = await this.readGoal(loaded.threadId);
+      if (read !== loaded.goalReads) return;
       const key = goal === null ? null : JSON.stringify(goal);
       if (key === loaded.goal) return;
       const hadGoal = loaded.goal !== null;
@@ -830,6 +835,7 @@ export class NativeAppServerClient {
     else if (status === "active") await this.goalCommand(loaded, "resume");
     const goal = await this.readGoal(threadId);
     if (goal === null) throw new RpcRequestError(-32603, `omo did not store the goal of ${threadId}`);
+    loaded.goalReads += 1;
     loaded.goal = JSON.stringify(goal);
     this.emit({ method: "thread/goal/updated", params: { threadId, turnId: loaded.projector.activeTurnId, goal } });
     return { goal };
@@ -839,6 +845,7 @@ export class NativeAppServerClient {
     const loaded = await this.load(threadId);
     const existed = await this.readGoal(threadId) !== null;
     await this.goalCommand(loaded, "clear");
+    loaded.goalReads += 1;
     loaded.goal = null;
     if (existed) this.emit({ method: "thread/goal/cleared", params: { threadId } });
     return {};
