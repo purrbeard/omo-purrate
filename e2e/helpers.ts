@@ -131,6 +131,8 @@ export async function launchApp(options: LaunchOptions): Promise<LaunchedApp> {
   }
 
   env["OMO_UI_IPHONE_BRIDGE"] = "0";
+  // Test windows open off screen and inactive so a run never takes the user's keyboard or mouse; OMO_UI_E2E_VISIBLE=1 shows them.
+  if (process.env["OMO_UI_E2E_VISIBLE"] !== "1") env[ENV.backgroundWindow] = "1";
   // A test must never replace the user's installed omo; the update spec drives a fake launcher instead.
   if (options.omo === "installed") env[ENV.omoAutoUpdate] = "0";
   Object.assign(env, options.extraEnv ?? {});

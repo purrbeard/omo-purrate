@@ -34,6 +34,12 @@ app.setPath("userData", process.env[ENV.userData] || path.join(app.getPath("appD
 registerMediaScheme();
 
 const devUrl = process.env[ENV.devUrl] || null;
+/**
+ * Test runs open a window the user can neither see, click nor focus (transparent, click-through, never activated), at its
+ * normal place so its display scale stays the real one; Chromium must not then treat it as occluded and stop painting.
+ */
+const background = process.env[ENV.backgroundWindow] === "1";
+if (background) app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion");
 const indexPath = path.join(__dirname, "../dist/index.html");
 let mainWindow: BrowserWindow | null = null;
 const attention = createAttentionTracker({ window: () => mainWindow });
@@ -62,6 +68,7 @@ function createWindow(): BrowserWindow {
     minHeight: 600,
     title: "omo Purrate",
     show: false,
+    ...(background ? { opacity: 0, focusable: false, skipTaskbar: true } : {}),
     ...(process.platform === "darwin" ? {
       titleBarStyle: "hiddenInset" as const,
       trafficLightPosition: { x: 16, y: 18 },
@@ -78,9 +85,11 @@ function createWindow(): BrowserWindow {
       sandbox: true,
       nodeIntegration: false,
       spellcheck: false,
+      ...(background ? { backgroundThrottling: false } : {}),
     },
   });
-  window.once("ready-to-show", () => window.show());
+  if (background) window.setIgnoreMouseEvents(true);
+  window.once("ready-to-show", () => (background ? window.showInactive() : window.show()));
   window.on("focus", attention.onFocus);
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
@@ -104,6 +113,7 @@ function createWindow(): BrowserWindow {
 function focusWindow(): void {
   const window = mainWindow ?? createWindow();
   if (window.isMinimized()) window.restore();
+  if (background) { window.showInactive(); return; }
   window.show();
   window.focus();
 }
