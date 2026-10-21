@@ -151,12 +151,10 @@ function applyLine(record: SessionRecord | null, line: string, sessionPath: stri
   return record;
 }
 
-async function readRange(file: string, start: number, end: number): Promise<string> {
-  if (end <= start) return "";
-  const chunks: string[] = [];
-  const stream = createReadStream(file, { start, end: end - 1, encoding: "utf8", highWaterMark: 1 << 20 });
-  for await (const chunk of stream) chunks.push(chunk as string);
-  return chunks.join("");
+/** The bytes [start, end) as UTF-8 chunks; a scan holds one chunk at a time, never a whole session file. */
+async function* readChunks(file: string, start: number, end: number): AsyncGenerator<string> {
+  if (end <= start) return;
+  for await (const chunk of createReadStream(file, { start, end: end - 1, encoding: "utf8", highWaterMark: 1 << 20 })) yield chunk as string;
 }
 
 /**
@@ -330,14 +328,20 @@ export class SessionIndex {
     if (entry === undefined || info.size < entry.scanned) {
       entry = { size: 0, mtimeMs: 0, scanned: 0, tail: "", record: null, entryIds: new Set() };
     }
-    const text = entry.tail + await readRange(file, entry.scanned, info.size);
-    const lastNewline = text.lastIndexOf("\n");
-    const complete = lastNewline === -1 ? "" : text.slice(0, lastNewline);
     let record = entry.record === null ? null
       : { ...entry.record, facts: { ...entry.record.facts, defects: [...entry.record.facts.defects] } };
     const { entryIds } = entry;
-    for (const line of complete.split("\n")) record = applyLine(record, line, file, entryIds);
-    const tail = lastNewline === -1 ? text : text.slice(lastNewline + 1);
+    let tail = entry.tail;
+    for await (const chunk of readChunks(file, entry.scanned, info.size)) {
+      const text = tail + chunk;
+      const lastNewline = text.lastIndexOf("\n");
+      if (lastNewline === -1) {
+        tail = text;
+        continue;
+      }
+      for (const line of text.slice(0, lastNewline).split("\n")) record = applyLine(record, line, file, entryIds);
+      tail = text.slice(lastNewline + 1);
+    }
     if (record !== null) {
       record.updatedAtMs = info.mtimeMs;
       record.facts.sizeBytes = info.size;

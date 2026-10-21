@@ -222,6 +222,27 @@ describe("SessionIndex", () => {
     expect((await index.find("s1"))).toMatchObject({ preview: "first ask", name: "Renamed" });
   });
 
+  it("scans a session longer than one read chunk with lines and Hangul split across chunk boundaries", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "native-index-"));
+    const folder = path.join(root, "--work--");
+    await mkdir(folder, { recursive: true });
+    const file = path.join(folder, "s1.jsonl");
+    let parentId: string | null = null;
+    const body: string[] = [line({ type: "session", id: "s1", timestamp: "2026-10-18T00:00:00.000Z", cwd: "/work" })];
+    for (let index = 0; index < 600; index += 1) {
+      body.push(line({ type: "message", id: `m${index}`, parentId, message: { role: "user", content: [{ type: "text", text: `질문 ${index} ${"한글".repeat(1_000)}` }] } }));
+      parentId = `m${index}`;
+    }
+    body.push(line({ type: "session_info", name: "긴 세션" }));
+    const text = body.join("");
+    expect(Buffer.byteLength(text)).toBeGreaterThan(3 << 20);
+    await writeFile(file, text);
+
+    const [record] = await new SessionIndex(root).list();
+    expect(record).toMatchObject({ id: "s1", name: "긴 세션", preview: expect.stringMatching(/^질문 0 한글/) });
+    expect(record!.facts).toMatchObject({ userMessages: 600, defects: [] });
+  });
+
   it("forks into a new file whose header names the source, and archives through a sidecar", async () => {
     root = await mkdtemp(path.join(tmpdir(), "native-index-"));
     const folder = path.join(root, "--work--");
