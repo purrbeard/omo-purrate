@@ -98,12 +98,10 @@ function settleDays(value: unknown, current: number): number {
   return Math.min(MAX_SETTLE_DAYS, Math.max(MIN_SETTLE_DAYS, Math.round(value)));
 }
 
-/** An explicit time wins; otherwise the first completion of the first-run import stamps the current time, once. */
 function adoptSince(patch: Record<string, unknown>, current: Preferences): Pick<Preferences, "adoptSessionsSinceMs"> {
   const value = patch["adoptSessionsSinceMs"];
   if (typeof value === "number" && Number.isFinite(value) && value >= 0) return { adoptSessionsSinceMs: value };
-  if (current.adoptSessionsSinceMs !== undefined) return { adoptSessionsSinceMs: current.adoptSessionsSinceMs };
-  return patch["sessionImportCompleted"] === true && current.sessionImportCompleted !== true ? { adoptSessionsSinceMs: Date.now() } : {};
+  return current.adoptSessionsSinceMs === undefined ? {} : { adoptSessionsSinceMs: current.adoptSessionsSinceMs };
 }
 
 /** Applies every valid field of patch to current; invalid or unknown values keep the current value. */
@@ -249,7 +247,11 @@ export class PreferencesStore {
 
   /** Validates patch (which crosses the IPC boundary untyped), persists, and returns the stored preferences. */
   set(patch: unknown): Preferences {
-    const next = merge(this.get(), patch);
+    const current = this.get();
+    let next = merge(current, patch);
+    // The first completion of the first-run import stamps when it happened, once; loading a file that already completed
+    // its import goes through merge too and must not, or an older install would start adopting from its launch.
+    if (next.sessionImportCompleted === true && current.sessionImportCompleted !== true && next.adoptSessionsSinceMs === undefined) next = { ...next, adoptSessionsSinceMs: Date.now() };
     this.withDb(db => db.write(threadState(next)));
     this.writeJson(withoutThreadState(next));
     this.cache = next;

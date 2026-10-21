@@ -39,6 +39,11 @@ describe("PreferencesStore", () => {
     expect(new PreferencesStore(dir).get().adoptSessionsSinceMs).toBe(stamped);
     expect(prefs.set({ adoptSessionsSinceMs: 1_000 }).adoptSessionsSinceMs).toBe(1_000);
   });
+  it("leaves the adoption start unset when it loads an import completed before the start was recorded", async () => {
+    await writeFile(path.join(dir, "preferences.json"), JSON.stringify({ sessionImportCompleted: true, managedThreadIds: ["main"] }));
+    expect(new PreferencesStore(dir).get().adoptSessionsSinceMs).toBeUndefined();
+    expect(new PreferencesStore(dir).set({ locale: "ko" }).adoptSessionsSinceMs).toBeUndefined();
+  });
   it("persists explicit related-session ownership without changing other preferences", () => {
     const prefs = new PreferencesStore(dir);
     prefs.set({ threadParents: { child: "main", self: "self", invalid: 2 }, settledThreads: ["old"] });
