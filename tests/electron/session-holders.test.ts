@@ -19,7 +19,8 @@ async function sessionWithHolders(records: Record<number, { processStartedAtMs: 
   return { id: ID, sessionPath: path.join(project, `${ID}.jsonl`) };
 }
 
-const starts = (live: Record<number, number>): StartTimes => async (pids) => new Map(pids.flatMap((pid) => (live[pid] === undefined ? [] : [[pid, live[pid]!] as const])));
+const starts = (live: Record<number, number>, parents: Record<number, number> = {}): StartTimes => async (pids) =>
+  new Map(pids.flatMap((pid) => (live[pid] === undefined ? [] : [[pid, { startedAtMs: live[pid]!, parentPid: parents[pid] ?? null }] as const])));
 
 describe("SessionHolders", () => {
   it("keeps a live holder, drops a reused pid and a dead pid, and excludes our own processes", async () => {
@@ -32,6 +33,13 @@ describe("SessionHolders", () => {
     });
     const holders = new SessionHolders({ ownPids: () => [400, null, 500], startTimes: starts({ 100: 1_000_900, 200: 7_000_000, 400: 1_000_000, 500: 1_000_000 }) });
     expect(await holders.lookup([session])).toEqual({ [ID]: [{ pid: 100, cwd: "P:\\work" }] });
+  });
+
+  it("treats the runtime our omo launcher started as our own, but not a foreign process's child", async () => {
+    // The app spawns the launcher (own pid 500); omo writes the holder record from the runtime it starts (600).
+    const session = await sessionWithHolders({ 600: { processStartedAtMs: 2_000_000 }, 700: { processStartedAtMs: 3_000_000 } });
+    const holders = new SessionHolders({ ownPids: () => [500], startTimes: starts({ 600: 2_000_000, 700: 3_000_000 }, { 600: 500, 700: 42 }) });
+    expect(await holders.lookup([session])).toEqual({ [ID]: [{ pid: 700 }] });
   });
 
   it("omits a session nobody holds and one with no holder directory", async () => {
@@ -60,8 +68,10 @@ describe("SessionHolders", () => {
 
 describe("process start time parsing", () => {
   it("reads the PowerShell and ps outputs", () => {
-    expect([...parseWindowsStartTimes("65112 1792456324283\r\nnoise\r\n7 12\r\n")]).toEqual([[65112, 1792456324283], [7, 12]]);
-    expect(parsePsStartTimes("  42 Mon Oct 20 12:34:56 2026\n").get(42)).toBe(new Date("Mon Oct 20 12:34:56 2026").getTime());
+    expect([...parseWindowsStartTimes("65112 1792456324283 3104\r\nnoise\r\n7 12 0\r\n")]).toEqual([
+      [65112, { startedAtMs: 1792456324283, parentPid: 3104 }], [7, { startedAtMs: 12, parentPid: 0 }],
+    ]);
+    expect(parsePsStartTimes("  42     1 Mon Oct 20 12:34:56 2026\n").get(42)).toEqual({ startedAtMs: new Date("Mon Oct 20 12:34:56 2026").getTime(), parentPid: 1 });
   });
 });
 

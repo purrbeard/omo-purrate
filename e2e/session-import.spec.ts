@@ -155,7 +155,7 @@ test("a session another omo process holds is marked in the sidebar and locks its
   const held = "0190f0c0-0000-7000-8000-00000000aaa1", stale = "0190f0c0-0000-7000-8000-00000000aaa2";
   const seedFile = await seededSessions(home, [held, stale]);
   // This test runner stands in for the foreign omo process: a real pid with its real creation time.
-  const startedAtMs = (await processStartTimes([process.pid])).get(process.pid);
+  const startedAtMs = (await processStartTimes([process.pid])).get(process.pid)?.startedAtMs;
   expect(startedAtMs).toBeDefined();
   const record = (id: string, processStartedAtMs: number): void => {
     const directory = path.join(home, "sessions", "session-holders", id);
