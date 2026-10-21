@@ -18,6 +18,21 @@ export function isRunning(thread: ThreadSummary): boolean {
   return running(thread);
 }
 
+/**
+ * Everything `isLiveRunning` reads from the bridge and the conversations, as one string: two states with the same key
+ * give every thread the same answer, so a streamed delta that only grows a turn does not change it.
+ */
+export function runningInputsKey(state: Pick<AppState, "bridge" | "conversations">): string {
+  const parts = [state.bridge?.state ?? ""];
+  for (const [id, conversation] of Object.entries(state.conversations)) {
+    const turnRunning = conversation.activeTurnId !== null
+      && conversation.turns.some(turn => turn.id === conversation.activeTurnId && turn.origin === "live" && turn.status === "inProgress");
+    const tasksRunning = Object.values(conversation.live.tasks).some(task => task.status === "running" && !isSuspended(task));
+    parts.push(`${id}:${conversation.live.freshness}:${turnRunning ? 1 : 0}:${tasksRunning ? 1 : 0}`);
+  }
+  return parts.join("|");
+}
+
 /** Runtime badges and filters must not promote persisted task records or disconnected snapshots to live work. */
 export function isLiveRunning(thread: ThreadSummary, state: Pick<AppState, "bridge" | "conversations">): boolean {
   return running(thread, state);

@@ -218,14 +218,21 @@ export function selectAgentChildren(state: AppState, mainId: string | null): Thr
   return children;
 }
 
-const pendingCache = new Map<string, { source: PendingRequest[]; result: PendingRequest[] }>();
+/** Per-thread results of one requests array; a replaced array and its results are released together. */
+const pendingCache = new WeakMap<PendingRequest[], Map<string, PendingRequest[]>>();
 
 /** Pending requests for one thread, oldest first; memoized per thread so the result is stable while requests are unchanged. */
 export function selectPendingRequestsForThread(state: AppState, threadId: string): PendingRequest[] {
-  const cached = pendingCache.get(threadId);
-  if (cached !== undefined && cached.source === state.pendingRequests) return cached.result;
-  const result = state.pendingRequests.filter((request) => request.threadId === threadId);
-  pendingCache.set(threadId, { source: state.pendingRequests, result });
+  let byThread = pendingCache.get(state.pendingRequests);
+  if (byThread === undefined) {
+    byThread = new Map();
+    pendingCache.set(state.pendingRequests, byThread);
+  }
+  let result = byThread.get(threadId);
+  if (result === undefined) {
+    result = state.pendingRequests.filter((request) => request.threadId === threadId);
+    byThread.set(threadId, result);
+  }
   return result;
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ContextUsage } from "../../../shared/workbench";
 import type { SessionStats } from "../../../shared/protocol";
 import { selectActiveSessionModel } from "../../state";
+import type { AppState, ConversationTurn } from "../../state";
 import { useAppSelector } from "../app-context";
 import { useNativeCatalog } from "./use-native-catalog";
 
@@ -14,16 +15,31 @@ export interface ContextGaugeUsage {
   cost: number | null;
 }
 
+/** Compaction weight per turn (streaming 1, finished 2); a streamed delta replaces only the live turn, so the rest are reused. */
+const compactionsByTurn = new WeakMap<ConversationTurn, number>();
+
+export function selectCompletedCount(state: AppState, threadId: string | null): number {
+  return threadId === null ? 0 : state.conversations[threadId]?.turns.reduce((count, turn) => count + (turn.status === "completed" ? 1 : 0), 0) ?? 0;
+}
+
+export function selectCompactionCount(state: AppState, threadId: string | null): number {
+  return threadId === null ? 0 : state.conversations[threadId]?.turns.reduce((count, turn) => {
+    let weight = compactionsByTurn.get(turn);
+    if (weight === undefined) {
+      weight = turn.items.reduce((total, entry) => total + (entry.item.type === "contextCompaction" ? entry.streaming ? 1 : 2 : 0), 0);
+      compactionsByTurn.set(turn, weight);
+    }
+    return count + weight;
+  }, 0) ?? 0;
+}
+
 export function useContextUsage(): ContextGaugeUsage | null {
   const threadId = useAppSelector(state => state.activeThreadId);
   const thread = useAppSelector(state => threadId === null ? null : state.threads[threadId] ?? null);
   const session = useAppSelector(selectActiveSessionModel);
   const modelId = useAppSelector(state => state.composer.modelId);
-  const completed = useAppSelector(state => threadId === null ? 0 :
-    state.conversations[threadId]?.turns.filter(turn => turn.status === "completed").length ?? 0);
-  const compactions = useAppSelector(state => threadId === null ? 0 :
-    state.conversations[threadId]?.turns.reduce((count, turn) => count + turn.items.reduce((total, entry) =>
-      total + (entry.item.type === "contextCompaction" ? entry.streaming ? 1 : 2 : 0), 0), 0) ?? 0);
+  const completed = useAppSelector(state => selectCompletedCount(state, threadId));
+  const compactions = useAppSelector(state => selectCompactionCount(state, threadId));
   const catalog = useNativeCatalog(thread?.cwd ?? null, thread?.path != null);
   const path = thread?.path ?? null;
   const [entry, setEntry] = useState<{ threadId: string; path: string; usage: ContextUsage } | null>(null);

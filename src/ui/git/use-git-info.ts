@@ -1,16 +1,24 @@
 import { useEffect, useState } from "react";
 import type { GitInfo } from "../../../shared/ipc";
 import { useAppSelector } from "../app-context";
-import type { AppState } from "../../state";
+import type { AppState, Conversation } from "../../state";
 
 /** Window event dispatched after UI-side git writes so every mounted git view re-reads its facts. */
 export const GIT_REFRESH_EVENT = "omo:git-refresh";
 
+/** Completed turns per turn list; a streamed delta replaces only the active thread's list, so the others are reused. */
+const completedByTurns = new WeakMap<Conversation["turns"], number>();
+
 /** Bumps whenever any thread's turn finishes; git facts refresh after each completed turn. */
 export function selectCompletedTurnCount(state: AppState): number {
   let count = 0;
-  for (const conversation of Object.values(state.conversations)) {
-    for (const turn of conversation.turns) if (turn.status === "completed") count += 1;
+  for (const { turns } of Object.values(state.conversations)) {
+    let completed = completedByTurns.get(turns);
+    if (completed === undefined) {
+      completed = turns.reduce((total, turn) => total + (turn.status === "completed" ? 1 : 0), 0);
+      completedByTurns.set(turns, completed);
+    }
+    count += completed;
   }
   return count;
 }

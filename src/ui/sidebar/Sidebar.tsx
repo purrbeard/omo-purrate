@@ -23,7 +23,7 @@ import { NativeSessionsDialog } from "./NativeSessionsDialog";
 import type { DeleteTarget } from "./DeleteThreadDialog";
 import { ThreadRow, WorkspaceRow } from "./Rows";
 import { SessionHoldersProvider, useSessionHolders } from "./session-holders";
-import { containsThread, filterGroups, isLiveRunning } from "./thread-filter";
+import { containsThread, filterGroups, isLiveRunning, runningInputsKey } from "./thread-filter";
 import type { ThreadPeriod } from "./thread-filter";
 import { partitionSettled, type SettleConfig } from "./settle";
 import { pruneSelection, selectRange, toggleId } from "./selection";
@@ -156,10 +156,14 @@ export function Sidebar() {
   const store = useContext(StoreContext);
   const newProject = useNewSessionFlow({ chooseFolder: true });
   const { preferences } = useUiState();
-  const state = useAppSelector(s => s);
+  // Only the inputs of the lists below re-render the sidebar; the selectors read them from the store's latest state.
+  const threads = useAppSelector(s => s.threads);
+  const threadOrder = useAppSelector(s => s.threadOrder);
+  const threadLinks = useAppSelector(s => s.threadLinks);
+  const btw = useAppSelector(s => s.btw);
   const snoozedMap = preferences?.snoozedThreads ?? NO_SNOOZED;
-  const allGroups = useMemo(() => selectManagedThreadsByWorkspace(state, preferences?.managedThreadIds ?? []), [state.threads, state.threadOrder, state.threadLinks, preferences?.managedThreadIds]);
-  const allPinned = useMemo(() => selectPinnedThreads(state, preferences?.pinnedThreadIds ?? []), [state.threads, state.threadOrder, state.threadLinks, state.btw, preferences?.pinnedThreadIds]);
+  const allGroups = useMemo(() => selectManagedThreadsByWorkspace(store!.getState(), preferences?.managedThreadIds ?? []), [store, threads, threadOrder, threadLinks, preferences?.managedThreadIds]);
+  const allPinned = useMemo(() => selectPinnedThreads(store!.getState(), preferences?.pinnedThreadIds ?? []), [store, threads, threadOrder, threadLinks, btw, preferences?.pinnedThreadIds]);
   // Snoozed threads leave the normal list (and the pinned section) until they wake; they live in the Snoozed group.
   const groups = useMemo(
     () => allGroups.map(group => ({ ...group, threads: group.threads.filter(thread => snoozedMap[thread.id] === undefined) })).filter(group => group.threads.length > 0),
@@ -179,7 +183,7 @@ export function Sidebar() {
   const threadsLoaded = useAppSelector((state) => state.threadsLoaded);
   const hasMore = useAppSelector((state) => state.threadsCursor !== null);
   const bridge = useAppSelector((state) => state.bridge);
-  const conversations = useAppSelector((state) => state.conversations);
+  const runningKey = useAppSelector(runningInputsKey);
   const connected = bridge?.state === "connected";
   const disconnectedHint = connected ? undefined : t("shell.newSessionDisconnected");
   const nowMs = useNowMs();
@@ -218,7 +222,8 @@ export function Sidebar() {
   const settledGroup = useMemo<WorkspaceGroup>(() => ({ cwd: "settled", label: "", threads: split.settled }), [split]);
 
   const fallbackTitle = t("shell.newSession");
-  const runningOf = useMemo(() => (thread: ThreadSummary) => isLiveRunning(thread, { bridge, conversations }), [bridge, conversations]);
+  // runningKey stands for every bridge and conversation field isLiveRunning reads.
+  const runningOf = useMemo(() => { const snapshot = store!.getState(); return (thread: ThreadSummary) => isLiveRunning(thread, snapshot); }, [store, runningKey]);
   const visiblePinned = filterGroups([{ cwd: "pinned", label: "", threads: pinned.map(thread => ({ ...thread, children: withoutPinned(thread.children ?? [], pinnedIds) })) }],
     { query, runningOnly, period }, nowMs, thread => threadTitle(thread, fallbackTitle), runningOf)[0]?.threads ?? [];
   const visibleGroups = useMemo(
