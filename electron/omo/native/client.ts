@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import os from "node:os";
@@ -53,6 +53,17 @@ interface Loaded {
   noticeIds: Set<string>;
   /** `extensionPath\0event` pairs already reported, so a failing extension warns once. */
   extensionErrors: Set<string>;
+  /** omo's own queue as last reported, shown before the inputs this client holds. */
+  nativeQueue: QueuedInput[];
+  /** Steers and follow-ups held by this client until the run settles (see `holdInputWhileRunning`). */
+  held: HeldInput[];
+}
+
+interface HeldInput {
+  queuedId: string;
+  mode: "steer" | "followUp";
+  input: JsonObject[];
+  text: string;
 }
 
 const DEFAULT_STOP_TIMEOUTS: StopTimeouts = { afterStdinEnd: 2_000, afterSigterm: 3_000 };
@@ -472,6 +483,7 @@ export class NativeAppServerClient {
         loaded.projector.handle(record);
         void this.refreshGoal(loaded);
         this.emit({ method: "mcpServer/startupStatus/updated", params: { threadId: loaded.threadId } });
+        void this.sendHeld(loaded);
         return;
       case "tool_execution_end":
         loaded.projector.handle(record);
@@ -483,8 +495,8 @@ export class NativeAppServerClient {
         this.emit({ method: "thread/status/changed", params: { threadId: loaded.threadId, status: { type: "notLoaded" } } });
         return;
       case "queue_update": {
-        const visible = loaded.projector.setQueue(queuedInputs(record));
-        this.emit({ method: "extension_event", params: { type: "extension_event", threadId: loaded.threadId, name: QUEUE_EVENT, data: { items: visible } } });
+        loaded.nativeQueue = loaded.projector.setQueue(queuedInputs(record));
+        this.emitQueue(loaded);
         return;
       }
       default:
@@ -537,6 +549,8 @@ export class NativeAppServerClient {
       goal: null,
       noticeIds: new Set(),
       extensionErrors: new Set(),
+      nativeQueue: [],
+      held: [],
     };
     this.sessions.set(threadId, loaded);
     this.byHandle.set(handle, loaded);
@@ -861,7 +875,23 @@ export class NativeAppServerClient {
 
   private async startTurn(threadId: string, input: JsonObject): Promise<{ turn: Turn }> {
     const loaded = await this.load(threadId);
-    const { message, images, shown } = await this.promptContent(input["input"]);
+    // Held inputs go first, in the order they were sent; they return to the queue if the turn does not start.
+    const held = loaded.held.splice(0);
+    if (held.length > 0) this.emitQueue(loaded);
+    try {
+      return await this.promptTurn(loaded, [...held.flatMap((item) => item.input), ...(Array.isArray(input["input"]) ? input["input"] : [])], input);
+    } catch (error) {
+      if (held.length > 0) {
+        loaded.held.unshift(...held);
+        this.emitQueue(loaded);
+      }
+      throw error;
+    }
+  }
+
+  private async promptTurn(loaded: Loaded, items: unknown[], input: JsonObject): Promise<{ turn: Turn }> {
+    const threadId = loaded.threadId;
+    const { message, images, shown } = await this.promptContent(items);
     if (loaded.projector.activeTurnId !== null && await this.closeStaleTurn(loaded)) {
       throw new RpcRequestError(-32600, `thread ${threadId} already has a running turn`);
     }
@@ -890,6 +920,7 @@ export class NativeAppServerClient {
     if (typeof input["expectedTurnId"] === "string" && input["expectedTurnId"] !== active) {
       throw new RpcRequestError(-32600, `Turn id mismatch: expected ${input["expectedTurnId"]} but active turn is ${active}`);
     }
+    if (this.options.holdInputWhileRunning === true) return this.hold(loaded, "steer", input, active);
     const { message, images, shown } = await this.promptContent(input["input"]);
     try {
       await this.command(loaded.handle, "steer", { message, ...(images.length > 0 ? { images } : {}) }, PROMPT_TIMEOUT_MS);
@@ -905,6 +936,7 @@ export class NativeAppServerClient {
     const loaded = await this.load(threadId);
     const active = loaded.projector.activeTurnId;
     if (active === null) throw new RpcRequestError(-32600, `No active turn for thread ${threadId}`);
+    if (this.options.holdInputWhileRunning === true) return this.hold(loaded, "followUp", input, active);
     const { message, images } = await this.promptContent(input["input"]);
     let data: JsonObject;
     try {
@@ -918,8 +950,45 @@ export class NativeAppServerClient {
     return { turnId: active };
   }
 
+  /**
+   * Keeps a steer or follow-up sent while omo runs and starts the next turn with it once the run settles. omo 5.1.38
+   * writes such input to the session as pending input and fsyncs it through a read-only handle, which always fails with
+   * EPERM on Windows; the failed record is replayed on every reopen and the session falls back from model to model.
+   */
+  private async hold(loaded: Loaded, mode: HeldInput["mode"], input: JsonObject, active: string): Promise<{ turnId: string }> {
+    const items = Array.isArray(input["input"]) ? input["input"].filter(isRecord) : [];
+    const { message } = await this.promptContent(items);
+    if (!(await this.closeStaleTurn(loaded))) return { turnId: (await this.startTurn(loaded.threadId, { input: items })).turn.id };
+    loaded.held.push({ queuedId: `held:${randomUUID()}`, mode, input: items, text: message });
+    this.emitQueue(loaded);
+    // The run may have settled while omo was asked for its state.
+    if (loaded.projector.activeTurnId === null) void this.sendHeld(loaded);
+    return { turnId: active };
+  }
+
+  private async sendHeld(loaded: Loaded): Promise<void> {
+    if (loaded.held.length === 0 || loaded.projector.activeTurnId !== null || this.sessions.get(loaded.threadId) !== loaded) return;
+    try {
+      await this.startTurn(loaded.threadId, { input: [] });
+    } catch (error) {
+      console.error(`Held input for thread ${loaded.threadId} stays queued: its turn did not start`, error);
+    }
+  }
+
+  private emitQueue(loaded: Loaded): void {
+    const items: QueuedInput[] = [...loaded.nativeQueue, ...loaded.held.map(({ queuedId, mode, text }) => ({ queuedId, mode, text }))];
+    this.emit({ method: "extension_event", params: { type: "extension_event", threadId: loaded.threadId, name: QUEUE_EVENT, data: { items } } });
+  }
+
   private async dequeue(threadId: string, queuedId: string): Promise<{ status: string }> {
     const loaded = await this.load(threadId);
+    const at = loaded.held.findIndex((item) => item.queuedId === queuedId);
+    if (queuedId.startsWith("held:")) {
+      if (at < 0) return { status: "notFound" };
+      loaded.held.splice(at, 1);
+      this.emitQueue(loaded);
+      return { status: "removed" };
+    }
     const data = params(await this.command(loaded.handle, "dequeue_message", { queuedId }));
     const status = typeof data["status"] === "string" ? data["status"] : "removed";
     if (status === "removed") loaded.projector.dropFollowUp(queuedId);
@@ -928,6 +997,14 @@ export class NativeAppServerClient {
 
   private async editQueued(threadId: string, queuedId: string, text: string): Promise<{ status: string }> {
     const loaded = await this.load(threadId);
+    if (queuedId.startsWith("held:")) {
+      const item = loaded.held.find((entry) => entry.queuedId === queuedId);
+      if (item === undefined) return { status: "notFound" };
+      item.input = [{ type: "text", text, text_elements: [] }, ...item.input.filter((entry) => entry["type"] !== "text")];
+      item.text = text;
+      this.emitQueue(loaded);
+      return { status: "edited" };
+    }
     const data = params(await this.command(loaded.handle, "edit_queued_message", { queuedId, text }));
     const status = typeof data["status"] === "string" ? data["status"] : "edited";
     return { status };

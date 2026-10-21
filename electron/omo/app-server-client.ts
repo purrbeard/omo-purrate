@@ -57,6 +57,8 @@ export interface AppServerClientOptions {
   stateDir?: string;
   /** Shared omo host socket the native client attaches to instead of spawning its own host. */
   socket?: string;
+  /** Keep steers and follow-ups sent during a run in the client and send them as the next turn, never as omo pending input. */
+  holdInputWhileRunning?: boolean;
 }
 
 type Listener<T> = (value: T) => void;

@@ -55,11 +55,11 @@ class FakeOmo {
   private readonly exit: Promise<ExitInfo>;
   private readonly listeners = new Set<() => void>();
 
-  constructor(readonly home: string, cwd: string, logPath: string, env: Record<string, string> = {}) {
+  constructor(readonly home: string, cwd: string, logPath: string, env: Record<string, string> = {}, holdInputWhileRunning = false) {
     this.client = new NativeAppServerClient({
       command: FIXTURE, args: HOST_ARGS, cwd, clientVersion: "test", spawnImpl: spawnFixture,
       env: processEnv({ FAKE_OMO_HOME: home, FAKE_OMO_LOG: logPath, ...env }),
-      agentDir: home, stateDir: join(home, "..", "state"),
+      agentDir: home, stateDir: join(home, "..", "state"), holdInputWhileRunning,
     });
     this.exit = new Promise((resolve) => this.client.onExit(resolve));
     this.client.onNotification((notification) => this.push({ ...notification }));
@@ -145,7 +145,7 @@ class FakeOmo {
 interface Sandbox {
   dir: string;
   home: string;
-  launch(logName?: string, env?: Record<string, string>): Promise<FakeOmo>;
+  launch(logName?: string, env?: Record<string, string>, holdInputWhileRunning?: boolean): Promise<FakeOmo>;
 }
 
 const sandboxDirs: string[] = [];
@@ -158,8 +158,8 @@ async function sandbox(): Promise<Sandbox> {
   return {
     dir,
     home,
-    async launch(logName = "log.jsonl", env = {}) {
-      const client = new FakeOmo(home, dir, join(dir, logName), env);
+    async launch(logName = "log.jsonl", env = {}, holdInputWhileRunning = false) {
+      const client = new FakeOmo(home, dir, join(dir, logName), env, holdInputWhileRunning);
       liveClients.push(client);
       await client.client.start();
       return client;
@@ -479,6 +479,33 @@ describe("fake omo Native RPC host through the app's adapter", () => {
       .map((frame) => JSON.stringify(at(frame, "params", "item", "content")));
     expect(userTexts.some((text) => text.includes("kept"))).toBe(true);
     expect(userTexts.some((text) => text.includes("keep me") || text.includes("drop me"))).toBe(false);
+    expect(await client.close()).toBe(0);
+  });
+
+  it("holds steers and follow-ups sent during a run and sends them as the next turn, never as omo pending input", async () => {
+    const box = await sandbox();
+    const client = await box.launch("log.jsonl", {}, true);
+    const threadId = await client.startThread(box.dir);
+    const gate = join(box.dir, "release-run");
+    const turnId = await client.startTurn(threadId, `SCENARIO:gate:${gate}`);
+    const input = (text: string) => [{ type: "text" as const, text, text_elements: [] }];
+    await client.request("turn/steer", { threadId, expectedTurnId: turnId, input: input("steer me") });
+    await client.request("turn/followUp", { threadId, input: input("follow me") });
+    await client.request("turn/followUp", { threadId, input: input("drop me") });
+    type Row = { queuedId: string; mode: string; text: string };
+    const rows = (frame: Frame): Row[] => at(frame, "params", "data", "items") as Row[];
+    const queued = await client.waitFrame((frame) => frame.method === "extension_event" && at(frame, "params", "name") === "omo.queue.updated" && rows(frame).length === 3, "three held messages");
+    const [steer, follow, drop] = rows(queued) as [Row, Row, Row];
+    expect([steer.mode, follow.mode]).toEqual(["steer", "followUp"]);
+    expect(await client.request("queue/edit", { threadId, queuedId: follow.queuedId, text: "followed" })).toEqual({ status: "edited" });
+    expect(await client.request("queue/dequeue", { threadId, queuedId: drop.queuedId })).toEqual({ status: "removed" });
+    const next = client.waitFrame((frame) => frame.method === "turn/started" && at(frame, "params", "turn", "id") !== turnId, "held turn started");
+    writeFileSync(gate, "");
+    await client.waitTurnCompleted(turnId);
+    await client.waitTurnCompleted(str(at(await next, "params", "turn", "id")));
+    const log = await readJsonLines(join(box.dir, "log.jsonl"));
+    expect(log.filter((frame) => frame["type"] === "steer" || frame["type"] === "follow_up")).toEqual([]);
+    expect(log.filter((frame) => frame["type"] === "prompt").map((frame) => frame["message"]).at(-1)).toBe("steer me\nfollowed");
     expect(await client.close()).toBe(0);
   });
 

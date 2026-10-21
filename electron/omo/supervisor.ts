@@ -244,6 +244,8 @@ export class OmoSupervisor {
       // The child env drops OMO_* overrides, so omo itself uses <home>/.omo/agent.
       agentDir: this.options.baseEnv[ENV.qaAgentDir] ?? path.join(this.options.homeDir, ".omo", "agent"),
       extraSessionDirs: () => alphaSessionRoots(this.options.homeDir, this.options.baseEnv),
+      // omo's pending-input fsync fails with EPERM on Windows, so input sent during a run waits in the client.
+      holdInputWhileRunning: process.platform === "win32",
       ...(this.options.stateDir === undefined ? {} : { stateDir: this.options.stateDir }),
     };
     let hostNotice: string | null = null;
