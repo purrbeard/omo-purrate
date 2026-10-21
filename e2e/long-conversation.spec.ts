@@ -61,8 +61,10 @@ test("a new session opens promptly while an answer streams fast into a long conv
   const { page } = current();
   await openLongConversation(page);
   // The transcript must be large enough that a synchronous layout per streamed delta costs more than the 2 ms between
-  // deltas; that per-delta layout is what delayed every other renderer task.
-  expect(await page.evaluate(() => document.getElementsByTagName("*").length)).toBeGreaterThan(30_000);
+  // deltas; that per-delta layout is what delayed every other renderer task. Folded work logs mount nothing, so every
+  // one is opened, as a reader who unfolds them would.
+  await page.evaluate(() => { for (const log of document.querySelectorAll<HTMLDetailsElement>('[data-testid="turn-work-log"]')) log.open = true; });
+  await expect.poll(() => page.evaluate(() => document.getElementsByTagName("*").length)).toBeGreaterThan(30_000);
   const compose = page.locator(`[data-testid="${TESTID.workspaceGroup}"][data-cwd=${JSON.stringify(pickDir)}] [data-testid="${TESTID.workspaceCompose}"]`);
   const box = await compose.boundingBox();
   if (box === null) throw new Error("the compose icon is not laid out");
@@ -70,7 +72,7 @@ test("a new session opens promptly while an answer streams fast into a long conv
   // The waits and timestamps live in the page and are requested before the stream starts: a driver query sent during the
   // stream queues behind the same backlog, so a click that waited for one would land only after the backlog drained.
   const probe = await page.evaluateHandle(
-    ({ answer, marker, sidebar, activeRow, composeIcon, stop, longId }) => {
+    ({ answer, marker, sidebar, activeRow, composeIcon, stop, longId, longRunning }) => {
       const answersBefore = document.querySelectorAll(answer).length;
       const reached = new Promise<void>((resolve) => {
         const check = (): void => {
@@ -91,15 +93,15 @@ test("a new session opens promptly while an answer streams fast into a long conv
       });
       const nav = document.querySelector(sidebar);
       if (nav === null) throw new Error("no sidebar");
-      const openedAfterMs = new Promise<number>((resolve) => {
+      const opened = new Promise<{ afterMs: number; longStillRunning: boolean }>((resolve) => {
         new MutationObserver((_records, observer) => {
           const row = nav.querySelector(activeRow);
           if (clickedAt === null || row === null || row.getAttribute("data-thread-id") === longId) return;
           observer.disconnect();
-          resolve(performance.now() - clickedAt);
+          resolve({ afterMs: performance.now() - clickedAt, longStillRunning: nav.querySelector(longRunning) !== null });
         }).observe(nav, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-current"] });
       });
-      return { reached, clicked, openedAfterMs };
+      return { reached, clicked, opened };
     },
     {
       answer: `[data-testid="${TESTID.assistantMessage}"]`,
@@ -109,15 +111,20 @@ test("a new session opens promptly while an answer streams fast into a long conv
       composeIcon: `[data-testid="${TESTID.workspaceCompose}"]`,
       stop: `[data-testid="${TESTID.composerStop}"]`,
       longId: LONG_ID,
+      longRunning: `[data-testid="thread-row"][data-thread-id="${LONG_ID}"] [data-testid="thread-running-status"]`,
     },
   );
   const reached = probe.evaluate((p) => p.reached);
   const clicked = probe.evaluate((p) => p.clicked);
-  const openedAfterMs = probe.evaluate((p) => p.openedAfterMs);
+  const opened = probe.evaluate((p) => p.opened);
 
   await send(page, "SCENARIO:flood:2000:2");
   await reached;
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   expect(await clicked).toEqual({ onCompose: true, streaming: true });
-  expect(await openedAfterMs).toBeLessThan(2_000);
+  // The stream still has about 1,500 deltas to go when the click lands. A renderer that lays out per delta opens the new
+  // session only after the stream drained; a responsive one opens it mid-stream on any machine, however slow.
+  const { afterMs, longStillRunning } = await opened;
+  test.info().annotations.push({ type: "opened-after-ms", description: String(Math.round(afterMs)) });
+  expect(longStillRunning).toBe(true);
 });
