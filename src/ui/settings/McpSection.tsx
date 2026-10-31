@@ -9,6 +9,7 @@ import { TESTID } from "../testids";
 import { SectionHeading } from "./SectionHeading";
 import { errorMessage } from "./diagnostics";
 import { ErrorText, ui } from "./SettingsCard";
+import { McpConfigEditor } from "./McpConfigEditor";
 
 const STATUS_BADGE = { connected: "success", needs_auth: "warning" } as const;
 
@@ -21,6 +22,7 @@ export function McpSection() {
   const [importError, setImportError] = useState<string | null>(null);
   const [imported, setImported] = useState<number | null>(null);
   const [configured, setConfigured] = useState<Array<{ name: string; enabled: boolean; type: string }>>([]);
+  const [reconnecting, setReconnecting] = useState(false);
   const loadConfigured = async (): Promise<void> => { setConfigured(await window.omo.readConfiguredMcpServers()); };
   const importExisting = async (): Promise<void> => {
     setImporting(true); setImportError(null); setImported(null);
@@ -58,7 +60,12 @@ export function McpSection() {
   return (
     <section className={ui.section} data-testid={TESTID.settingsMcp} aria-busy={loading}>
       <SectionHeading title={t("shell.settings.nav.mcp")} intro={t("shell.settings.mcp.intro")} />
+      <McpConfigEditor />
       <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="outline" size="sm" disabled={turnActive || reconnecting || loading} data-testid="mcp-reconnect" onClick={() => {
+          setReconnecting(true); setImportError(null);
+          void window.omo.restart().then(async () => { await loadConfigured(); await actions.loadMcpServers(); }).catch((reason: unknown) => setImportError(errorMessage(reason))).finally(() => setReconnecting(false));
+        }}>{t("shell.settings.omo.restart")}</Button>
         <Button variant="primary" size="sm" icon={<ScanSearch aria-hidden="true" />} disabled={importing || loading || turnActive} data-testid="mcp-import-existing" onClick={() => void importExisting()}>{t("shell.settings.mcp.importExisting")}</Button>
         <Button variant="outline" size="sm" icon={<FileInput aria-hidden="true" />} disabled={importing || loading || turnActive} data-testid="mcp-import" onClick={() => void importConfig()}>
           {t(importing ? "shell.settings.mcp.importing" : "shell.settings.mcp.import")}

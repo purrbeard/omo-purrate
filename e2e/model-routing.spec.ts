@@ -27,8 +27,8 @@ test("available models append unique research fallbacks and replace a mapping ta
     await running.page.getByTestId("routing-save").click();
     await expect(running.page.getByTestId("routing-saved")).toBeVisible();
     const saved = JSON.parse(readFileSync(path.join(home, ".omo", "omo.json"), "utf8"));
-    expect(saved["[senpi]"].agents.librarian.models).toEqual([values[0], values[1]]);
-    expect(saved["[senpi]"].models["research-main"].model).toBe(values[1]);
+    expect(saved["[native]"].agents.librarian.models).toEqual([values[0], values[1]]);
+    expect(saved["[native]"].models["research-main"].model).toBe(values[1]);
     await shot(running.page, "model-routing-list");
     await editor.fill("");
     await running.page.locator('[data-route-remove="research-main"]').click();
@@ -39,9 +39,9 @@ test("available models append unique research fallbacks and replace a mapping ta
     await running.page.getByTestId("routing-save").click();
     await expect(running.page.getByTestId("routing-saved")).toBeVisible();
     const cleared = JSON.parse(readFileSync(path.join(home, ".omo", "omo.json"), "utf8"));
-    expect(cleared["[senpi]"].agents.librarian.models).toEqual([]);
-    expect(cleared["[senpi]"].models["research-main"]).toBeUndefined();
-    expect(cleared["[senpi]"].models["cancelled-mapping"]).toBeUndefined();
+    expect(cleared["[native]"].agents.librarian.models).toEqual([]);
+    expect(cleared["[native]"].models["research-main"]).toBeUndefined();
+    expect(cleared["[native]"].models["cancelled-mapping"]).toBeUndefined();
     await running.page.locator('[data-section="general"]').click();
     await expect(running.page.getByTestId("settings-workspace-default")).toHaveAccessibleName("Start new threads in");
     await running.page.locator('[data-section="model"]').click();
