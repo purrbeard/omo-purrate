@@ -31,12 +31,15 @@ export function KeybindingsSection() {
       <SettingsCard>
         {APP_SHORTCUTS.map((shortcut) => (
           <SettingRow key={shortcut.id} title={t(shortcut.label)}>
-            {EDITABLE_SHORTCUTS.has(shortcut.id) ? (
-              <input className={`${ui.control} w-48 max-w-full min-w-0`} aria-label={t(shortcut.label)}
-                aria-invalid={validation !== null} data-shortcut-input={shortcut.id} disabled={saving || preferences === null}
-                value={bindings[shortcut.id] ?? shortcut.keys.other.join("+").replace(/^Ctrl/, "CmdOrCtrl")}
-                onChange={event => { setDraft({ ...bindings, [shortcut.id]: event.target.value }); setFailure(null); }} />
-            ) : <span data-shortcut={shortcut.id}><ShortcutKeys keys={shortcutKeys(shortcut, window.omo.platform, bindings)} /></span>}
+            <div className="flex max-w-full flex-wrap items-center gap-2">
+              {EDITABLE_SHORTCUTS.has(shortcut.id) && (
+                <input className={`${ui.control} w-48 max-w-full min-w-0`} aria-label={t(shortcut.label)}
+                  aria-invalid={validation !== null} data-shortcut-input={shortcut.id} disabled={saving || preferences === null}
+                  value={bindings[shortcut.id] ?? shortcut.keys.other.join("+").replace(/^Ctrl/, "CmdOrCtrl")}
+                  onChange={event => { setDraft({ ...bindings, [shortcut.id]: event.target.value }); setFailure(null); }} />
+              )}
+              <span data-shortcut={shortcut.id}><ShortcutKeys keys={shortcutKeys(shortcut, window.omo.platform, bindings)} /></span>
+            </div>
           </SettingRow>
         ))}
       </SettingsCard>
