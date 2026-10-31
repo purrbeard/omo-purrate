@@ -46,3 +46,19 @@ it("allows Alpha history reads but refuses changes until it has been copied into
     expect(await readFile(external, "utf8")).toBe(original);
   } finally { vi.unstubAllEnvs(); quarantineSync(root, { recursive: true, force: true }); }
 });
+
+it("keeps the configured native store boundary while the supervisor reconnects", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "purrate-reconnect-boundary-"));
+  const agent = path.join(root, "isolated-agent");
+  const fallback = path.join(root, ".omo", "agent", "sessions");
+  await mkdir(path.join(agent, "sessions"), { recursive: true });
+  await mkdir(fallback, { recursive: true });
+  const own = path.join(agent, "sessions", "own.jsonl"), unrelated = path.join(fallback, "other.jsonl");
+  await writeFile(own, "{}\n"); await writeFile(unrelated, "{}\n");
+  vi.stubEnv("OMO_UI_QA_AGENT_DIR", agent);
+  try {
+    const resolve = createSessionFileResolver({ initializeResult: null }, root, true);
+    await expect(resolve(own)).resolves.toBe(own);
+    await expect(resolve(unrelated)).rejects.toThrow("Copy this Alpha session");
+  } finally { vi.unstubAllEnvs(); quarantineSync(root, { recursive: true, force: true }); }
+});

@@ -118,7 +118,7 @@ export function createSessionFileResolver(supervisor: { readonly initializeResul
   return async (sessionPath) => {
     const requested = requireString(sessionPath, "sessionPath");
     if (!path.isAbsolute(requested)) throw new Error("sessionPath must be absolute");
-    const codexHome = supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent");
+    const codexHome = supervisor.initializeResult?.codexHome ?? process.env[ENV.qaAgentDir] ?? path.join(homeDir, ".omo", "agent");
     const target = await realpath(requested);
     for (const root of [path.join(codexHome, "sessions"), ...(writable ? [] : alphaSessionRoots(homeDir, process.env))]) {
       const real = await realpath(root).catch(() => null);
@@ -169,7 +169,8 @@ export function registerIpc(deps: IpcDeps): () => void {
   });
   let installing: Promise<InstallResult> | null = null;
   let applyingProxy = false;
-  const proxyAgentDir = (): string => supervisor.initializeResult?.codexHome ?? process.env["OMO_CODING_AGENT_DIR"] ?? path.join(homeDir, ".omo", "agent");
+  const taskAgentDir = (): string => supervisor.initializeResult?.codexHome ?? process.env[ENV.qaAgentDir] ?? path.join(homeDir, ".omo", "agent");
+  const proxyAgentDir = (): string => supervisor.initializeResult?.codexHome ?? process.env[ENV.qaAgentDir] ?? process.env["OMO_CODING_AGENT_DIR"] ?? path.join(homeDir, ".omo", "agent");
   const settingsCwd = async (threadId: unknown): Promise<string | undefined> => {
     if (threadId === null) return undefined;
     const { thread } = await supervisor.request("thread/read", { threadId: requireString(threadId, "threadId"), includeTurns: false });
@@ -180,7 +181,7 @@ export function registerIpc(deps: IpcDeps): () => void {
   const writableSessionFile = createSessionFileResolver(supervisor, homeDir, true);
   let catalog: SessionIndex | null = null;
   const catalogIndex = (): SessionIndex => {
-    const dir = path.join(supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent"), "sessions");
+    const dir = path.join(taskAgentDir(), "sessions");
     if (catalog?.sessionsDir !== dir) catalog = new SessionIndex(dir, () => alphaSessionRoots(homeDir, process.env));
     return catalog;
   };
@@ -190,7 +191,6 @@ export function registerIpc(deps: IpcDeps): () => void {
   const sessionWatcher = createSessionWatcher((sessionPath) => send(IPC.historyChanged, sessionPath));
   /** Task stores a view follows, per parent session, with the number of views following it. */
   const taskStoreWatches = new Map<string, { cwd: string; refs: number; watcher: TaskStoreWatcher }>();
-  const taskAgentDir = (): string => supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent");
   const pushTaskStore = async (cwd: string, parentSessionId: string): Promise<void> => {
     try {
       const [work, runs] = await Promise.all([
@@ -520,7 +520,7 @@ export function registerIpc(deps: IpcDeps): () => void {
       return { adopted };
     },
     [IPC.loadTaskWork]: (_event, cwd, parentSessionId) => loadTaskWork(
-      supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent"),
+      taskAgentDir(),
       requireString(cwd, "cwd"), requireString(parentSessionId, "parentSessionId"),
     ),
     [IPC.watchTaskStore]: async (_event, cwd, parentSessionId): Promise<void> => {
@@ -549,7 +549,7 @@ export function registerIpc(deps: IpcDeps): () => void {
       const parent = requireString(parentSessionId, "parentSessionId");
       const target = requireString(taskId, "taskId");
       const { thread } = await supervisor.request("thread/read", { threadId: parent });
-      const work = await loadTaskWork(supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent"), thread.cwd, parent);
+      const work = await loadTaskWork(taskAgentDir(), thread.cwd, parent);
       const linked = work.find(item => item.task.task_id === target);
       await supervisor.request("extension_request", {
         threadId: parent,
@@ -557,11 +557,11 @@ export function registerIpc(deps: IpcDeps): () => void {
         data: { taskId: target, message: requireString(message, "message"), ...(linked !== undefined && linked.parentSessionId !== parent ? { allScope: true } : {}) },
       });
     },
-    [IPC.readAccountUsage]: () => readAccountUsage({ agentDir: supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent") }),
+    [IPC.readAccountUsage]: () => readAccountUsage({ agentDir: taskAgentDir() }),
     [IPC.loadThreadLinks]: async (_event, cwds, paths = []) => {
       if (!Array.isArray(cwds) || cwds.some(cwd => typeof cwd !== "string" || !path.isAbsolute(cwd))) throw new Error("Invalid workspace paths");
       if (!Array.isArray(paths) || paths.some(file => typeof file !== "string" || !path.isAbsolute(file))) throw new Error("Invalid session paths");
-      const agentDir = supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent");
+      const agentDir = taskAgentDir();
       const tasks = (await Promise.all([...new Set(cwds as string[])].map(cwd => readTaskLinks({ cwd, agentDir })))).flat();
       return [...tasks, ...await loadHeaderLinks(paths as string[], sessionFile)];
     },
