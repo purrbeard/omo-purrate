@@ -368,7 +368,7 @@ export interface ClientRequestMap {
   /** omo writes the session as one HTML file at `outputPath` (its `export_html`). */
   "thread/export": { params: { threadId: string; outputPath: string }; result: { path: string } };
   "thread/goal/clear": { params: { threadId: string }; result: Record<string, never> };
-  "thread/compact/start": { params: { threadId: string }; result: Record<string, never> };
+  "thread/compact/start": { params: { threadId: string; customInstructions?: string }; result: Record<string, never> };
   "thread/goal/set": { params: { threadId: string; objective?: string | null; status?: "active" | "paused" | "complete"; tokenBudget?: number | null }; result: { goal: WireGoal } };
   extension_request: { params: { threadId: string; name: string; data?: unknown }; result: unknown };
   "thread/loaded/list": { params: Record<string, never>; result: { data: string[]; nextCursor: string | null } };

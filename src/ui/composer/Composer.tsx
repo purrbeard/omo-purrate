@@ -337,7 +337,7 @@ export function Composer() {
     try {
       switch (name) {
         case "compact":
-          if (activeThreadId !== null) await window.omo.request("thread/compact/start", { threadId: activeThreadId });
+          if (activeThreadId !== null) await window.omo.request("thread/compact/start", { threadId: activeThreadId, ...(argument === "" ? {} : { customInstructions: argument }) });
           break;
         case "goal":
           if (argument === "") setAddDialog("goal");
@@ -357,10 +357,13 @@ export function Composer() {
     if (option === undefined || trigger === null) return;
     if (option.kind === "command") {
       if (trigger.start === 0 && option.command.source === undefined && ["compact", "goal", "model", "plan"].includes(option.command.name)) {
-        const remaining = draft.text.slice(trigger.end).trim();
-        setDraft({ text: option.command.name === "goal" ? "" : remaining, selected: pruneSelected(remaining, draft.selected) });
-        setCaret(remaining.length);
-        void localCommand(option.command.name, option.command.name === "goal" ? remaining : "");
+        const tail = draft.text.slice(trigger.end);
+        const remaining = option.command.name === "compact" ? tail.replace(/^[ \t]/, "") : tail.trim();
+        const consumesArgument = option.command.name === "goal" || option.command.name === "compact";
+        const nextText = consumesArgument ? "" : remaining;
+        setDraft({ text: nextText, selected: pruneSelected(nextText, draft.selected) });
+        setCaret(nextText.length);
+        void localCommand(option.command.name, consumesArgument ? remaining : "");
         return;
       }
       const accepted = acceptCommand(draft.text, trigger, option.command.name);
@@ -451,7 +454,13 @@ export function Composer() {
   const submit = async (mode: "send" | "followUp" = "send"): Promise<void> => {
     let message = text.trim();
     if (!canSend) return;
-    const local = /^\/(compact|goal|model|plan)(?:\s+(.*))?$/s.exec(message);
+    const compact = /^\s*\/compact(?:[ \t]([\s\S]*)|(\r?\n[\s\S]*))?$/.exec(text);
+    if (compact !== null) {
+      setDraft(EMPTY_DRAFT);
+      await localCommand("compact", compact[1] ?? compact[2] ?? "");
+      return;
+    }
+    const local = /^\/(goal|model|plan)(?:\s+(.*))?$/s.exec(message);
     const slashPlan = local?.[1] === "plan" && (local[2]?.trim() ?? "") !== "";
     if (slashPlan) message = local?.[2]?.trim() ?? "";
     else if (local !== null) {

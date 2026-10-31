@@ -375,7 +375,7 @@ export class NativeAppServerClient {
       case "thread/delete":
         return this.deleteThread(requiredString(input, "threadId"));
       case "thread/compact/start":
-        return this.compact(requiredString(input, "threadId"));
+        return this.compact(requiredString(input, "threadId"), typeof input["customInstructions"] === "string" ? input["customInstructions"] : undefined);
       case "thread/goal/get":
         return { goal: await this.readGoal(requiredString(input, "threadId")) };
       case "thread/stats":
@@ -803,9 +803,9 @@ export class NativeAppServerClient {
     return {};
   }
 
-  private async compact(threadId: string): Promise<Record<string, never>> {
+  private async compact(threadId: string, customInstructions: string | undefined): Promise<Record<string, never>> {
     const loaded = await this.load(threadId);
-    this.command(loaded.handle, "compact", {}, PROMPT_TIMEOUT_MS).catch((error: unknown) => {
+    this.command(loaded.handle, "compact", customInstructions === undefined ? {} : { customInstructions }, PROMPT_TIMEOUT_MS).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[omo-ui] compaction of ${threadId} failed: ${message}`);
       this.alert(loaded, `compact:${Date.now()}`, "error", "compactFailed", { error: message });

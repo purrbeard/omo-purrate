@@ -61,6 +61,43 @@ test("context usage and native slash command menu", async () => {
   }
 });
 
+for (const delivery of ["send", "menu"] as const) {
+  test(`custom compaction instructions reach native without an extra prompt via ${delivery}`, async () => {
+    const launched = await launchApp({ omo: "fake", pickDir: WT });
+    try {
+      const { page } = launched;
+      const threadId = await newSession(page);
+      const input = byTestId(page, TESTID.composerInput);
+      const instructions = "\n  Preserve decisions\nand pending file paths  \n";
+      const logPath = launched.dirs.fakeLog;
+      if (logPath === null) throw new Error("fake log path is required");
+      const received = new Promise<void>((resolve, reject) => {
+        const watcher = watch(logPath, () => {
+          if (!launched.readFakeLog().some(frame => frame["type"] === "compact")) return;
+          clearTimeout(timeout);
+          watcher.close();
+          resolve();
+        });
+        const timeout = setTimeout(() => { watcher.close(); reject(new Error("native compact was not received")); }, 30_000);
+        watcher.once("error", error => { clearTimeout(timeout); watcher.close(); reject(error); });
+      });
+      await input.fill(`${delivery === "send" ? "  " : ""}/compact ${instructions}`);
+      if (delivery === "menu") {
+        await input.press("ControlOrMeta+Home");
+        for (let index = 0; index < 8; index++) await input.press("ArrowRight");
+        await byTestId(page, TESTID.skillMenu).locator('[data-command="compact"]').click();
+      }
+      else await byTestId(page, TESTID.composerSend).click();
+      await received;
+      expect(launched.readFakeLog().filter(frame => frame["type"] === "compact"))
+        .toEqual([expect.objectContaining({ threadId, customInstructions: instructions })]);
+      await expect(byTestId(page, TESTID.compaction)).toHaveAttribute("data-status", "completed");
+      await expect(input).toHaveValue("");
+      expect(prompts(launched.readFakeLog())).toEqual([]);
+    } finally { await launched.close(); }
+  });
+}
+
 test("Alt+Enter queues a follow-up for after the turn; queued messages can be edited and withdrawn", async () => {
   const pickDir = tempDir("queue-workspace");
   const launched = await launchApp({ omo: "fake", pickDir });
