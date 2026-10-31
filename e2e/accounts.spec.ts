@@ -46,3 +46,38 @@ test("Accounts lists omo's accounts with their quota state, and pins and removes
     rmSync(fakeHome, { recursive: true, force: true });
   }
 });
+
+test("Accounts keeps the newest refresh when an older focus request finishes last", async () => {
+  const launched = await launchApp({ omo: "fake" });
+  try {
+    const { app, page } = launched;
+    await app.evaluate(({ ipcMain, BrowserWindow }) => {
+      const pending: Array<() => void> = [];
+      Object.assign(globalThis, { releaseAccountRead: (index: number) => pending[index]?.() });
+      ipcMain.removeHandler("omo:request");
+      ipcMain.handle("omo:request", async (_event, method: string, params: { provider?: string }) => {
+        if (method !== "account/providerAccounts/read") throw new Error(`unexpected request ${method}`);
+        if (params.provider !== "anthropic-subscription") return { ok: true, result: { provider: params.provider, accounts: [] } };
+        const index = pending.length;
+        const gate = new Promise<void>(resolve => pending.push(resolve));
+        await BrowserWindow.getAllWindows()[0]?.webContents.executeJavaScript(`document.documentElement.dataset.qaAccountRequests = "${pending.length}"`);
+        await gate;
+        return { ok: true, result: { provider: params.provider, accounts: [{ name: index === 0 ? "stale-account" : "fresh-account", source: "fixture", blocked: false, pinned: false }] } };
+      });
+    });
+    await byTestId(page, TESTID.openSettings).click();
+    await page.locator('[data-section="accounts"]').click();
+    await expect(page.locator("html")).toHaveAttribute("data-qa-account-requests", "1");
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(page.locator("html")).toHaveAttribute("data-qa-account-requests", "2");
+    await app.evaluate(() => Reflect.get(globalThis, "releaseAccountRead")(1));
+    const section = byTestId(page, TESTID.settingsAccounts);
+    await expect(section).toHaveAttribute("aria-busy", "true");
+    await expect(section.locator('[data-account="fresh-account"]')).toBeVisible();
+    await expect(byTestId(page, TESTID.accountsRefresh)).toBeEnabled();
+    await app.evaluate(() => Reflect.get(globalThis, "releaseAccountRead")(0));
+    await expect(section).toHaveAttribute("aria-busy", "false");
+    await expect(section.locator('[data-account="stale-account"]')).toHaveCount(0);
+    await expect(section.locator('[data-account="fresh-account"]')).toBeVisible();
+  } finally { await launched.close(); }
+});

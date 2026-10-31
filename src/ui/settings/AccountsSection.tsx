@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pin, PinOff, Plus, RefreshCw, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import { Badge, Button } from "../kit";
@@ -136,23 +136,38 @@ export function AccountsSection() {
   const actions = useActions();
   const [snapshot, setSnapshot] = useState<AccountsSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
+  const [reading, setReading] = useState(false);
   const [loginOpened, setLoginOpened] = useState<string | null>(null);
+  const revision = useRef(0);
+  const pendingReads = useRef(new Set<number>());
   const load = useCallback(async () => {
+    const request = ++revision.current;
+    pendingReads.current.add(request);
     setLoading(true);
-    setSnapshot(await actions.loadAccounts());
-    setLoading(false);
+    setReading(true);
+    const next = await actions.loadAccounts();
+    if (!pendingReads.current.delete(request)) return;
+    if (request === revision.current) {
+      setSnapshot(next);
+      setLoading(false);
+    }
+    setReading(pendingReads.current.size > 0);
   }, [actions]);
   useEffect(() => {
     void load();
     // Sign-in finishes in Terminal; coming back to the app shows the new account.
     const onFocus = (): void => void load();
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    return () => {
+      revision.current++;
+      pendingReads.current.clear();
+      window.removeEventListener("focus", onFocus);
+    };
   }, [load]);
   const providers = (snapshot?.providers ?? []).filter((entry) =>
     SUBSCRIPTIONS.has(entry.provider) || entry.accounts.length > 0 || entry.error !== null);
   return (
-    <section className={ui.section} data-testid={TESTID.settingsAccounts} aria-busy={loading}>
+    <section className={ui.section} data-testid={TESTID.settingsAccounts} aria-busy={reading}>
       <SectionHeading title={t("shell.settings.nav.accounts")} intro={t("shell.settings.accounts.intro")} />
       <div className="flex justify-end">
         <Button variant="outline" size="sm" icon={<RefreshCw aria-hidden="true" />} disabled={loading} data-testid={TESTID.accountsRefresh} onClick={() => void load()}>
