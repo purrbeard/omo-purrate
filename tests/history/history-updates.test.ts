@@ -50,10 +50,12 @@ describe("history updates", () => {
   });
 
   it("cuts the long strings of the turns before fullFrom, counted from the end when negative", () => {
-    const update = new HistoryUpdates().update("/s.jsonl", history(turn("t1"), turn("t2"), turn("t3")), null, -1);
+    const prompt = "full user prompt ".repeat(180);
+    const update = new HistoryUpdates().update("/s.jsonl", history(turn("t1", prompt), turn("t2"), turn("t3")), null, -1);
     expect(update.fullFrom).toBe(2);
     expect(update.turns.map((entry) => entry.items.map((item) => item.type))).toEqual(Array(3).fill(["userMessage", "commandExecution", "agentMessage"]));
     expect(update.turns.map((entry) => outputLength(entry))).toEqual([2_001, 2_001, 5_000]);
+    expect(update.turns[0]?.items[0]).toMatchObject({ type: "userMessage", content: [{ type: "text", text: prompt }] });
   });
 
   it("replaces outlines with full turns when the reader asks for an earlier fullFrom", () => {

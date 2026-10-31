@@ -21,9 +21,9 @@ function trimmed(value: unknown): unknown {
   return Object.fromEntries(Object.entries(value).map(([key, field]) => [key, WHOLE_FIELDS.has(key) ? field : trimmed(field)]));
 }
 
-/** A turn with every item but its long strings cut: it still lists, previews and counts like the full turn. */
+/** Keep prompts whole for editing and recall; only generated output is outlined. */
 function outline(turn: HistoryTurn): HistoryTurn {
-  return { ...turn, items: turn.items.map((item) => trimmed(item) as HistoryTurn["items"][number]) };
+  return { ...turn, items: turn.items.map((item) => item.type === "userMessage" ? item : trimmed(item) as HistoryTurn["items"][number]) };
 }
 
 /**

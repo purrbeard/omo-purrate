@@ -1,9 +1,88 @@
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { byTestId, launchApp, newSession, send, setTheme, shot, WT, goalCommands, prompts } from "./helpers";
+import { byTestId, launchApp, newSession, send, setTheme, shot, WT, goalCommands, prompts, threadRow } from "./helpers";
 import { TESTID } from "../src/ui/testids";
 
 const planSkill = { name: "ulw-plan", description: "Write a plan before implementation.", scope: "system", enabled: true, path: "/fake/ulw-plan/SKILL.md" };
+
+test("a failed delayed send preserves both submitted text and a newer draft", async () => {
+  const launched = await launchApp({ omo: "fake", pickDir: WT });
+  try {
+    const { page, app } = launched;
+    await newSession(page);
+    await app.evaluate(({ ipcMain, BrowserWindow }) => {
+      const existing = Reflect.get(ipcMain, "_invokeHandlers").get("omo:request");
+      ipcMain.removeHandler("omo:request");
+      ipcMain.handle("omo:request", async (event, method: string, params: unknown) => {
+        if (method !== "turn/start") return existing(event, method, params);
+        let release = (): void => {};
+        const pending = new Promise<void>(resolve => { release = resolve; });
+        Object.assign(globalThis, { rejectDraftSend: release });
+        await BrowserWindow.getAllWindows()[0]?.webContents.executeJavaScript('document.documentElement.dataset.qaSendHeld = "true"');
+        await pending;
+        return { ok: false, error: { message: "QA send refused" } };
+      });
+    });
+    const input = byTestId(page, TESTID.composerInput);
+    await input.fill("original submitted draft");
+    await input.press("Enter");
+    await expect(page.locator("html")).toHaveAttribute("data-qa-send-held", "true");
+    await input.fill("new draft while sending");
+    await app.evaluate(() => Reflect.get(globalThis, "rejectDraftSend")());
+    await expect(byTestId(page, TESTID.composerSend)).toBeEnabled();
+    await expect(input).toHaveValue("original submitted draft\n\nnew draft while sending");
+  } finally { await launched.close(); }
+});
+
+test("a delayed goal send stays in its original session and preserves the selected session draft", async () => {
+  const launched = await launchApp({ omo: "fake", pickDir: WT });
+  try {
+    const { page, app } = launched;
+    const first = await newSession(page);
+    const second = await newSession(page);
+    const input = byTestId(page, TESTID.composerInput);
+    await input.fill("second session draft");
+    await threadRow(page, first).click();
+    await byTestId(page, TESTID.modelPicker).click();
+    await byTestId(page, TESTID.specificModelTab).click();
+    await byTestId(page, TESTID.modelOption).filter({ hasText: "GPT-6 Sol Fast" }).click();
+    await page.getByTestId("composer-add").click();
+    await page.getByRole("menuitem", { name: /^Goal/ }).click();
+    await page.getByTestId("context-dialog-input").fill("goal on first session");
+    await page.getByRole("button", { name: "Add goal", exact: true }).click();
+    await app.evaluate(({ ipcMain, BrowserWindow }) => {
+      const existing = Reflect.get(ipcMain, "_invokeHandlers").get("omo:request");
+      ipcMain.removeHandler("omo:request");
+      ipcMain.handle("omo:request", async (event, method: string, params: { status?: string }) => {
+        if (method === "thread/goal/set" && params.status === "paused") {
+          let release = (): void => {};
+          const ready = new Promise<void>(resolve => { release = resolve; });
+          Object.assign(globalThis, { releaseGoalSend: release });
+          await BrowserWindow.getAllWindows()[0]?.webContents.executeJavaScript('document.documentElement.dataset.qaGoalHeld = "true"');
+          await ready;
+        }
+        return existing(event, method, params);
+      });
+    });
+    await input.fill("message for first session");
+    await input.press("Enter");
+    await expect(page.locator("html")).toHaveAttribute("data-qa-goal-held", "true");
+    await threadRow(page, second).click();
+    await expect(input).toHaveValue("second session draft");
+    await byTestId(page, TESTID.modelPicker).click();
+    await byTestId(page, TESTID.specificModelTab).click();
+    await byTestId(page, TESTID.modelOption).filter({ hasText: "GPT-6 Astra" }).click();
+    await app.evaluate(() => Reflect.get(globalThis, "releaseGoalSend")());
+    await expect(byTestId(page, TESTID.composerSend)).toBeEnabled();
+    await expect(input).toHaveValue("second session draft");
+    await expect(byTestId(page, TESTID.turn)).toHaveCount(0);
+    await threadRow(page, first).click();
+    await expect(byTestId(page, TESTID.assistantMessage)).toContainText("message for first session");
+    await expect(input).toHaveValue("");
+    const selections = launched.readFakeLog().filter(entry => entry["type"] === "set_model");
+    expect(selections.at(-1)).toMatchObject({ provider: "chatgpt-subscription", modelId: "gpt-6-sol-fast" });
+  } finally { await launched.close(); }
+});
 
 test("terminal context and goal are attached only on send, then activated in order", async () => {
   const launched = await launchApp({ omo: "fake", pickDir: WT });

@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { FolderOpen, Paperclip, X } from "lucide-react";
 import { focusRing, Tooltip } from "../kit";
 import { ArrowUpGlyph } from "../glyphs";
-import { parseBtwCommand, selectActiveCwd, selectIsTurnActive, selectSkillCatalog } from "../../state";
+import { parseBtwCommand, selectActiveCwd, selectIsTurnActive, selectSkillCatalog, useAppStore } from "../../state";
 import type { SkillCatalog } from "../../state";
 import { useT } from "../../i18n";
 import { useActions, useAppSelector } from "../app-context";
@@ -44,6 +44,7 @@ import { detectMention, removeMention } from "./mention";
 import { QueueList } from "./QueueList";
 import { useQueuedMessages } from "./queue";
 import type { QueuedMessage } from "./queue";
+import { promptHistory, recallPrompt, type HistoryCursor } from "./prompt-history";
 
 /** Ghost 28px chip in the composer row (attach, workspace). */
 const chipClass = clsx(
@@ -105,8 +106,10 @@ function StopIcon() {
 export function Composer() {
   const t = useT();
   const actions = useActions();
+  const store = useAppStore();
   const askSide = useAskSide();
   const activeThreadId = useAppSelector((state) => state.activeThreadId);
+  const conversation = useAppSelector(state => activeThreadId === null ? null : state.conversations[activeThreadId] ?? null);
   const turnActive = useAppSelector(selectIsTurnActive);
   const connected = useAppSelector((state) => state.bridge?.state === "connected");
   const held = useAppSelector((state) => selectHeldHolders(state, state.activeThreadId));
@@ -194,6 +197,8 @@ export function Composer() {
   const composingRef = useRef(false);
   const pendingCaret = useRef<number | null>(null);
   const drafts = useRef(new Map<string, SkillDraft>());
+  const historyCursors = useRef(new Map<string, HistoryCursor>());
+  const clearHistoryCursor = (): void => { if (activeThreadId !== null) historyCursors.current.delete(activeThreadId); };
   const draftThread = useRef(activeThreadId);
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -236,6 +241,7 @@ export function Composer() {
   useEffect(() => {
     const insert = (event: Event): void => {
       if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
+      if (draftThread.current !== null) historyCursors.current.delete(draftThread.current);
       const next = appendToDraft(draftRef.current.text, event.detail);
       setDraft((current) => ({ text: next, selected: pruneSelected(next, current.selected) }));
       pendingCaret.current = next.length;
@@ -243,6 +249,7 @@ export function Composer() {
     };
     const replace = (event: Event): void => {
       if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
+      if (draftThread.current !== null) historyCursors.current.delete(draftThread.current);
       const next: string = event.detail;
       setDraft((current) => ({ text: next, selected: pruneSelected(next, current.selected) }));
       pendingCaret.current = next.length;
@@ -310,6 +317,7 @@ export function Composer() {
   };
 
   const edit = (nextText: string, selection: number): void => {
+    clearHistoryCursor();
     pendingCaret.current = null;
     setMentionDismissed((dismissed) => (dismissed !== null && detectMention(nextText, selection)?.start === dismissed ? dismissed : null));
     if (detectSkillTrigger(nextText, selection) === null) setHighlight({ key: "", index: 0 });
@@ -356,6 +364,7 @@ export function Composer() {
   const pickOption = (index: number): void => {
     const option = options[index];
     if (option === undefined || trigger === null) return;
+    clearHistoryCursor();
     if (option.kind === "command") {
       if (trigger.start === 0 && option.command.source === undefined && ["compact", "goal", "model", "plan"].includes(option.command.name)) {
         const tail = draft.text.slice(trigger.end);
@@ -388,6 +397,7 @@ export function Composer() {
   const pickMention = (index: number): void => {
     const file = mentionFiles[index];
     if (file === undefined || mention === null) return;
+    clearHistoryCursor();
     const next = removeMention(draft.text, mention);
     pendingCaret.current = next.caret;
     setDraft({ text: next.text, selected: pruneSelected(next.text, draft.selected) });
@@ -455,6 +465,7 @@ export function Composer() {
   const submit = async (mode: "send" | "followUp" = "send"): Promise<void> => {
     let message = text.trim();
     if (!canSend) return;
+    clearHistoryCursor();
     const compact = /^\s*\/compact(?:[ \t]([\s\S]*)|(\r?\n[\s\S]*))?$/.exec(text);
     if (compact !== null) {
       setDraft(EMPTY_DRAFT);
@@ -478,15 +489,42 @@ export function Composer() {
     const contextual = contextMessage(message || goalDraft, context);
     const serialized = serializeSkillDraft({ text: contextual, selected });
     const transport = (planMode || slashPlan) && !selected.includes("ulw-plan") ? `/skill:ulw-plan ${serialized}` : serialized;
+    const selection = store.getState().composer;
     setBusy(true);
     let targetThreadId = activeThreadId;
     let accepted = false;
+    // Clear the submitted draft before any await; another selected session owns its own draft.
+    setDraft(EMPTY_DRAFT);
+    setImages([]);
+    setContext([]);
+    setGoalDraft("");
+    setPlanMode(false);
+    setDismissedStart(null);
+    contextDrafts.current.delete(NO_THREAD_DRAFT);
+    imageDrafts.current.delete(NO_THREAD_DRAFT);
+    const restore = (): void => {
+      const key = targetThreadId ?? NO_THREAD_DRAFT;
+      if (draftThread.current === targetThreadId) {
+        setPlanMode(planMode);
+        setContext(current => addContext(context, current));
+        setGoalDraft(current => current || goalDraft);
+        setImages(current => capImages(images, current));
+        setDraft(current => ({ text: current.text === "" ? text : `${text}\n\n${current.text}`, selected: [...new Set([...selected, ...current.selected])] }));
+        setCaret(text.length);
+      } else {
+        const current = drafts.current.get(key);
+        drafts.current.set(key, { text: !current?.text ? text : `${text}\n\n${current.text}`, selected: [...new Set([...selected, ...(current?.selected ?? [])])] });
+        const saved = contextDrafts.current.get(key);
+        contextDrafts.current.set(key, { context: addContext(context, saved?.context ?? []), plan: saved?.plan || planMode, goal: saved?.goal || goalDraft });
+        imageDrafts.current.set(key, capImages(images, imageDrafts.current.get(key) ?? []));
+      }
+    };
     try {
       if (activeThreadId === null) {
         const cwd = workspace ?? (await pickWorkspace());
-        if (cwd === null) return;
+        if (cwd === null) { restore(); return; }
         const threadId = await actions.newThread(cwd);
-        if (threadId === null) return;
+        if (threadId === null) { restore(); return; }
         targetThreadId = threadId;
         drafts.current.delete(NO_THREAD_DRAFT);
       }
@@ -494,40 +532,21 @@ export function Composer() {
         // Paused persists the goal without launching an idle thread ahead of its contextual message.
         await window.omo.request("thread/goal/set", { threadId: targetThreadId, objective: goalDraft, status: "paused" });
       }
-      setDraft(EMPTY_DRAFT);
-      setImages([]);
-      setContext([]);
-      setGoalDraft("");
-      contextDrafts.current.delete(NO_THREAD_DRAFT);
-      imageDrafts.current.delete(NO_THREAD_DRAFT);
-      setDismissedStart(null);
-      const sent = await (mode === "followUp" && turnActive ? actions.sendFollowUp(transport, images) : actions.sendMessage(transport, images));
+      const sent = await (mode === "followUp" && turnActive ? actions.sendFollowUp(transport, images, targetThreadId ?? undefined, selection) : actions.sendMessage(transport, images, targetThreadId ?? undefined, selection));
       accepted = sent;
       if (!sent) {
-        setPlanMode(planMode);
-        setContext(current => addContext(context, current));
-        setGoalDraft(current => current || goalDraft);
-        setImages((current) => capImages(images, current));
-        setDraft((current) => (current.text === "" ? { text: message, selected: pruneSelected(message, selected) } : current));
-        setCaret(message.length);
+        restore();
       } else {
-        setPlanMode(false);
         if (goalDraft !== "" && targetThreadId !== null) {
           await window.omo.request("thread/goal/set", { threadId: targetThreadId, status: "active" });
         }
       }
     } catch (error) {
       setImageNotice(userErrorText(error, t("conversation.error.requestFailed")).text);
-      if (!accepted) {
-        setPlanMode(planMode);
-        setContext(current => addContext(context, current));
-        setGoalDraft(current => current || goalDraft);
-        setImages(current => capImages(images, current));
-        setDraft(current => current.text === "" ? { text: message, selected } : current);
-      }
+      if (!accepted) restore();
     } finally {
       setBusy(false);
-      inputRef.current?.focus({ preventScroll: true });
+      if (draftThread.current === targetThreadId) inputRef.current?.focus({ preventScroll: true });
     }
   };
 
@@ -569,6 +588,24 @@ export function Composer() {
         event.preventDefault();
         pickMention(mentionIndex);
         return;
+      }
+    }
+    if ((event.key === "ArrowUp" || event.key === "ArrowDown") && activeThreadId !== null &&
+        !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey &&
+        event.currentTarget.selectionStart === event.currentTarget.selectionEnd) {
+      const cursor = historyCursors.current.get(activeThreadId);
+      if (cursor !== undefined || (!text.includes("\n") && event.currentTarget.selectionStart === 0 && event.key === "ArrowUp")) {
+        const entries = promptHistory(conversation?.turns ?? []);
+        const result = recallPrompt(cursor ?? { entries, index: entries.length, original: draft }, event.key === "ArrowUp" ? "up" : "down");
+        if (result !== null) {
+          event.preventDefault();
+          if (result.cursor === null) historyCursors.current.delete(activeThreadId);
+          else historyCursors.current.set(activeThreadId, result.cursor);
+          pendingCaret.current = result.draft.text.length;
+          setDraft(result.draft);
+          setCaret(result.draft.text.length);
+          return;
+        }
       }
     }
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -738,6 +775,7 @@ export function Composer() {
                 const targetCwd = activeCwd ?? workspace;
                 if (targetCwd !== null) void actions.ensureSkills(targetCwd);
               }} onAction={addAction} onSkill={skill => {
+                clearHistoryCursor();
                 const base = draft.text === "" ? "/" : `${draft.text} /`;
                 const result = acceptSkill({ text: base, selected: draft.selected }, { start: base.length - 1, end: base.length, query: "" }, skill.name);
                 if (!result.ok) { setImageNotice(t("composer.skills.limit", { max: 5 })); return; }
