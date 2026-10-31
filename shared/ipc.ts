@@ -177,6 +177,8 @@ export interface Preferences {
   timeFormat: TimeFormatPreference;
   /** The composer's send key. */
   sendKey: SendKeyPreference;
+  /** App-local palette bindings; native TUI keybindings are a separate resource. */
+  keyboardShortcuts?: Record<string, string>;
   /** Whether inactive sidebar threads settle automatically after `autoSettleDays`. */
   autoSettle: boolean;
   /** Whole days of inactivity before an idle thread auto-settles, clamped to 1..365. */
@@ -247,6 +249,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   inAppNotifications: true,
   timeFormat: "system",
   sendKey: "enter",
+  keyboardShortcuts: {},
   autoSettle: true,
   autoSettleDays: 3,
   settledThreads: [],

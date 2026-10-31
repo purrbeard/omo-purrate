@@ -1,13 +1,13 @@
 import { existsSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, newSession, tempDir, type LaunchedApp } from "./helpers.ts";
+import { byTestId, launchApp, newSession, tempDir, WT, type LaunchedApp } from "./helpers.ts";
 
 let launched: LaunchedApp;
 const modifier = process.platform === "darwin" ? "Meta" : "Control";
 
 test.beforeEach(async () => {
-  launched = await launchApp({ omo: "fake", pickDir: tempDir("shortcuts-workspace") });
+  launched = await launchApp({ omo: "fake", pickDir: WT });
 });
 
 test.afterEach(async () => {
@@ -37,6 +37,51 @@ test("Help > Keyboard Shortcuts opens the keybindings settings page", async () =
     item.click();
   });
   await expect(byTestId(page, TESTID.settingsDialog)).toHaveAttribute("data-active-section", "keybindings");
+});
+
+test("palette shortcut rejects collisions, survives restart and resets without replacing native shortcuts", async () => {
+  await launched.close();
+  const userData = tempDir("shortcut-profile");
+  launched = await launchApp({ omo: "fake", userData });
+  let page = launched.page;
+  const open = async (): Promise<void> => {
+    await byTestId(page, TESTID.openSettings).click();
+    await page.locator('[data-section="keybindings"]').click();
+  };
+  await open();
+  const field = () => page.locator('[data-shortcut-input="command-palette"]');
+  await field().fill("Ctrl+N");
+  await expect(page.getByTestId("shortcuts-error")).toBeVisible();
+  await expect(page.getByTestId("shortcuts-save")).toBeDisabled();
+  await field().fill("Ctrl+Shift+J");
+  await page.getByTestId("shortcuts-save").click();
+  await expect(page.getByTestId("settings-keybindings")).toHaveAttribute("data-dirty", "false");
+  const accelerator = await launched.app.evaluate(({ Menu }) => (Menu.getApplicationMenu()?.items ?? [])
+    .flatMap(menu => menu.submenu?.items ?? []).find(item => item.label === "Command Palette")?.accelerator);
+  expect(accelerator).toBe("CmdOrCtrl+Shift+J");
+  await page.keyboard.press("Escape");
+  await page.evaluate(isMac => window.dispatchEvent(new KeyboardEvent("keydown", {
+    key: "J", ctrlKey: !isMac, metaKey: isMac, shiftKey: true, isComposing: true, bubbles: true,
+  })), process.platform === "darwin");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.keyboard.press(`${modifier}+K`);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.keyboard.press(`${modifier}+Shift+J`);
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await launched.close();
+  launched = await launchApp({ omo: "fake", userData });
+  page = launched.page;
+  await page.keyboard.press(`${modifier}+Shift+J`);
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await open();
+  await page.getByTestId("shortcuts-reset").click();
+  await expect(page.getByTestId("settings-keybindings")).toHaveAttribute("data-dirty", "false");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press(`${modifier}+Shift+J`);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.keyboard.press(`${modifier}+K`);
+  await expect(page.getByRole("dialog")).toHaveCount(1);
 });
 
 test("Settings > About opens the logs folder that holds main.log", async () => {

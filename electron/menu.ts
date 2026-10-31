@@ -1,6 +1,7 @@
 import { app, Menu, shell } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
 import type { MenuCommand } from "../shared/ipc";
+import { APP_SHORTCUTS, shortcutKeys, type ShortcutOverrides } from "../src/ui/shortcuts";
 
 const GITHUB_URL = "https://github.com/code-yeongyu/oh-my-openagent";
 
@@ -8,6 +9,7 @@ const GITHUB_URL = "https://github.com/code-yeongyu/oh-my-openagent";
 export interface MenuOptions {
   /** Opens the app's log folder; the Help item appears only when this is provided. */
   openLogs?: () => void;
+  keyboardShortcuts?: ShortcutOverrides;
 }
 
 /**
@@ -20,6 +22,8 @@ export function buildMenuTemplate(
   platform: NodeJS.Platform,
   isPackaged: boolean,
 ): MenuItemConstructorOptions[] {
+  const palette = APP_SHORTCUTS.find(shortcut => shortcut.id === "command-palette");
+  const paletteAccelerator = palette === undefined ? undefined : shortcutKeys(palette, "other", options.keyboardShortcuts).join("+").replace(/^Ctrl\+/, "CmdOrCtrl+");
   const developerItems: MenuItemConstructorOptions[] = isPackaged
     ? []
     : [{ role: "reload" }, { role: "toggleDevTools" }, { type: "separator" }];
@@ -79,7 +83,7 @@ export function buildMenuTemplate(
       label: "View",
       submenu: [
         // The renderer owns Ctrl+K (src/ui/shortcuts.ts) so it also works when the menu accelerator never reaches the page.
-        { label: "Command Palette", accelerator: "CmdOrCtrl+K", registerAccelerator: false, click: () => sendCommand("command-palette") },
+        { label: "Command Palette", accelerator: paletteAccelerator, registerAccelerator: false, click: () => sendCommand("command-palette") },
         { label: "Toggle Sidebar", accelerator: "CmdOrCtrl+\\", click: () => sendCommand("toggle-sidebar") },
         { type: "separator" },
         { label: "Agents", accelerator: "CmdOrCtrl+Shift+A", click: () => sendCommand("toggle-agents") },

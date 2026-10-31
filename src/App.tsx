@@ -141,7 +141,7 @@ function Shell() {
   const paletteCommands: MenuCommand[] = ["new-session", "open-project", "settings", "toggle-sidebar", "toggle-agents", "toggle-workflow", "toggle-files", "toggle-terminal", "toggle-side-chat", "keyboard-shortcuts"];
   const paletteEntries = buildPaletteEntries([...paletteCommands.map(id => {
     const shortcut = APP_SHORTCUTS.find(shortcut => shortcut.id === id)!;
-    return { id, title: t(shortcut.label), shortcut: [...shortcutKeys(shortcut, window.omo.platform)], run: () => runCommand(id) };
+    return { id, title: t(shortcut.label), shortcut: [...shortcutKeys(shortcut, window.omo.platform, preferences?.keyboardShortcuts)], run: () => runCommand(id) };
   }), { id: "open-archive", title: t("screens.palette.archive"), run: () => { if (!composing.current) uiState.openArchive(); } }], sessions.map(thread => ({ id: thread.id, title: threadTitle(thread, t("shell.untitledThread")), workspace: thread.cwd })), id => { void actions.openThread(id); });
 
   useEffect(() => {
@@ -159,7 +159,7 @@ function Shell() {
     const end = (): void => { composing.current = false; };
     const onKeyDown = (event: globalThis.KeyboardEvent): void => {
       if (composition.guards(event) || document.querySelector(modalSelector) !== null) return;
-      const shortcut = rendererShortcut(event, window.omo.platform);
+      const shortcut = rendererShortcut(event, window.omo.platform, uiState.get().preferences?.keyboardShortcuts);
       if (shortcut === undefined) return;
       event.preventDefault();
       if (shortcut.id === "command-palette" || shortcut.id === "command-palette-alternate") openPalette();

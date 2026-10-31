@@ -186,9 +186,10 @@ function run(): void {
 
   void app.whenReady().then(() => {
     if (!app.isPackaged) app.dock?.setIcon(path.join(__dirname, "../build/icon.png"));
-    installApplicationMenu(sendMenuCommand, { openLogs: () => void shell.openPath(logger.dir) });
+    const refreshMenu = (): void => installApplicationMenu(sendMenuCommand, { openLogs: () => void shell.openPath(logger.dir), keyboardShortcuts: prefs.get().keyboardShortcuts ?? {} });
+    refreshMenu();
     registerMediaProtocol();
-    registerIpc({ supervisor, iphone, android, prefs, getWindow: () => mainWindow, homeDir });
+    registerIpc({ supervisor, iphone, android, prefs, getWindow: () => mainWindow, homeDir, refreshMenu });
     registerWorkbenchIpc(workbench);
     registerBrowserIpc(browser);
     registerServersIpc(servers);

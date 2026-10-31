@@ -59,6 +59,7 @@ export interface IpcDeps {
   prefs: PreferencesStore;
   getWindow: () => BrowserWindow | null;
   homeDir: string;
+  refreshMenu?: () => void;
   /** Defaults to the real mdfind/open spawner and shell.openPath; tests inject fakes. */
   openWorkspace?: OpenWorkspace;
   /** Defaults to git through execFile with a 3 s timeout; tests inject fakes. */
@@ -534,6 +535,7 @@ export function registerIpc(deps: IpcDeps): () => void {
     [IPC.getPreferences]: () => prefs.get(),
     [IPC.setPreferences]: (_event, patch) => {
       const next = prefs.set(patch);
+      deps.refreshMenu?.();
       send(IPC.preferencesChanged, next);
       return next;
     },

@@ -3,6 +3,7 @@ import path from "node:path";
 import { DEFAULT_PREFERENCES } from "../shared/ipc";
 import { pruneExpired, sanitizeSnoozed } from "../shared/snooze";
 import { sanitizeProjectSettings } from "../shared/project-settings";
+import { parseShortcutOverrides, shortcutOverridesError } from "../src/ui/shortcuts";
 import { THREAD_STATE_KEYS, ThreadDb } from "./store/thread-db";
 import type { ImportRecord, ThreadState } from "./store/thread-db";
 import type { DiffColorPreference, FollowUpPreference, LocalePreference, ModelProfile, PalettePreference, Preferences, SendKeyPreference, ThemePreference, ThreadCreatorEvidence, ThreadNotificationPreference, ThreadOrigin, TimeFormatPreference } from "../shared/ipc";
@@ -140,6 +141,8 @@ function merge(current: Preferences, patch: unknown): Preferences {
     inAppNotifications: typeof patch["inAppNotifications"] === "boolean" ? patch["inAppNotifications"] : current.inAppNotifications,
     timeFormat: has("timeFormat") ? pick(TIME_FORMATS, patch["timeFormat"], current.timeFormat) : current.timeFormat,
     sendKey: has("sendKey") ? pick(SEND_KEYS, patch["sendKey"], current.sendKey ?? "enter") : current.sendKey ?? "enter",
+    keyboardShortcuts: has("keyboardShortcuts") && shortcutOverridesError(patch["keyboardShortcuts"]) === null
+      ? parseShortcutOverrides(patch["keyboardShortcuts"]) ?? {} : current.keyboardShortcuts ?? {},
     autoSettle: typeof patch["autoSettle"] === "boolean" ? patch["autoSettle"] : current.autoSettle,
     autoSettleDays: has("autoSettleDays") ? settleDays(patch["autoSettleDays"], current.autoSettleDays) : current.autoSettleDays,
     settledThreads: has("settledThreads") ? threadIds(patch["settledThreads"], current.settledThreads) : current.settledThreads,
@@ -248,6 +251,9 @@ export class PreferencesStore {
   /** Validates patch (which crosses the IPC boundary untyped), persists, and returns the stored preferences. */
   set(patch: unknown): Preferences {
     const current = this.get();
+    if (isRecord(patch) && "keyboardShortcuts" in patch && shortcutOverridesError(patch["keyboardShortcuts"]) !== null) {
+      throw new TypeError("Invalid or conflicting keyboard shortcut");
+    }
     let next = merge(current, patch);
     // The first completion of the first-run import stamps when it happened, once; loading a file that already completed
     // its import goes through merge too and must not, or an older install would start adopting from its launch.
