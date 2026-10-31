@@ -12,7 +12,7 @@ export const RIGHT_TABS: readonly RightTab[] = ["work", "btw", "terminal", "file
 /** Tabs every stored layout has; a layout saved before later tabs existed gets them appended. */
 const BASE_TABS: readonly RightTab[] = ["work", "btw", "terminal", "files"];
 /** Views of the single Work panel: agent conversations, the run graph, the work list and the activity log. */
-export type WorkView = "agents" | "graph" | "list" | "activity";
+export type WorkView = "agents" | "graph" | "list" | "activity" | "teams";
 export type DockSide = "left" | "right";
 export type FilesView = "changes" | "all";
 const DOCK_LAYOUT_KEY = "omo-ui.dock-layout.v1";

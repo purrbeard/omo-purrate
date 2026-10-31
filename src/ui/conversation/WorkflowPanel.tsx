@@ -6,6 +6,7 @@ import type { WorkView } from "../ui-state";
 import { ActivityPanel } from "./ActivityPanel";
 import { AgentWorkspace } from "./AgentWorkspace";
 import { WorkflowActivity } from "./WorkflowActivity";
+import { TeamMonitorPanel } from "./TeamMonitorPanel";
 import clsx from "clsx";
 import { focusRing } from "../kit";
 
@@ -16,6 +17,7 @@ const VIEWS: readonly { id: WorkView; label: MessageKey; testId: string }[] = [
   { id: "graph", label: "activity.graph", testId: "workflow-graph-view" },
   { id: "list", label: "activity.list", testId: "workflow-list" },
   { id: "activity", label: "activity.log.title", testId: "workflow-log-view" },
+  { id: "teams", label: "activity.teams", testId: "workflow-teams-view" },
 ];
 
 /** The Work panel: agent conversations, the run graph, the work list and the activity log of the active thread. */
@@ -25,8 +27,8 @@ export function WorkflowPanel({ placement }: { placement: "docked" | "overlay" }
   const { workflowPanelSize, workView } = useUiState();
   return <section id="workflow-panel" className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-solid border-border bg-background text-xs text-foreground data-[placement=overlay]:shadow-lg" data-testid="workflow-panel" data-placement={placement} data-size={workflowPanelSize} data-view={workView}
     aria-label={t("activity.work")}>
-    <nav className="flex flex-none gap-1 border-0 border-b border-solid border-border px-3 py-2" aria-label={t("activity.view")}>
-      <div className="flex gap-1" role="tablist" aria-label={t("activity.view")}>
+    <nav className="flex flex-none flex-wrap gap-1 border-0 border-b border-solid border-border px-3 py-2" aria-label={t("activity.view")}>
+      <div className="flex flex-wrap gap-1" role="tablist" aria-label={t("activity.view")}>
         {VIEWS.map(view => <button key={view.id} id={`workflow-tab-${view.id}`} type="button" role="tab" className={viewButton} aria-selected={workView === view.id}
           aria-controls="workflow-content" data-testid={view.testId} onClick={() => uiState.setWorkView(view.id)}>{t(view.label)}</button>)}
       </div>
@@ -40,6 +42,7 @@ export function WorkflowPanel({ placement }: { placement: "docked" | "overlay" }
       {workView === "agents" ? <AgentWorkspace placement={placement} />
         : threadId === null ? <p className="m-0 p-4 text-muted-foreground">{t("activity.selectThread")}</p>
         : workView === "activity" ? <WorkflowActivity key={`log:${threadId}`} threadId={threadId} />
+        : workView === "teams" ? <TeamMonitorPanel key={threadId} threadId={threadId} />
         : <ActivityPanel key={threadId} threadId={threadId} id="workflow-activity" view={workView} docked />}
     </div>
   </section>;
