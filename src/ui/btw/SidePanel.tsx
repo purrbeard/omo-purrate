@@ -5,6 +5,9 @@ import { Check, ChevronDown } from "lucide-react";
 import { MarkdownDelegateProvider } from "../content/markdown/MarkdownDelegate";
 import { MarkdownText } from "../content/markdown/MarkdownText";
 import { resolveWorkspacePath } from "../content/workspace-path";
+import { PathPreviewProvider } from "../content/media/PathPreviewContext";
+import { PathText } from "../content/media/PathText";
+import { usePathActions } from "../content/media/use-path-actions";
 import type { ThreadItem, UserMessageItem } from "../../../shared/protocol";
 import { useT } from "../../i18n";
 import { selectPanelNotices, selectPendingRequestsForThread, selectSidesOf, sideDraftKey } from "../../state";
@@ -57,7 +60,7 @@ const keepFocus = (event: MouseEvent<HTMLButtonElement>): void => {
 function QuestionBubble({ text, sending = false }: { text: string; sending?: boolean }) {
   return (
     <div className="max-w-[85%] self-end rounded-[16px_16px_4px_16px] bg-message-user px-3 py-[7px] [overflow-wrap:anywhere] whitespace-pre-wrap text-message-user-foreground data-[sending]:opacity-70" data-testid={TESTID.sideQuestion} data-sending={sending || undefined}>
-      {text}
+      <PathText text={text} previews={false} />
     </div>
   );
 }
@@ -139,13 +142,15 @@ function SideTranscript({ side, cwd }: { side: SideChat; cwd: string | null }) {
   const activeTurn = activeTurnId === null ? null : (turns.find((turn) => turn.id === activeTurnId) ?? null);
   const streaming = activeTurn?.items.some((entry) => entry.streaming) ?? false;
   const working = activeTurn !== null && !streaming && pending.length === 0;
+  const pathActions = usePathActions();
   const openExternalLink = useCallback((href: string) => void window.omo.openExternal(href), []);
   const openFile = useCallback(
-    (path: string) => void window.omo.revealPath(resolveWorkspacePath(cwd ?? undefined, path)),
-    [cwd],
+    (path: string) => pathActions.open(resolveWorkspacePath(cwd ?? undefined, path)),
+    [cwd, pathActions],
   );
   return (
     <div ref={scroll.scrollRef} className="scrollable min-h-0 flex-1 overflow-y-auto" role="region" aria-label={t("btw.transcript")}>
+      <PathPreviewProvider cwd={cwd}>
       <div ref={scroll.contentRef} className={clsx("flex flex-col gap-3.5 pt-3.5 pb-2", PAD_X)} data-testid={TESTID.sideTranscript} data-side-id={side.id}>
         {conversation?.historyState === "loading" && (
           <div className="flex items-center gap-2 text-muted-foreground" role="status">
@@ -176,6 +181,7 @@ function SideTranscript({ side, cwd }: { side: SideChat; cwd: string | null }) {
           </RenderBoundary>
         ))}
       </div>
+      </PathPreviewProvider>
     </div>
   );
 }

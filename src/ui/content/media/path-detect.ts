@@ -1,27 +1,16 @@
-/**
- * Pure detection of local file paths inside chat text and inline code. Detection only proposes candidates; whether a
- * candidate really exists is decided later by one batched existence check, so prose that merely looks like a path
- * stays text.
- */
-/** One path found in a text, with its span in that text. */
+/** Pure detection proposes path candidates; the batched existence check decides which become clickable. */
 export interface PathCandidate {
-  /** Start offset of the displayed text (inclusive). */
   start: number;
-  /** End offset of the displayed text (exclusive). */
   end: number;
-  /** The displayed text, including any line suffix. */
   text: string;
-  /** The path without a `:12` / `:12:5` line suffix; absolute or workspace-relative. */
   path: string;
-  /** First line named by the suffix. */
   line?: number;
 }
 
-/** Candidates scanned per text, so a pathological message cannot fan out into thousands of lookups. */
 export const MAX_CANDIDATES = 60;
 
 const URL_SPANS = /\b[a-z][a-z0-9+.-]*:\/\/[^\s<>"'`]*|\bwww\.[^\s<>"'`]+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+/giu;
-const QUOTED = /(["'\u201c\u2018])((?:[A-Za-z]:[\\/]|\/(?!\/)|\.{1,2}[\\/])[^"'\u201c\u201d\u2018\u2019\n]*?)["'\u201d\u2019]/gu;
+const QUOTED = /(["'`\u201c\u2018])((?:[A-Za-z]:[\\/]|\/(?!\/)|\.{1,2}[\\/])[^"'`\u201c\u201d\u2018\u2019\n]*?)["'`\u201d\u2019]/gu;
 const TOKEN = new RegExp(
   "(?<![A-Za-z0-9_@~:/\\\\.-])(?:"
   + "[A-Za-z]:[\\\\/]"
@@ -44,14 +33,13 @@ function count(value: string, character: string): number {
   return value.split(character).length - 1;
 }
 
-/** Remove trailing sentence punctuation, keeping a closing bracket that pairs with one inside the token. */
+/** Keep closing brackets that balance an opener inside the path. */
 function trimTrailing(value: string): string {
   let current = value;
   for (;;) {
     const next = current.replace(TRAILING, (run) => {
       let kept = "";
       let rest = run;
-      // Keep brackets that balance an opener inside the token: "report (1).png".
       while (rest.length > 0 && ")]}".includes(rest[0] ?? "")) {
         const close = rest[0] ?? "";
         const open = close === ")" ? "(" : close === "]" ? "[" : "{";
@@ -60,7 +48,7 @@ function trimTrailing(value: string): string {
           rest = rest.slice(1);
         } else break;
       }
-      return kept === "" ? "" : kept;
+      return kept;
     });
     if (next === current) return current;
     current = next;
@@ -83,14 +71,7 @@ function finish(text: string, start: number): PathCandidate | null {
   return line === undefined ? { start, end: start + shown.length, text: shown, path } : { start, end: start + shown.length, text: shown, path, line };
 }
 
-/**
- * Find path candidates in running text: absolute Windows (`C:\\x`, `C:/x`) and POSIX paths, `./` / `../` and
- * separator-bearing relative paths, bare file names with an extension, and quoted paths (which may contain spaces).
- * URLs, e-mail addresses and UNC paths are never matched. Trailing punctuation and a `:12` line suffix are not part of
- * the path.
- * @param text - Plain text (a Markdown text node, a message, a tool output).
- * @returns non-overlapping candidates in text order, at most MAX_CANDIDATES.
- */
+/** Find bounded, non-overlapping local paths, excluding URLs, email and UNC paths. */
 export function findPathCandidates(text: string): PathCandidate[] {
   const blocked: [number, number][] = [];
   for (const match of text.matchAll(URL_SPANS)) blocked.push([match.index, match.index + match[0].length]);
@@ -118,33 +99,23 @@ export function findPathCandidates(text: string): PathCandidate[] {
 const CODE_PATH_START = /^(?:[A-Za-z]:[\\/]|\/(?!\/)|\.{1,2}[\\/])/;
 const CODE_RELATIVE = /^[\p{L}\p{N}_.@~-][^<>|*?"&;$(){}=\n]*[\\/][^<>|*?"&;$(){}=\n]*$/u;
 
-/**
- * The path an inline-code token names, when the whole token is one path (it may contain spaces).
- * @param value - The inline-code text.
- * @returns the candidate spanning the token, or null for commands, URLs and anything that is not a path.
- */
+/** Resolve a whole inline-code path without changing its displayed value. */
 export function inlineCodePath(value: string): PathCandidate | null {
   const trimmed = value.trim().replace(/^(["'])(.*)\1$/u, "$2").trim();
-  if (trimmed === "" || trimmed.length > 400 || trimmed.includes("://") || /^[\\/]{2}/.test(trimmed) && !trimmed.startsWith("//")) return null;
-  if (trimmed.startsWith("//") || trimmed.startsWith("\\\\")) return null;
-  const offset = value.indexOf(trimmed);
+  if (trimmed === "" || trimmed.length > 400 || trimmed.includes("://") || /^[\\/]{2}/.test(trimmed)) return null;
   if (CODE_PATH_START.test(trimmed) || CODE_RELATIVE.test(trimmed)) {
     const suffix = LINE_SUFFIX.exec(trimmed);
     const path = suffix !== null && suffix.index > 1 ? trimmed.slice(0, suffix.index) : trimmed;
-    const base: PathCandidate = { start: offset, end: offset + trimmed.length, text: trimmed, path };
+    const base: PathCandidate = { start: 0, end: value.length, text: value, path };
     return suffix !== null && suffix.index > 1 ? { ...base, line: Number(suffix[1]) } : base;
   }
   const single = findPathCandidates(trimmed);
   const only = single[0];
-  return single.length === 1 && only !== undefined && only.start === 0 && only.end === trimmed.length ? { ...only, start: offset, end: offset + trimmed.length } : null;
+  return single.length === 1 && only !== undefined && only.start === 0 && only.end === trimmed.length
+    ? { ...only, start: 0, end: value.length, text: value } : null;
 }
 
-/**
- * Resolve a candidate path against the workspace root.
- * @param path - Absolute or workspace-relative path.
- * @param cwd - Workspace root, when known.
- * @returns an absolute path, or null when the path is relative and no root is known.
- */
+/** Resolve a workspace-relative candidate, preserving already absolute paths. */
 export function absolutePathOf(path: string, cwd: string | undefined): string | null {
   if (/^[A-Za-z]:[\\/]/.test(path) || path.startsWith("/")) return path;
   if (cwd === undefined || cwd === "") return null;

@@ -35,6 +35,7 @@ import { PathToken } from '../media/PathChip'
 import { absolutePathOf, findPathCandidates, inlineCodePath } from '../media/path-detect'
 import { collectParagraphMedia } from '../media/mdast-media'
 import { usePathPreview } from '../media/PathPreviewContext'
+import { usePathInfo } from '../media/path-store'
 import { renderPathSegments } from '../media/PathText'
 import type { PositionedBlock } from './incremental.ts'
 
@@ -611,17 +612,29 @@ function MarkdownFileLink({ file, glyph, children }: {
   readonly children: ReactNode[]
 }): ReactNode {
   const { openFile } = useMarkdownDelegate()
+  const preview = usePathPreview()
+  const absolute = preview === null ? null : absolutePathOf(file.path, preview.cwd)
+  const info = usePathInfo(absolute)
+  const lightbox = useMediaLightbox()
   if (openFile === undefined) return <>{children}</>
   return (
+    <>
     <button
       type="button"
       className="md-file-mention md-file-link"
       title={file.path}
-      onClick={() => { openFile(file.path, file.line === undefined ? undefined : { line: file.line }) }}
+      data-path={absolute ?? undefined}
+      data-path-kind={info?.kind}
+      onClick={(event) => {
+        if (absolute !== null && info?.kind === 'file' && mediaKind(absolute) !== null) lightbox.show(event.currentTarget, absolute)
+        else openFile(file.path, file.line === undefined ? undefined : { line: file.line })
+      }}
     >
       {glyph && <LinkIcon kind={classifyLinkPath(file.path)} className="md-link-icon" />}
       {children}
     </button>
+    {lightbox.node}
+    </>
   )
 }
 
