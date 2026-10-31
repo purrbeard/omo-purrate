@@ -17,6 +17,7 @@ import { TESTID } from "../testids";
 import { uiState, updatePreferences, useUiState } from "../ui-state";
 import { errorMessage } from "./diagnostics";
 import { ErrorText, SettingsCard, SettingsGroup, ui } from "./SettingsCard";
+import { ProjectResourcesSection } from "./ProjectResourcesSection";
 
 function threadIds(threads: readonly ThreadSummary[]): string[] {
   return threads.flatMap(thread => [thread.id, ...threadIds(thread.children ?? [])]);
@@ -191,6 +192,7 @@ export function ProjectsSection() {
           </div>
         );
       })}
+      <ProjectResourcesSection />
     </section>
   );
 }

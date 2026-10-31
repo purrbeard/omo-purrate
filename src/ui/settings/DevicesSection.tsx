@@ -7,6 +7,8 @@ import { useT } from "../../i18n";
 import { SectionHeading } from "./SectionHeading";
 import { errorMessage } from "./diagnostics";
 import { ErrorText, ui } from "./SettingsCard";
+import { StorageSection } from "./StorageSection";
+import { MemorySyncSection } from "./MemorySyncSection";
 
 export function DevicesSection() {
   const t = useT();
@@ -48,5 +50,7 @@ export function DevicesSection() {
         {overview.memory.path && <Button variant="outline" size="sm" icon={<FolderOpen aria-hidden="true" />} onClick={() => void window.omo.revealPath(overview.memory.path ?? "")}>{t("shell.settings.devices.openMemory")}</Button>}
       </> : overview !== null ? <p className={ui.muted}>{t("shell.settings.devices.noMemory")}</p> : null}
     </div></article>
+    <StorageSection load={window.omo.readStorageUsage} />
+    <MemorySyncSection />
   </section>;
 }

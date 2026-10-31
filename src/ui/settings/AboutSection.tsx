@@ -5,6 +5,7 @@ import { errorMessage, useDiagnostics } from "./diagnostics";
 import { SectionHeading } from "./SectionHeading";
 import { ErrorText, SettingsCard, ui } from "./SettingsCard";
 import { AppUpdateSection } from "./AppUpdateSection";
+import { LicensesSection } from "./LicensesSection";
 import { uiState } from "../ui-state";
 import { TESTID } from "../testids";
 
@@ -36,6 +37,7 @@ export function AboutSection() {
     <section className={ui.section}>
       <SectionHeading title={t("shell.settings.nav.about")} intro={t("shell.settings.about.intro")} />
       <AppUpdateSection />
+      <LicensesSection />
       <SettingsCard>
         <div className={ui.cardBody}>
           <button className={ui.link} type="button" data-testid="settings-show-onboarding" onClick={() => { uiState.setOnboardingOpen(true); }}>{t("shell.settings.about.showOnboarding")}</button>
