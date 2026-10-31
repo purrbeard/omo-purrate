@@ -136,13 +136,20 @@ test("plan menu invokes the installed skill; sketch produces a PNG and keyboard 
     await page.mouse.move(bounds.x + 100, bounds.y + 70);
     await page.mouse.up();
     await shot(page, "add-menu-sketch-drawing");
+    const png = await canvas.evaluate(element => {
+      if (!(element instanceof HTMLCanvasElement)) throw new Error("Missing sketch canvas");
+      return element.toDataURL("image/png").split(",")[1];
+    });
     await page.getByRole("button", { name: "Attach sketch", exact: true }).click();
     await expect(byTestId(page, TESTID.attachmentThumbnail)).toHaveCount(1);
     await send(page, "SCENARIO:echo plan the layout");
     await expect(byTestId(page, TESTID.turn).last()).toHaveAttribute("data-status", "completed");
-    const message = prompts(readFakeLog())[0]?.message ?? "";
+    const log = readFakeLog();
+    const message = prompts(log)[0]?.message ?? "";
     expect(message).toMatch(/^\/skill:ulw-plan /);
-    expect(message).toContain(".png");
+    expect(log.find(entry => entry["type"] === "prompt" && entry["message"] === message)?.["images"]).toEqual([
+      { type: "image", mimeType: "image/png", data: png },
+    ]);
     await page.getByTestId("composer-add").click();
     // Escape must reach the open menu: pressed before it opens, the menu would open afterwards and take focus.
     await expect(page.getByRole("menu")).toBeVisible();
