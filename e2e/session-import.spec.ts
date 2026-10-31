@@ -176,8 +176,6 @@ test("a session another omo process holds is marked in the sidebar and locks its
     await threadRow(page, held).click();
     const input = page.getByTestId("composer-input");
     await expect(input).toHaveAttribute("data-thread-id", held);
-    await input.fill("hello");
-    await input.press("Enter");
     const banner = page.getByTestId("composer-held-banner");
     await expect(banner).toContainText(`This session is open in another omo process (pid ${process.pid}, P:\\elsewhere)`);
     await expect(input).toBeDisabled();

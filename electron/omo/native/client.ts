@@ -32,6 +32,7 @@ import type { ExitInfo, StopTimeouts } from "../managed-child";
 import { AppServerStartError, BRIDGE_ERROR_CODES, RpcRequestError } from "../rpc";
 import { NativeCommandError, NativeConnection } from "./connection";
 import type { NativeRecord } from "./connection";
+import { NativeOwnershipGate } from "./ownership-gate";
 import { TurnProjector } from "./projector";
 import type { QueuedInput } from "./projector";
 import { SessionIndex } from "./threads";
@@ -59,6 +60,8 @@ interface Loaded {
   nativeQueue: QueuedInput[];
   /** Steers and follow-ups held by this client until the run settles (see `holdInputWhileRunning`). */
   held: HeldInput[];
+  /** A user Stop keeps deferred input queued until the next explicit user send. */
+  inputPaused: boolean;
 }
 
 interface HeldInput {
@@ -208,6 +211,9 @@ export class NativeAppServerClient {
   private readonly utility = new Map<string, Promise<{ handle: string; model: { provider: string; id: string } | null }>>();
   private readonly utilityHandles = new Set<string>();
   private readonly ui: UiBridge;
+  private readonly ownership: NativeOwnershipGate;
+  private readonly stoppingInput = new Set<string>();
+  private hostInstance: string | null = null;
   private initResult: InitializeResult | null = null;
   private readonly notificationListeners = new Set<(notification: RpcNotification) => void>();
   private readonly serverRequestListeners = new Set<(request: RpcServerRequest) => void>();
@@ -226,8 +232,28 @@ export class NativeAppServerClient {
       ...(options.spawnImpl === undefined ? {} : { spawnImpl: options.spawnImpl }),
       ...(options.socket === undefined ? {} : { socket: options.socket }),
     });
+    this.ownership = new NativeOwnershipGate({
+      client: options,
+      ownPid: () => this.connection.pid,
+      attached: (threadId) => this.sessions.has(threadId),
+      target: async (threadId) => {
+        const sessionPath = this.sessions.get(threadId)?.sessionPath ?? (await this.index.find(threadId))?.sessionPath;
+        return sessionPath == null ? null : { id: threadId, sessionPath };
+      },
+      open: async (threadId) => {
+        const loaded = this.sessions.get(threadId);
+        if (loaded?.projector.activeTurnId != null) throw new RpcRequestError(-32600, "A locally admitted turn is still settling");
+        await this.closeIfLoaded(threadId);
+        await this.load(threadId);
+      },
+      emit: (notification) => this.emit(notification),
+    });
     this.ui = new UiBridge(
-      (handle, frame) => this.connection.write({ ...frame, type: "extension_ui_response", sessionId: handle }),
+      (handle, frame) => {
+        const loaded = this.byHandle.get(handle);
+        if (loaded !== undefined) this.ownership.assertWritable(loaded.threadId);
+        this.connection.write({ ...frame, type: "extension_ui_response", sessionId: handle });
+      },
       (request) => this.emitRequest(request),
       (notification) => this.emit(notification),
     );
@@ -236,6 +262,7 @@ export class NativeAppServerClient {
       for (const listener of [...this.malformedListeners]) listener(line, error);
     });
     this.connection.onExit((info) => {
+      this.ownership.close();
       for (const loaded of this.sessions.values()) loaded.projector.abandon();
       for (const listener of [...this.exitListeners]) listener(info);
     });
@@ -255,11 +282,9 @@ export class NativeAppServerClient {
     try {
       const info = params(await this.connection.send("get_protocol_info", {}, startTimeoutMs));
       if (info["mode"] !== "multi") throw new Error(`omo answered in ${String(info["mode"])} mode, not multi-session`);
-      try {
-        await this.connection.send("set_client_info", { width: 120, capabilities: ["extension_events", "question", "media_placeholders"] }, startTimeoutMs);
-      } catch (error) {
-        if (!(error instanceof NativeCommandError)) throw error;
-      }
+      this.hostInstance = typeof info["instanceId"] === "string" ? info["instanceId"] : null;
+      this.ownership.identifyHost(info["instanceId"]);
+      await this.connection.send("set_client_info", { width: 120, capabilities: ["interactive_user", "extension_events", "question", "media_placeholders"] }, startTimeoutMs);
       const version = typeof info["serverVersion"] === "string" ? info["serverVersion"] : "unknown";
       this.initResult = {
         userAgent: `omo/${version}`,
@@ -287,6 +312,7 @@ export class NativeAppServerClient {
   }
 
   stop(): Promise<void> {
+    this.ownership.close();
     return this.connection.stop(this.options.stopTimeoutsMs ?? DEFAULT_STOP_TIMEOUTS);
   }
 
@@ -311,7 +337,14 @@ export class NativeAppServerClient {
   }
 
   request<M extends ClientMethod>(method: M, input: ClientParams<M>): Promise<ClientResult<M>> {
-    return this.dispatch(method, params(input)).then((result) => result as ClientResult<M>);
+    const fields = params(input);
+    return this.ownership.before(method, fields)
+      .then(() => this.dispatch(method, fields))
+      .catch(async (error: unknown) => {
+        if (typeof fields["threadId"] === "string") await this.ownership.refused(fields["threadId"], error);
+        throw error;
+      })
+      .then((result) => result as ClientResult<M>);
   }
 
   private async dispatch(method: ClientMethod, input: JsonObject): Promise<unknown> {
@@ -427,6 +460,17 @@ export class NativeAppServerClient {
 
   private apply(loaded: Loaded, record: NativeRecord): void {
     switch (record.type) {
+      case "session_paused":
+        loaded.inputPaused = true;
+        return;
+      case "session_resumed":
+        loaded.inputPaused = false;
+        return;
+      case "session_lifecycle": {
+        const lifecycle = record["lifecycle"];
+        if (isRecord(lifecycle) && lifecycle["state"] === "paused") loaded.inputPaused = true;
+        return;
+      }
       case "extension_ui_request":
         this.ui.handle({
           threadId: loaded.threadId, handle: loaded.handle, cwd: loaded.cwd, activeTurnId: loaded.projector.activeTurnId,
@@ -554,6 +598,7 @@ export class NativeAppServerClient {
       extensionErrors: new Set(),
       nativeQueue: [],
       held: [],
+      inputPaused: state["paused"] === true,
     };
     this.sessions.set(threadId, loaded);
     this.byHandle.set(handle, loaded);
@@ -880,13 +925,14 @@ export class NativeAppServerClient {
     return { message, images, shown };
   }
 
-  private async startTurn(threadId: string, input: JsonObject): Promise<{ turn: Turn }> {
+  private async startTurn(threadId: string, input: JsonObject, automatic = false): Promise<{ turn: Turn }> {
     const loaded = await this.load(threadId);
+    if (this.stoppingInput.has(threadId) || (automatic && loaded.inputPaused)) throw new RpcRequestError(-32600, "user Stop keeps deferred input queued");
     // Held inputs go first, in the order they were sent; they return to the queue if the turn does not start.
     const held = loaded.held.splice(0);
     if (held.length > 0) this.emitQueue(loaded);
     try {
-      return await this.promptTurn(loaded, [...held.flatMap((item) => item.input), ...(Array.isArray(input["input"]) ? input["input"] : [])], input);
+      return await this.promptTurn(loaded, [...held.flatMap((item) => item.input), ...(Array.isArray(input["input"]) ? input["input"] : [])], input, automatic);
     } catch (error) {
       if (held.length > 0) {
         loaded.held.unshift(...held);
@@ -896,28 +942,51 @@ export class NativeAppServerClient {
     }
   }
 
-  private async promptTurn(loaded: Loaded, items: unknown[], input: JsonObject): Promise<{ turn: Turn }> {
+  private async promptTurn(loaded: Loaded, items: unknown[], input: JsonObject, automatic = false): Promise<{ turn: Turn }> {
     const threadId = loaded.threadId;
     const { message, images, shown } = await this.promptContent(items);
     if (loaded.projector.activeTurnId !== null && await this.closeStaleTurn(loaded)) {
       throw new RpcRequestError(-32600, `thread ${threadId} already has a running turn`);
     }
+    if (this.stoppingInput.has(threadId) || (automatic && loaded.inputPaused)) throw new RpcRequestError(-32600, "user Stop keeps deferred input queued");
     const clientId = typeof input["clientUserMessageId"] === "string" && input["clientUserMessageId"] !== "" ? input["clientUserMessageId"] : null;
     loaded.holding = [];
     let disposition: unknown;
+    let heldAsNotice = false;
     try {
-      const data = params(await this.command(loaded.handle, "prompt", {
+      const fields = {
         message, ...(images.length > 0 ? { images } : {}), ...(clientId === null ? {} : { clientMessageId: clientId }),
-      }, PROMPT_TIMEOUT_MS));
+      };
+      const data = params(await (automatic && this.options.socket !== undefined
+        ? this.automaticPrompt(loaded, fields)
+        : this.command(loaded.handle, "prompt", fields, PROMPT_TIMEOUT_MS)));
       disposition = data["disposition"];
+      heldAsNotice = data["heldAsNotice"] === true;
     } catch (error) {
       this.release(loaded);
       throw error;
     }
+    if (heldAsNotice) loaded.inputPaused = true;
+    else if (!automatic) loaded.inputPaused = false;
     const turn = loaded.projector.beginClientTurn(shown, clientId);
-    if (disposition === "handled") loaded.projector.completeNow();
+    if (disposition === "handled" || heldAsNotice) loaded.projector.completeNow();
     this.release(loaded);
     return { turn };
+  }
+
+  /** A delayed send must never inherit the person's authority to release a concurrent Stop. */
+  private async automaticPrompt(loaded: Loaded, fields: JsonObject): Promise<unknown> {
+    const peer = new NativeConnection({ command: this.options.command, args: [], cwd: this.options.cwd, env: this.options.env, socket: this.options.socket });
+    peer.start();
+    try {
+      const info = params(await peer.send("get_protocol_info", {}, 5000));
+      if (this.hostInstance === null || info["instanceId"] !== this.hostInstance) throw new RpcRequestError(-32600, "The shared host changed before deferred input admission");
+      await peer.send("set_client_info", { capabilities: [] }, 5000);
+      await peer.send("attach_session", { sessionId: loaded.handle, durableSessionId: loaded.threadId, expectedHostInstance: this.hostInstance }, 5000);
+      return await peer.send("prompt", { ...fields, sessionId: loaded.handle }, PROMPT_TIMEOUT_MS);
+    } finally {
+      await peer.stop({ afterStdinEnd: 1000, afterSigterm: 0 });
+    }
   }
 
   private async steer(threadId: string, input: JsonObject): Promise<{ turnId: string }> {
@@ -965,7 +1034,7 @@ export class NativeAppServerClient {
   private async hold(loaded: Loaded, mode: HeldInput["mode"], input: JsonObject, active: string): Promise<{ turnId: string }> {
     const items = Array.isArray(input["input"]) ? input["input"].filter(isRecord) : [];
     const { message } = await this.promptContent(items);
-    if (!(await this.closeStaleTurn(loaded))) return { turnId: (await this.startTurn(loaded.threadId, { input: items })).turn.id };
+    if (!(await this.closeStaleTurn(loaded)) && !loaded.inputPaused) return { turnId: (await this.startTurn(loaded.threadId, { input: items }, true)).turn.id };
     loaded.held.push({ queuedId: `held:${randomUUID()}`, mode, input: items, text: message });
     this.emitQueue(loaded);
     // The run may have settled while omo was asked for its state.
@@ -974,11 +1043,11 @@ export class NativeAppServerClient {
   }
 
   private async sendHeld(loaded: Loaded): Promise<void> {
-    if (loaded.held.length === 0 || loaded.projector.activeTurnId !== null || this.sessions.get(loaded.threadId) !== loaded) return;
+    if (loaded.inputPaused || loaded.held.length === 0 || loaded.projector.activeTurnId !== null || this.sessions.get(loaded.threadId) !== loaded) return;
     try {
-      await this.startTurn(loaded.threadId, { input: [] });
+      await this.startTurn(loaded.threadId, { input: [] }, true);
     } catch (error) {
-      console.error(`Held input for thread ${loaded.threadId} stays queued: its turn did not start`, error);
+      if (!loaded.inputPaused) console.error(`Held input for thread ${loaded.threadId} stays queued: its turn did not start`, error);
     }
   }
 
@@ -1033,14 +1102,20 @@ export class NativeAppServerClient {
     const active = loaded?.projector.activeTurnId ?? null;
     if (loaded === undefined || active === null) return {};
     if (active !== turnId) throw new RpcRequestError(-32600, `Turn id mismatch: expected ${turnId} but active turn is ${active}`);
+    loaded.inputPaused = true;
+    this.stoppingInput.add(threadId);
     loaded.projector.markInterrupted();
-    // A pending auto-retry is cancelled first; abort alone would let omo schedule the next attempt.
-    if (loaded.projector.retryPending) await this.command(loaded.handle, "abort_retry");
-    await this.command(loaded.handle, "abort");
-    // An aborted run closes its permission dialogs without a record, so their cards are withdrawn here.
-    this.ui.dropSession(loaded.handle);
-    if (loaded.projector.activeTurnId === turnId) loaded.projector.completeNow("interrupted");
-    return {};
+    try {
+      // A pending auto-retry is cancelled first; abort alone would let omo schedule the next attempt.
+      if (loaded.projector.retryPending) await this.command(loaded.handle, "abort_retry");
+      await this.command(loaded.handle, "abort", { intent: "stop", awaitIdle: true });
+      // An aborted run closes its permission dialogs without a record, so their cards are withdrawn here.
+      this.ui.dropSession(loaded.handle);
+      if (loaded.projector.activeTurnId === turnId) loaded.projector.completeNow("interrupted");
+      return {};
+    } finally {
+      this.stoppingInput.delete(threadId);
+    }
   }
 
   private utilitySession(cwd: string): Promise<{ handle: string; model: { provider: string; id: string } | null }> {

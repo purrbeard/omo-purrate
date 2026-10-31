@@ -1,4 +1,5 @@
 import type { ThreadItem } from "../../shared/protocol";
+import { normalizeHolders } from "../../shared/session-held";
 import {
   appendAt,
   ensureTurn,
@@ -231,8 +232,20 @@ export function applyNotification(state: AppState, notification: ServerNotificat
       const { threadId, key, level, code, params, pinned } = notification.params;
       return pushNotice(state, { id: `alert:${threadId}:${key}`, level, message: params["error"] ?? code, params, threadId, code, ...(pinned ? { pinned } : {}) });
     }
-    case "extension_event":
-      if (notification.params.name.startsWith(UI_EXTENSION_PREFIX)) return applyUiExtension(state, notification.params.threadId, notification.params.name, notification.params.data);
-      return applyLiveExtension(state, notification.params.threadId, notification.params.name, notification.params.data, receivedAtMs);
+    case "extension_event": {
+      const { threadId, name, data } = notification.params;
+      if (name === "omo.session.ownership" && typeof data === "object" && data !== null && !Array.isArray(data)) {
+        const ownership = data as Record<string, unknown>;
+        if (typeof ownership["writable"] !== "boolean") return state;
+        // Only the native controller's authoritative open success sends writable:true. No draft is delivered here.
+        return updateConversation(state, threadId, conversation => ({
+          ...conversation,
+          held: ownership["writable"] ? null : normalizeHolders(ownership["holders"]),
+          resumed: false,
+        }));
+      }
+      if (name.startsWith(UI_EXTENSION_PREFIX)) return applyUiExtension(state, threadId, name, data);
+      return applyLiveExtension(state, threadId, name, data, receivedAtMs);
+    }
   }
 }
