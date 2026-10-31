@@ -62,7 +62,10 @@ function applyBridgeStatus(state: AppState, status: BridgeStatus): AppState {
   if (status.state === "connected") {
     return state.bridge?.state === "connected"
       ? { ...state, bridge: status }
-      : { ...state, bridge: status, skillCatalogs: {}, loadedSkillCwds: {} };
+      : { ...state, bridge: status, skillCatalogs: {}, loadedSkillCwds: {}, conversations: Object.fromEntries(Object.entries(state.conversations).map(([id, conversation]) => {
+        const { monitors: _monitors, ...live } = conversation.live;
+        return [id, { ...conversation, live }];
+      })) };
   }
   let changed = false;
   const conversations: Record<string, Conversation> = {};

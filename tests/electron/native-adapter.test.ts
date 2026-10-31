@@ -266,6 +266,27 @@ describe("SessionIndex", () => {
     expect(await index.isArchived(source!)).toBe(false);
   });
 
+  it("clones only the active path while leaving alternate branches in the source", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "native-index-"));
+    await mkdir(path.join(root, "work"));
+    const file = path.join(root, "work", "source.jsonl");
+    const entries = [
+      { type: "session", version: 3, id: "source", timestamp: "2026-10-18T00:00:00.000Z", cwd: "/work" },
+      { type: "message", id: "u", parentId: null, message: { role: "user", content: "question" } },
+      { type: "message", id: "a", parentId: "u", message: { role: "assistant", content: "alternate" } },
+      { type: "message", id: "b", parentId: "u", message: { role: "assistant", content: "active" } },
+    ];
+    const original = entries.map(line).join("");
+    await writeFile(file, original);
+    const index = new SessionIndex(root);
+    const [record] = await index.list();
+    if (!record) throw new Error("Missing source");
+    const target = await index.fork(record, record.cwd, Date.parse("2026-10-18T02:00:00.000Z"), true);
+    const rows = (await readFile(target, "utf8")).trim().split("\n").map(row => JSON.parse(row));
+    expect(rows.slice(1)).toEqual([entries[1], entries[3]]);
+    expect(await readFile(file, "utf8")).toBe(original);
+  });
+
   it("lists an OmO (Alpha) store beside omo's sessions, once per id, and never writes into or deletes from it", async () => {
     root = await mkdtemp(path.join(tmpdir(), "native-index-"));
     const sessions = path.join(root, "agent", "sessions");

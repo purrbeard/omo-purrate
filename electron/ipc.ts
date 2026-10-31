@@ -14,6 +14,7 @@ import type { ClientMethod, ClientParams, RequestId } from "../shared/protocol";
 import { openLogin } from "./accounts/login";
 import { readAccountUsage } from "./accounts/usage";
 import { branchSession, retryEntryId } from "./history/branch-session";
+import { exportSessionJsonl, importSessionJsonl } from "./history/session-transfer";
 import { runSessionTree } from "./omo/session-tree";
 import type { ModelRung } from "../shared/ipc";
 import { HistoryReader } from "./history/history-reader";
@@ -49,6 +50,11 @@ import { discoverMcpConfigs, importMcpConfig, readConfiguredMcpServers } from ".
 import { readOpencodexAccounts } from "./accounts/opencodex";
 import { listWorkspaceFiles, readWorkspaceFile, getWorkspaceDiff, listSessionWork, searchWorkspaceFiles } from "./workspace-files";
 import { getDeviceOverview } from "./device-overview";
+import { readStorageUsage } from "./storage";
+import { readNativeSettings, saveNativeSettings } from "./omo/native-settings";
+import { readProjectResources } from "./omo/project-resources";
+import { loadMcpSettings, saveMcpSettings } from "./omo/mcp-settings";
+import { readTeams } from "./history/teams";
 import { AppUpdater } from "./app-update";
 import { readModelRouting, saveModelRouting } from "./omo/model-routing";
 
@@ -108,17 +114,17 @@ function requireString(value: unknown, name: string): string {
  * Shared by history:load and the workbench handlers: a renderer-supplied session path must stay inside the omo sessions
  * directory or an OmO (Alpha) session store.
  */
-export function createSessionFileResolver(supervisor: OmoSupervisor, homeDir: string): (sessionPath: unknown) => Promise<string> {
+export function createSessionFileResolver(supervisor: { readonly initializeResult: { readonly codexHome?: string } | null }, homeDir: string, writable = false): (sessionPath: unknown) => Promise<string> {
   return async (sessionPath) => {
     const requested = requireString(sessionPath, "sessionPath");
     if (!path.isAbsolute(requested)) throw new Error("sessionPath must be absolute");
     const codexHome = supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent");
     const target = await realpath(requested);
-    for (const root of [path.join(codexHome, "sessions"), ...alphaSessionRoots(homeDir, process.env)]) {
+    for (const root of [path.join(codexHome, "sessions"), ...(writable ? [] : alphaSessionRoots(homeDir, process.env))]) {
       const real = await realpath(root).catch(() => null);
       if (real !== null && isInside(real, target)) return target;
     }
-    throw new Error("sessionPath is outside the omo and OmO (Alpha) session directories");
+    throw new Error(writable ? "Copy this Alpha session into omo before changing its tree" : "sessionPath is outside the omo and OmO (Alpha) session directories");
   };
 }
 
@@ -164,8 +170,14 @@ export function registerIpc(deps: IpcDeps): () => void {
   let installing: Promise<InstallResult> | null = null;
   let applyingProxy = false;
   const proxyAgentDir = (): string => supervisor.initializeResult?.codexHome ?? process.env["OMO_CODING_AGENT_DIR"] ?? path.join(homeDir, ".omo", "agent");
+  const settingsCwd = async (threadId: unknown): Promise<string | undefined> => {
+    if (threadId === null) return undefined;
+    const { thread } = await supervisor.request("thread/read", { threadId: requireString(threadId, "threadId"), includeTurns: false });
+    return thread.cwd;
+  };
   /** Resolves a renderer-supplied session path, refusing anything outside the omo sessions directory. */
   const sessionFile = createSessionFileResolver(supervisor, homeDir);
+  const writableSessionFile = createSessionFileResolver(supervisor, homeDir, true);
   let catalog: SessionIndex | null = null;
   const catalogIndex = (): SessionIndex => {
     const dir = path.join(supervisor.initializeResult?.codexHome ?? path.join(homeDir, ".omo", "agent"), "sessions");
@@ -206,11 +218,12 @@ export function registerIpc(deps: IpcDeps): () => void {
   };
 
   let treeBusy = false;
+  let mcpSaving = false;
   const handlers: Record<string, (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown> = {
     [IPC.sessionTree]: async (_event, threadId, operation) => {
       if (typeof threadId !== "string" || typeof operation !== "object" || operation === null) throw new TypeError("invalid session tree request");
       const request = operation as SessionTreeOperation;
-      if (!["list", "retry", "navigate"].includes(request.type)) throw new TypeError("invalid session tree operation");
+      if (!["list", "retry", "navigate", "edit"].includes(request.type)) throw new TypeError("invalid session tree operation");
       if (request.type === "list") {
         const { thread } = await supervisor.request("thread/read", { threadId, includeTurns: false });
         return historyReader.tree(await sessionFile(thread.path));
@@ -222,13 +235,15 @@ export function registerIpc(deps: IpcDeps): () => void {
         const snapshots = await Promise.all(loaded.data.map(id => supervisor.request("thread/read", { threadId: id, includeTurns: true })));
         if (snapshots.some(({ thread }) => thread.status.type === "active")) throw new Error("finish the running turn before switching session branches");
         const { thread } = snapshots.find(({ thread }) => thread.id === threadId) ?? await supervisor.request("thread/read", { threadId, includeTurns: true });
-        const target = await sessionFile(thread.path);
-        let nativeRequest: Extract<SessionTreeOperation, { type: "navigate" }>;
+        const target = await writableSessionFile(thread.path);
+        let nativeRequest: Extract<SessionTreeOperation, { type: "navigate" | "edit" }>;
         if (request.type === "retry") {
           if (!request.point || typeof request.point.text !== "string" || !Number.isInteger(request.point.occurrence) || request.point.occurrence < 0) throw new TypeError("invalid retry point");
           nativeRequest = { type: "navigate", entryId: retryEntryId(await readFile(target, "utf8"), request.point), intent: "select" };
         } else nativeRequest = request;
         if (nativeRequest.type === "navigate" && (typeof nativeRequest.entryId !== "string" || !["select", "resume"].includes(nativeRequest.intent))) throw new TypeError("invalid branch selection");
+        if (nativeRequest.type === "edit" && (typeof nativeRequest.entryId !== "string" || typeof nativeRequest.text !== "string" || nativeRequest.text.trim() === "")) throw new TypeError("invalid assistant edit");
+        if (nativeRequest.expectedLeafId !== undefined && nativeRequest.expectedLeafId !== null && typeof nativeRequest.expectedLeafId !== "string") throw new TypeError("invalid expected leaf");
         try {
           return await supervisor.withSessionOwner((binary, env) => runSessionTree({ binary, env, sessionPath: target, cwd: thread.cwd, operation: nativeRequest, extensionPath: path.join(app.isPackaged ? process.resourcesPath : __dirname, "tree-selection-extension.js") }));
         } finally {
@@ -304,6 +319,49 @@ export function registerIpc(deps: IpcDeps): () => void {
     },
     [IPC.getIphoneStatus]: () => deps.iphone?.getStatus() ?? { enabled: false, state: "searching", devices: [] },
     [IPC.getStatus]: () => supervisor.getStatus(),
+    [IPC.readStorageUsage]: (_event, days) => readStorageUsage({ agentDir: taskAgentDir(), userData: app.getPath("userData"), olderThanDays: Number(days) }),
+    [IPC.readNativeSettings]: async (_event, scope, threadId) => {
+      if (scope !== "global" && scope !== "project") throw new TypeError("Invalid settings scope");
+      return readNativeSettings(taskAgentDir(), scope, scope === "project" ? await settingsCwd(threadId) : undefined);
+    },
+    [IPC.saveNativeSettings]: async (_event, input, threadId) => {
+      if (!isRecord(input) || (input["scope"] !== "global" && input["scope"] !== "project") || typeof input["revision"] !== "string" || !isRecord(input["values"])) throw new TypeError("Invalid settings input");
+      return saveNativeSettings(taskAgentDir(), { scope: input["scope"], revision: input["revision"], values: input["values"] }, input["scope"] === "project" ? await settingsCwd(threadId) : undefined);
+    },
+    [IPC.readProjectResources]: async (_event, threadId) => {
+      const cwd = await settingsCwd(threadId);
+      if (!cwd) throw new Error("Select a project session first");
+      return readProjectResources(taskAgentDir(), cwd);
+    },
+    [IPC.readTeams]: async (_event, threadId) => {
+      const cwd = await settingsCwd(threadId);
+      if (!cwd) throw new Error("Select a session first");
+      return readTeams(taskAgentDir(), cwd, requireString(threadId, "threadId"));
+    },
+    [IPC.sendTeamMessage]: async (_event, threadId, teamRunId, member, message) => {
+      const id = requireString(threadId, "threadId"), run = requireString(teamRunId, "teamRunId"), target = requireString(member, "member"), text = requireString(message, "message");
+      const cwd = await settingsCwd(id);
+      if (!cwd || !text.trim()) throw new Error("Select a session and enter a message");
+      const teams = await readTeams(taskAgentDir(), cwd, id);
+      if (!teams.some(team => team.id === run && team.members.some(entry => entry.name === target))) throw new Error("Team member is not owned by this session");
+      await supervisor.request("extension_request", { threadId: id, name: "omo-ui.team.send", data: { teamRunId: run, member: target, message: text } });
+    },
+    [IPC.loadMcpSettings]: async (_event, scope, threadId) => {
+      if (scope !== "global" && scope !== "project") throw new TypeError("Invalid MCP scope");
+      const cwd = scope === "global" ? homeDir : await settingsCwd(threadId);
+      if (!cwd) throw new Error("Select a project session first");
+      return loadMcpSettings(scope, taskAgentDir(), cwd);
+    },
+    [IPC.saveMcpSettings]: async (_event, scope, threadId, input) => {
+      if (scope !== "global" && scope !== "project") throw new TypeError("Invalid MCP scope");
+      if (mcpSaving) throw new Error("An MCP settings save is already running");
+      mcpSaving = true;
+      try {
+        const cwd = scope === "global" ? homeDir : await settingsCwd(threadId);
+        if (!cwd) throw new Error("Select a project session first");
+        await saveMcpSettings(scope, taskAgentDir(), cwd, input);
+      } finally { mcpSaving = false; }
+    },
     [IPC.request]: async (_event, method, params): Promise<RequestEnvelope> => {
       if (!isClientMethod(method)) {
         return { ok: false, error: { code: INVALID_REQUEST, message: `method not allowed: ${String(method)}` } };
@@ -366,6 +424,42 @@ export function registerIpc(deps: IpcDeps): () => void {
         target = saved.filePath;
       }
       return supervisor.request("thread/export", { threadId: id, outputPath: target });
+    },
+    [IPC.exportSessionJsonl]: async (_event, threadId): Promise<{ path: string } | null> => {
+      const id = requireString(threadId, "threadId");
+      const { thread } = await supervisor.request("thread/read", { threadId: id, includeTurns: false });
+      const source = await sessionFile(thread.path);
+      const qa = process.env[ENV.qaSavePath];
+      let target = qa;
+      if (!target) {
+        const options: SaveDialogOptions = { title: "Export native JSONL", defaultPath: `${id}.jsonl`, filters: [{ name: "Native session", extensions: ["jsonl"] }] };
+        const window = getWindow();
+        const saved = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
+        if (saved.canceled || saved.filePath === "") return null;
+        target = saved.filePath;
+      }
+      if (!path.isAbsolute(target)) throw new Error("Export path must be absolute");
+      return exportSessionJsonl(source, target);
+    },
+    [IPC.importSessionJsonl]: async (): Promise<BranchResult | null> => {
+      const qa = process.env[ENV.qaPickAttachments];
+      let source: unknown;
+      if (qa) {
+        const files: unknown = JSON.parse(qa);
+        if (!Array.isArray(files) || files.length !== 1) throw new Error("Choose one JSONL session file");
+        source = files[0];
+      } else {
+        const options: OpenDialogOptions = { title: "Import native JSONL as a new copy", properties: ["openFile"], filters: [{ name: "Native session", extensions: ["jsonl"] }] };
+        const window = getWindow();
+        const chosen = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+        if (chosen.canceled) return null;
+        source = chosen.filePaths[0];
+      }
+      if (typeof source !== "string" || !path.isAbsolute(source)) throw new Error("Import path must be absolute");
+      const imported = await importSessionJsonl(source, catalogIndex().sessionsDir);
+      const current = prefs.get();
+      prefs.set({ managedThreadIds: [...new Set([...current.managedThreadIds, imported.threadId])], sessionImportCompleted: true });
+      return imported;
     },
     [IPC.watchHistory]: async (_event, sessionPath): Promise<void> => {
       if (sessionPath === null) return sessionWatcher.set(null, null);

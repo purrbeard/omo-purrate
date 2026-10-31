@@ -26,6 +26,7 @@ import type { WorkbenchBridgeApi } from "./workbench";
 import type { BrowserBridgeApi } from "./browser";
 import type { ServersBridgeApi } from "./servers";
 import type { OpenPathOutcome, PathInfo } from "./media";
+import type { SessionTreeEditResult, SessionTreeNode } from "./session-tree";
 
 /** URL of the official omo installer script. */
 export const OMO_INSTALL_SCRIPT_URL = "https://get.omo.dev/install.sh";
@@ -458,12 +459,16 @@ export interface BranchResult {
 export type SessionTreeOperation =
   | { type: "list" }
   | { type: "navigate"; entryId: string; intent: "select" | "resume"; expectedLeafId?: string | null }
+  | { type: "edit"; entryId: string; text: string; expectedLeafId?: string | null }
   | { type: "retry"; point: BranchPoint };
 
 export interface SessionTreeResult {
   leafId: string | null;
   branches: Array<{ entryId: string; label: string; active: boolean }>;
+  nodes: SessionTreeNode[];
   outcome?: "navigated" | "cancelled";
+  editorText?: string;
+  edit?: SessionTreeEditResult;
 }
 
 /** Subscription providers whose stored accounts report usage windows. */
@@ -552,6 +557,14 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   installAppUpdate(): Promise<AppUpdateStatus>;
   onAppUpdateStatus(listener: (status: AppUpdateStatus) => void): () => void;
   getDeviceOverview(): Promise<DeviceOverview>;
+  readStorageUsage(days: number): Promise<import("./storage").StorageUsage>;
+  readNativeSettings(scope: import("./native-settings").NativeSettingsScope, threadId: string | null): Promise<import("./native-settings").NativeSettingsSnapshot>;
+  saveNativeSettings(input: import("./native-settings").NativeSettingsInput, threadId: string | null): Promise<import("./native-settings").NativeSettingsSnapshot>;
+  readProjectResources(threadId: string): Promise<import("./project-resources").ProjectResources>;
+  readTeams(threadId: string): Promise<import("./team").TeamSnapshot[]>;
+  sendTeamMessage(threadId: string, teamRunId: string, member: string, message: string): Promise<void>;
+  loadMcpSettings(scope: import("./mcp-settings").McpScope, threadId: string | null): Promise<import("./mcp-settings").McpSnapshot>;
+  saveMcpSettings(scope: import("./mcp-settings").McpScope, threadId: string | null, input: import("./mcp-settings").McpSaveInput): Promise<void>;
   listWorkspaceFiles(cwd: string): Promise<WorkspaceFile[]>;
   /** Files of the thread's workspace whose path contains `query` (the composer's @ mention); `cwd` must be the thread's own cwd. */
   searchWorkspaceFiles(threadId: string, cwd: string, query: string): Promise<WorkspaceFileMatch[]>;
@@ -590,6 +603,8 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   /** Writes the session at `threadId` as one HTML file: omo's `export_html`.
    * Returns the written path, or null when the user cancels the save dialog. */
   exportSession(threadId: string): Promise<{ path: string } | null>;
+  exportSessionJsonl(threadId: string): Promise<{ path: string } | null>;
+  importSessionJsonl(): Promise<BranchResult | null>;
   /** Parses the session JSONL at sessionPath, which must resolve inside the omo sessions directory. */
   loadHistory(sessionPath: string): Promise<HistoryResult>;
   /**
@@ -682,6 +697,14 @@ export const IPC = {
   installAppUpdate: "app-update:install",
   appUpdateStatus: "app-update:status",
   getDeviceOverview: "devices:overview",
+  readStorageUsage: "devices:storage-usage",
+  readNativeSettings: "native-settings:read",
+  saveNativeSettings: "native-settings:save",
+  readProjectResources: "projects:resources",
+  readTeams: "teams:read",
+  sendTeamMessage: "teams:send",
+  loadMcpSettings: "mcp-settings:load",
+  saveMcpSettings: "mcp-settings:save",
   listWorkspaceFiles: "workspace:list-files",
   searchWorkspaceFiles: "workspace:search-files",
   readWorkspaceFile: "workspace:read-file",
@@ -710,6 +733,8 @@ export const IPC = {
   loadHistory: "history:load",
   loadHistoryUpdate: "history:load-update",
   exportSession: "session:export",
+  exportSessionJsonl: "session:export-jsonl",
+  importSessionJsonl: "session:import-jsonl",
   watchHistory: "history:watch",
   historyChanged: "history:changed",
   preferencesChanged: "prefs:changed",

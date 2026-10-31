@@ -241,7 +241,7 @@ export class SessionIndex {
   }
 
   /** Copies a session into a new file with a fresh header id that names the source as its parent. */
-  async fork(record: SessionRecord, cwd: string, nowMs = Date.now()): Promise<string> {
+  async fork(record: SessionRecord, cwd: string, nowMs = Date.now(), activePathOnly = false): Promise<string> {
     const text = await readFile(record.sessionPath, "utf8");
     const newline = text.indexOf("\n");
     const headerLine = newline === -1 ? text : text.slice(0, newline);
@@ -250,13 +250,34 @@ export class SessionIndex {
     const id = uuidv7(nowMs);
     const timestamp = new Date(nowMs).toISOString();
     const forked = { ...header, id, timestamp, cwd, parentSession: record.sessionPath };
+    let body = newline === -1 ? "" : text.slice(newline + 1);
+    if (activePathOnly) {
+      const entries = new Map<string, { raw: string; parentId: string | null }>();
+      let leaf: string | null = null;
+      for (const raw of body.split(/\r?\n/).filter(line => line.trim() !== "")) {
+        const value: unknown = JSON.parse(raw);
+        if (!isRecord(value) || typeof value["id"] !== "string" || (value["parentId"] !== null && typeof value["parentId"] !== "string")) throw new Error("Cannot clone malformed session entries");
+        entries.set(value["id"], { raw, parentId: value["parentId"] });
+        leaf = value["id"];
+      }
+      const branch: string[] = [];
+      const seen = new Set<string>();
+      while (leaf !== null) {
+        if (seen.has(leaf)) throw new Error("Cannot clone a cyclic session");
+        seen.add(leaf);
+        const entry = entries.get(leaf);
+        if (!entry) throw new Error("Cannot clone an orphaned session");
+        branch.push(entry.raw); leaf = entry.parentId;
+      }
+      body = branch.reverse().join("\n") + (branch.length ? "\n" : "");
+    }
     // A fork of an Alpha session is this app's own session: it goes to omo's sessions directory, never into Alpha's store.
     const directory = this.isExternal(record) ? path.join(this.sessionsDir, sessionFolder(cwd)) : path.dirname(record.sessionPath);
     const target = path.join(directory, `${timestamp.replace(/[:.]/g, "-")}_${id}.jsonl`);
     await mkdir(directory, { recursive: true });
     const handle = await open(target, "wx", 0o600);
     try {
-      await handle.writeFile(`${JSON.stringify(forked)}\n${newline === -1 ? "" : text.slice(newline + 1)}`, "utf8");
+      await handle.writeFile(`${JSON.stringify(forked)}\n${body}`, "utf8");
     } finally {
       await handle.close();
     }

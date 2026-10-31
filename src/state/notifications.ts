@@ -234,6 +234,16 @@ export function applyNotification(state: AppState, notification: ServerNotificat
     }
     case "extension_event": {
       const { threadId, name, data } = notification.params;
+      if (name === "terminal_monitor_state") {
+        if (typeof data !== "object" || data === null || !("activeCount" in data) || typeof data.activeCount !== "number" || !Number.isSafeInteger(data.activeCount) || data.activeCount < 0 || !("monitors" in data) || !Array.isArray(data.monitors)) return state;
+        const monitors: import("../../shared/team").MonitorSnapshot["monitors"][number][] = [];
+        for (const value of data.monitors) {
+          if (typeof value !== "object" || value === null || !("id" in value) || typeof value.id !== "string" || !("description" in value) || typeof value.description !== "string" || !("paused" in value) || typeof value.paused !== "boolean" || !("startedAtMs" in value) || typeof value.startedAtMs !== "number" || !Number.isFinite(value.startedAtMs)) return state;
+          monitors.push({ id: value.id, description: value.description, paused: value.paused, startedAtMs: value.startedAtMs });
+        }
+        const activeCount = data.activeCount;
+        return updateConversation(state, threadId, conversation => ({ ...conversation, live: { ...conversation.live, monitors: { activeCount, monitors } } }));
+      }
       if (name === "omo.session.ownership" && typeof data === "object" && data !== null && !Array.isArray(data)) {
         const ownership = data as Record<string, unknown>;
         if (typeof ownership["writable"] !== "boolean") return state;

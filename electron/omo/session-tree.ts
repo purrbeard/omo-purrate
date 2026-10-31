@@ -6,7 +6,7 @@ import { JsonlDecoder } from "./jsonl";
 import { ManagedChild } from "./managed-child";
 import type { StopTimeouts } from "./managed-child";
 
-export type SessionTreeOperation = Extract<SharedOperation, { type: "list" | "navigate" }>;
+export type SessionTreeOperation = Extract<SharedOperation, { type: "list" | "navigate" | "edit" }>;
 
 export interface SessionTreeOptions {
   binary: OmoBinary;
@@ -98,11 +98,23 @@ function plain(markdown: string): string {
 function normalizeTree(value: unknown): SessionTreeResult {
   const { tree, leafId } = parseTree(value);
   const branches = new Map<string, { entryId: string; label: string; active: boolean }>();
+  const nodes: SessionTreeResult["nodes"] = [];
   let activeId: string | null = null;
   const pending = tree.map((node) => ({ node, meaningful: null as TreeNode | null, label: undefined as string | undefined })).reverse();
   while (pending.length) {
     const { node, meaningful: previous, label: previousLabel } = pending.pop()!;
     const message = node.entry["message"];
+    const role = isRecord(message) && typeof message["role"] === "string" ? message["role"] : null;
+    const content = isRecord(message) ? message["content"] : node.entry["content"];
+    const nodeText = text(content);
+    nodes.push({
+      entryId: node.entry.id,
+      parentId: node.entry.parentId,
+      type: node.entry.type,
+      role,
+      label: node.label ?? (plain(nodeText) || role || node.entry.type),
+      ...(node.entry.type === "message" && role === "assistant" ? { text: nodeText } : nodeText ? { text: nodeText } : {}),
+    });
     const conversation = node.entry.type === "custom_message" || (node.entry.type === "message" && isRecord(message) && (message["role"] === "user" || message["role"] === "assistant"));
     const bookkeepingNotice = node.entry.type === "custom_message" && typeof node.entry["customType"] === "string" && /^(omo-model-profile:|senpi-)/.test(node.entry["customType"]);
     const meaningful = conversation && (!bookkeepingNotice || previous === null) ? node : previous;
@@ -117,7 +129,7 @@ function normalizeTree(value: unknown): SessionTreeResult {
     for (const child of [...node.children].reverse()) pending.push({ node: child, meaningful, label });
   }
   for (const branch of branches.values()) branch.active = branch.entryId === activeId;
-  return { leafId, branches: [...branches.values()] };
+  return { leafId, branches: [...branches.values()], nodes };
 }
 
 /** Opening RPC appends runtime bindings; those are not a concurrent conversation edit. */
@@ -169,10 +181,23 @@ export async function readSessionTree(sessionPath: string): Promise<SessionTreeR
   return parseSessionTree(await readFile(sessionPath, "utf8"));
 }
 
-function parseNavigation(value: unknown): Omit<SessionTreeResult, "branches"> {
+function parseNavigation(value: unknown): Pick<SessionTreeResult, "leafId" | "outcome" | "editorText" | "aborted" | "summaryEntryId"> {
   if (!isRecord(value) || !isLeafId(value["leafId"]) || (value["outcome"] !== "navigated" && value["outcome"] !== "cancelled")) throw malformed("navigate_tree");
   if ((value["editorText"] !== undefined && typeof value["editorText"] !== "string") || (value["aborted"] !== undefined && typeof value["aborted"] !== "boolean") || (value["summaryEntryId"] !== undefined && typeof value["summaryEntryId"] !== "string")) throw malformed("navigate_tree");
   return { ...value, leafId: value["leafId"], outcome: value["outcome"] };
+}
+
+function parseEdit(value: unknown): NonNullable<SessionTreeResult["edit"]> {
+  if (!isRecord(value) || !isLeafId(value["leafId"])) throw malformed("edit_assistant_message");
+  if (value["outcome"] === "edited") {
+    if (!isRecord(value["entry"]) || typeof value["entry"]["id"] !== "string") throw malformed("edit_assistant_message");
+    return { outcome: "edited", leafId: value["leafId"], entry: value["entry"] };
+  }
+  if (value["outcome"] === "unchanged") return { outcome: "unchanged", leafId: value["leafId"] };
+  if (value["outcome"] === "cancelled" && (value["aborted"] === undefined || typeof value["aborted"] === "boolean")) {
+    return { outcome: "cancelled", leafId: value["leafId"], ...(value["aborted"] !== undefined ? { aborted: value["aborted"] } : {}) };
+  }
+  throw malformed("edit_assistant_message");
 }
 
 /** The caller must fully stop app-server before opening the same session here. Never starts a turn. */
@@ -244,6 +269,16 @@ export async function runSessionTree(options: SessionTreeOptions): Promise<Sessi
       const navigation = parseNavigation(await request("navigate_tree", { entryId, ...(intent === "resume" ? { intent } : {}), ...(guardedLeafId !== undefined ? { expectedLeafId: guardedLeafId } : {}) }));
       if (navigation.outcome === "navigated") await request("extension_request", { name: "omoui.tree.persist", data: {} });
       result = { ...navigation, ...normalizeTree(await request("get_tree")) };
+    } else if (options.operation.type === "edit") {
+      const { entryId, text, expectedLeafId } = options.operation;
+      const guardedLeafId = navigationLeaf(initialTree, expectedLeafId);
+      const edit = parseEdit(await request("edit_assistant_message", {
+        entryId,
+        text,
+        ...(guardedLeafId !== undefined ? { expectedLeafId: guardedLeafId } : {}),
+      }));
+      if (edit.outcome === "edited") await request("extension_request", { name: "omoui.tree.persist", data: {} });
+      result = { ...normalizeTree(await request("get_tree")), edit };
     }
   } finally {
     await child.stop(options.stopTimeoutsMs ?? { afterStdinEnd: 2_000, afterSigterm: 3_000 });

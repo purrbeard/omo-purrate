@@ -112,6 +112,8 @@ class FakeBridge implements OmoBridgeApi {
   inspectSessions(): ReturnType<OmoBridgeApi["inspectSessions"]> { return Promise.resolve({ holders: {}, missing: [] }); }
   loadContextUsage(): ReturnType<OmoBridgeApi["loadContextUsage"]> { return Promise.resolve({ tokens: null, provider: null, model: null, compacted: false }); }
   exportSession(): ReturnType<OmoBridgeApi["exportSession"]> { return Promise.resolve(null); }
+  exportSessionJsonl(): ReturnType<OmoBridgeApi["exportSessionJsonl"]> { return Promise.resolve(null); }
+  importSessionJsonl(): ReturnType<OmoBridgeApi["importSessionJsonl"]> { return Promise.resolve(null); }
   loadNativeCatalog(): ReturnType<OmoBridgeApi["loadNativeCatalog"]> { return Promise.resolve({ commands: [], contextWindows: {}, error: null }); }
   readonly dagLoads: Array<{ cwd: string; threadId: string }> = [];
   dagRuns: (cwd: string, threadId: string) => Promise<DagRun[]> = async () => [];
@@ -151,6 +153,14 @@ class FakeBridge implements OmoBridgeApi {
   getIphoneStatus(): ReturnType<OmoBridgeApi["getIphoneStatus"]> { return Promise.resolve({ enabled: false, state: "searching", devices: [] }); }
   onIphoneStatus(): () => void { return () => {}; }
   readonly platform = "darwin";
+  readStorageUsage(): ReturnType<OmoBridgeApi["readStorageUsage"]> { return Promise.resolve({ olderThanDays: 30, rows: [], incomplete: false }); }
+  readNativeSettings(): ReturnType<OmoBridgeApi["readNativeSettings"]> { return Promise.resolve({ scope: "global", configPath: "/native/settings.json", revision: "test", values: {} }); }
+  saveNativeSettings(): ReturnType<OmoBridgeApi["saveNativeSettings"]> { return this.readNativeSettings(); }
+  readProjectResources(): ReturnType<OmoBridgeApi["readProjectResources"]> { return Promise.reject(new Error("No project fixture")); }
+  readTeams(): ReturnType<OmoBridgeApi["readTeams"]> { return Promise.resolve([]); }
+  sendTeamMessage(): ReturnType<OmoBridgeApi["sendTeamMessage"]> { return Promise.resolve(); }
+  loadMcpSettings(): ReturnType<OmoBridgeApi["loadMcpSettings"]> { return Promise.resolve({ revision: "fixture", servers: [] }); }
+  saveMcpSettings(): ReturnType<OmoBridgeApi["saveMcpSettings"]> { return Promise.resolve(); }
   readonly calls: Array<{ method: ClientMethod; params: unknown }> = [];
   readonly responses: Array<{ id: RequestId; result: unknown }> = [];
   readonly historyLoads: string[] = [];
@@ -305,7 +315,7 @@ class FakeBridge implements OmoBridgeApi {
       const index = history.turns.findIndex(turn => turn.items.some(item => item.type === "userMessage" && item.content.some(input => input.type === "text" && input.text === operation.point.text) && matches++ === operation.point.occurrence));
       this.history = async () => ({ ...history, turns: history.turns.slice(0, index) });
     }
-    return { leafId: "leaf", branches: [], outcome: "navigated" };
+    return { leafId: "leaf", branches: [], nodes: [], outcome: "navigated" };
   }
   async pickDirectory(): Promise<string | null> {
     return null;
@@ -825,7 +835,7 @@ describe("createActions", () => {
     context.store.dispatch({ type: "composer/modelSelected", modelId: "opencodex/opencode-go/deepseek-v4.1-flash", effort: "high" });
     expect(await context.actions.sendMessage("hello")).toBe(true);
     expect(context.bridge.methods().slice(-2)).toEqual(["thread/settings/update", "turn/start"]);
-    expect(context.bridge.calls.at(-2)?.params).toEqual({ threadId: THREAD_ID, model: "opencodex/opencode-go/deepseek-v4.1-flash", effort: "high" });
+    expect(context.bridge.calls.at(-2)?.params).toEqual({ threadId: THREAD_ID, model: "opencodex/opencode-go/deepseek-v4.1-flash", effort: "high", effortScope: "turn" });
   });
 
   it("fails the message instead of running it on another model when the thread settings are refused", async () => {
@@ -1509,13 +1519,25 @@ describe("branching from a user message", () => {
   it("keeps the visible branch when native navigation is cancelled or fails", async () => {
     const context = await opened();
     const source = context.store.getState().conversations[THREAD_ID];
-    context.bridge.sessionTree = async () => ({ leafId: "original", branches: [], outcome: "cancelled" });
+    context.bridge.sessionTree = async () => ({ leafId: "original", branches: [], nodes: [], outcome: "cancelled" });
     await expect(context.actions.switchBranch(THREAD_ID, "alternate", "original")).resolves.toBe(false);
     expect(context.store.getState().conversations[THREAD_ID]).toBe(source);
     context.bridge.sessionTree = async () => { throw new Error("stale leaf"); };
     await expect(context.actions.switchBranch(THREAD_ID, "alternate", "original")).resolves.toBe(false);
     expect(context.store.getState().conversations[THREAD_ID]).toBe(source);
     expect(context.bridge.methods()).not.toContain("turn/start");
+  });
+
+  it("uses the original session path when reconnect hydration clears its metadata during tree edits", async () => {
+    const context = await opened();
+    context.bridge.sessionTree = async () => {
+      const thread = context.store.getState().threads[THREAD_ID];
+      if (!thread) throw new Error("Missing thread");
+      context.store.dispatch({ type: "thread/opened", thread: { ...thread, path: null, createdAt: 1, turns: [], source: thread.source ?? "unknown" }, resumed: false });
+      return { leafId: "edited", branches: [], nodes: [], edit: { outcome: "edited", leafId: "edited", entry: { id: "edited" } } };
+    };
+    await expect(context.actions.switchBranch(THREAD_ID, "old", "original", "resume", "edited")).resolves.toBe(true);
+    expect(context.bridge.historyLoads.at(-1)).toBe(SESSION_PATH);
   });
 
   it("reports a message that the saved session does not hold instead of branching", async () => {

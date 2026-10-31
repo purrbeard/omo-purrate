@@ -102,7 +102,7 @@ describe("session tree", () => {
       child.stdout.emit("data", Buffer.from(JSON.stringify({ type: "extension_ui_request", id: "notice", method: "notify", message: "No model available" }) + "\n"));
       reply(tree);
     });
-    await expect(runSessionTree(fake.options)).resolves.toEqual({
+    await expect(runSessionTree(fake.options)).resolves.toMatchObject({
       leafId: "persisted",
       branches: [
         { entryId: "original", label: "원래 응답", active: false },
@@ -213,15 +213,15 @@ describe("session tree", () => {
       entry("old", "root", "assistant"), entry("alternate", "root", "user"),
       custom("oauth", "alternate"), custom("persisted", "old"),
     ].map((value) => JSON.stringify(value)).join("\n") + '\n{"type":';
-    expect(parseSessionTree(source)).toEqual({ leafId: "persisted", branches: [
+    expect(parseSessionTree(source)).toMatchObject({ leafId: "persisted", branches: [
       { entryId: "old", label: "old", active: true }, { entryId: "alternate", label: "alternate", active: false },
     ] });
-    expect(parseSessionTree("")).toEqual({ leafId: null, branches: [] });
+    expect(parseSessionTree("")).toEqual({ leafId: null, branches: [], nodes: [] });
   });
 
   it("reads the session file directly using UTF-8 without acquiring its process owner", async () => {
     vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(entry("user", null, "user", "local branch")));
-    await expect(readSessionTree("/sessions/local.jsonl")).resolves.toEqual({ leafId: "user", branches: [{ entryId: "user", label: "local branch", active: true }] });
+    await expect(readSessionTree("/sessions/local.jsonl")).resolves.toMatchObject({ leafId: "user", branches: [{ entryId: "user", label: "local branch", active: true }] });
     expect(readFile).toHaveBeenCalledWith("/sessions/local.jsonl", "utf8");
   });
 
@@ -282,5 +282,81 @@ describe("session tree", () => {
     const callback = handle.mock.calls[0]?.[1] as (data: unknown) => void;
     callback({});
     expect(appendEntry).toHaveBeenCalledWith("omoui.tree.selection", {});
+  });
+});
+
+describe("whole session tree and assistant edits", () => {
+  it("exposes intermediate entries and metadata with native identities while retaining branch endpoints", () => {
+    const source = [
+      entry("u", null, "user", "question"),
+      entry("a", "u", "assistant", [{ type: "text", text: "first" }, { type: "text", text: "second" }]),
+      entry("u2", "a", "user", "follow up"),
+      custom("tail", "u2"),
+    ].map(value => JSON.stringify(value)).join("\n");
+    const result = parseSessionTree(source);
+    expect(result.nodes).toEqual([
+      { entryId: "u", parentId: null, type: "message", role: "user", label: "question", text: "question" },
+      { entryId: "a", parentId: "u", type: "message", role: "assistant", label: "first second", text: "first\nsecond" },
+      { entryId: "u2", parentId: "a", type: "message", role: "user", label: "follow up", text: "follow up" },
+      { entryId: "tail", parentId: "u2", type: "custom", role: null, label: "custom" },
+    ]);
+    expect(result.branches).toEqual([{ entryId: "u2", label: "follow up", active: true }]);
+  });
+
+  it("forwards the guarded edit, persists only the edited outcome, and returns the new tree", async () => {
+    const initial = { leafId: "binding", tree: [node(entry("answer", null, "assistant", "old"), [node(custom("binding", "answer"))])] };
+    const edited = entry("new-answer", null, "assistant", "corrected");
+    const final = { leafId: "marker", tree: [...initial.tree, node(edited, [node(custom("marker", "new-answer"))])] };
+    let persisted = false;
+    const fake = fakeRunner((frame, reply) => {
+      if (frame["type"] === "edit_assistant_message") reply({ outcome: "edited", entry: edited, leafId: "new-answer" });
+      else if (frame["type"] === "extension_request") { persisted = true; reply({}); }
+      else reply(persisted ? final : initial);
+    });
+    fake.options.operation = { type: "edit", entryId: "answer", text: "corrected", expectedLeafId: "answer" };
+    const result = await runSessionTree(fake.options);
+    expect(fake.frames).toEqual([
+      { id: "tree-1", type: "get_tree" },
+      { id: "tree-2", type: "edit_assistant_message", entryId: "answer", text: "corrected", expectedLeafId: "binding" },
+      { id: "tree-3", type: "extension_request", name: "omoui.tree.persist", data: {} },
+      { id: "tree-4", type: "get_tree" },
+    ]);
+    expect(result.edit).toEqual({ outcome: "edited", entry: edited, leafId: "new-answer" });
+    expect(result.leafId).toBe("marker");
+    expect(result.nodes.map(node => node.entryId)).toEqual(["answer", "binding", "new-answer", "marker"]);
+    expect(result.branches.map(branch => branch.entryId)).toEqual(["answer", "new-answer"]);
+  });
+
+  it.each(["unchanged", "cancelled"] as const)("does not persist an %s edit", async (outcome) => {
+    const edit = outcome === "cancelled"
+      ? { outcome, leafId: "persisted", aborted: true }
+      : { outcome, leafId: "persisted" };
+    const fake = fakeRunner((frame, reply) => reply(frame["type"] === "edit_assistant_message" ? edit : tree));
+    fake.options.operation = { type: "edit", entryId: "original", text: "원래 응답", expectedLeafId: "" };
+    const result = await runSessionTree(fake.options);
+    expect(result.edit).toEqual(edit);
+    expect(fake.frames.map(frame => frame["type"])).toEqual(["get_tree", "edit_assistant_message", "get_tree"]);
+    expect(fake.frames[1]?.["expectedLeafId"]).toBe("");
+  });
+
+  it("preserves stale edit errors without writing a selection marker", async () => {
+    const fake = fakeRunner((frame, reply, child) => {
+      if (frame["type"] === "get_tree") reply(tree);
+      else child.stdout.emit("data", Buffer.from(`${JSON.stringify({
+        id: frame["id"], type: "response", command: "edit_assistant_message",
+        success: false, error: "leaf moved", errorCode: "stale_leaf", errorData: { leafId: "other" },
+      })}\n`));
+    });
+    fake.options.operation = { type: "edit", entryId: "original", text: "원래 응답", expectedLeafId: "old" };
+    await expect(runSessionTree(fake.options)).rejects.toMatchObject({ command: "edit_assistant_message", errorCode: "stale_leaf", errorData: { leafId: "other" } });
+    expect(fake.frames.map(frame => frame["type"])).toEqual(["get_tree", "edit_assistant_message"]);
+    expect(fake.exited).toBe(true);
+  });
+
+  it("rejects an edited response without an entry instead of persisting it", async () => {
+    const fake = fakeRunner((frame, reply) => reply(frame["type"] === "edit_assistant_message" ? { outcome: "edited", leafId: "new" } : tree));
+    fake.options.operation = { type: "edit", entryId: "original", text: "new" };
+    await expect(runSessionTree(fake.options)).rejects.toMatchObject({ command: "edit_assistant_message", errorCode: "malformed_response" });
+    expect(fake.frames.map(frame => frame["type"])).toEqual(["get_tree", "edit_assistant_message"]);
   });
 });

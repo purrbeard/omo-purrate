@@ -93,6 +93,7 @@ export interface SessionAnnotations {
 }
 
 export interface ThreadLiveState {
+  monitors?: import("../../shared/team").MonitorSnapshot;
   freshness: "unattached" | "live" | "stale";
   runs: Record<string, DagRun>;
   runOrder: string[];

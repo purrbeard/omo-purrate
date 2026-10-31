@@ -160,5 +160,8 @@ describe("NativeAppServerClient records", () => {
     deliver({ type: "commands_changed" });
     deliver({ type: "loaded_surfaces_changed" });
     expect(methods(seen, "skills/changed")).toEqual([{ method: "skills/changed", params: {} }, { method: "skills/changed", params: {} }]);
+    expect(methods(seen, "mcpServer/startupStatus/updated")).toMatchObject([
+      { params: { threadId: "thread-1" } }, { params: { threadId: "thread-1" } },
+    ]);
   });
 });

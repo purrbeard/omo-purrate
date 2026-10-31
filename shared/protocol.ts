@@ -409,7 +409,7 @@ export interface ClientRequestMap {
     result: { data: Thread[]; nextCursor: string | null };
   };
   "thread/start": { params: { cwd: string; model?: string | null }; result: ThreadSessionResult };
-  "thread/fork": { params: { threadId: string; cwd: string }; result: ThreadSessionResult };
+  "thread/fork": { params: { threadId: string; cwd: string; activePathOnly?: boolean }; result: ThreadSessionResult };
   "thread/resume": { params: { threadId: string }; result: ThreadSessionResult };
   "thread/read": { params: { threadId: string; includeTurns?: boolean }; result: { thread: Thread } };
   "thread/name/set": { params: { threadId: string; name: string }; result: Record<string, never> };
@@ -417,7 +417,7 @@ export interface ClientRequestMap {
   "thread/unarchive": { params: { threadId: string }; result: { status: ThreadStatus } };
   "thread/delete": { params: { threadId: string }; result: Record<string, never> };
   /** omo takes a turn's model and effort from the thread settings; it drops the same fields on turn/start. */
-  "thread/settings/update": { params: { threadId: string; model?: string; effort?: ReasoningEffort }; result: Record<string, never> };
+  "thread/settings/update": { params: { threadId: string; model?: string; effort?: ReasoningEffort; effortScope?: "turn" }; result: Record<string, never> };
   "turn/start": {
     params: {
       threadId: string;

@@ -1,5 +1,9 @@
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { searchThreadWorkspaceFiles } from "../../electron/ipc";
+import { createSessionFileResolver, searchThreadWorkspaceFiles } from "../../electron/ipc";
+import { quarantineSync } from "../../scripts/quarantine-temp.mjs";
 
 vi.mock("electron", () => ({
   app: { name: "OmO UI", isPackaged: false },
@@ -22,4 +26,23 @@ describe("searchThreadWorkspaceFiles", () => {
     await expect(searchThreadWorkspaceFiles(readThread, "thread-1", "/work/project", 5)).rejects.toThrow(TypeError);
     expect(readThread).not.toHaveBeenCalled();
   });
+});
+
+it("allows Alpha history reads but refuses changes until it has been copied into the native store", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "purrate-alpha-boundary-"));
+  const agent = path.join(root, "agent");
+  const alpha = path.join(root, ".omo", "desktop", "userdata", "omo-sessions");
+  await mkdir(path.join(agent, "sessions"), { recursive: true });
+  await mkdir(alpha, { recursive: true });
+  const external = path.join(alpha, "alpha.jsonl"), own = path.join(agent, "sessions", "own.jsonl");
+  const original = '{"type":"session","id":"alpha"}\n';
+  await writeFile(external, original); await writeFile(own, original);
+  vi.stubEnv("OMO_UI_ALPHA_HOME", path.join(root, ".omo", "desktop"));
+  try {
+    const supervisor = { initializeResult: { codexHome: agent } };
+    await expect(createSessionFileResolver(supervisor, root)(external)).resolves.toBe(external);
+    await expect(createSessionFileResolver(supervisor, root, true)(external)).rejects.toThrow("Copy this Alpha session");
+    await expect(createSessionFileResolver(supervisor, root, true)(own)).resolves.toBe(own);
+    expect(await readFile(external, "utf8")).toBe(original);
+  } finally { vi.unstubAllEnvs(); quarantineSync(root, { recursive: true, force: true }); }
 });

@@ -26,6 +26,18 @@ function opened() {
   return reduce(createInitialState(), { type: "thread/activated", threadId: "T" });
 }
 
+it("routes monitor snapshots to their session, rejects malformed values and clears them on reconnect", () => {
+  const snapshot = { activeCount: 1, monitors: [{ id: "bash_1", description: "own watch", paused: false, startedAtMs: 123 }] };
+  const state = extension(opened(), "terminal_monitor_state", snapshot);
+  expect(state.conversations["T"]?.live.monitors).toEqual(snapshot);
+  expect(extension(state, "terminal_monitor_state", { ...snapshot, activeCount: -1 })).toBe(state);
+  expect(extension(state, "terminal_monitor_state", { ...snapshot, monitors: [{ ...snapshot.monitors[0], paused: "yes" }] })).toBe(state);
+  const disconnected = reduce(state, { type: "bridge/status", status: { state: "restarting", omo: null, userAgent: null, message: null, stderrTail: null, exitCode: null, restartAttempt: 1, installCommand: OMO_INSTALL_COMMAND } });
+  if (!disconnected.bridge) throw new Error("Missing bridge status");
+  const reconnected = reduce(disconnected, { type: "bridge/status", status: { ...disconnected.bridge, state: "connected" } });
+  expect(reconnected.conversations["T"]?.live.monitors).toBeUndefined();
+});
+
 describe("live wire parsing", () => {
   it("validates full DAG records while retaining unfamiliar statuses", () => {
     expect(parseDagUpdated({ parent_session_id: "T", runs: [{ ...run, status: "future" }], truncated_runs: 3 })?.runs[0]?.status).toBe("future");

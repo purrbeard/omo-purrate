@@ -368,7 +368,7 @@ export class NativeAppServerClient {
       case "thread/read":
         return this.readThread(requiredString(input, "threadId"), input["includeTurns"] === true);
       case "thread/fork":
-        return this.forkThread(requiredString(input, "threadId"), typeof input["cwd"] === "string" ? input["cwd"] : null);
+        return this.forkThread(requiredString(input, "threadId"), typeof input["cwd"] === "string" ? input["cwd"] : null, input["activePathOnly"] === true);
       case "thread/name/set":
         return this.setName(requiredString(input, "threadId"), requiredString(input, "name"));
       case "thread/settings/update":
@@ -457,6 +457,7 @@ export class NativeAppServerClient {
     const handle = record["sessionId"];
     if (typeof handle !== "string") return;
     if (this.utilityHandles.has(handle)) {
+      if (record.type === "loaded_surfaces_changed") this.emit({ method: "mcpServer/startupStatus/updated", params: {} });
       if (record.type === "extension_ui_request" && ["select", "confirm", "input", "editor", "question"].includes(String(record["method"]))) {
         this.connection.write({ type: "extension_ui_response", sessionId: handle, id: record["id"], cancelled: true });
       }
@@ -537,8 +538,11 @@ export class NativeAppServerClient {
         return;
       }
       case "commands_changed":
+        this.emit({ method: "skills/changed", params: {} });
+        return;
       case "loaded_surfaces_changed":
         this.emit({ method: "skills/changed", params: {} });
+        this.emit({ method: "mcpServer/startupStatus/updated", params: { threadId: loaded.threadId } });
         return;
       case "agent_end":
         loaded.projector.handle(record);
@@ -727,13 +731,13 @@ export class NativeAppServerClient {
     return { thread: { ...thread, turns } };
   }
 
-  private async forkThread(threadId: string, cwd: string | null): Promise<ThreadSessionResult> {
+  private async forkThread(threadId: string, cwd: string | null, activePathOnly: boolean): Promise<ThreadSessionResult> {
     const record = await this.index.find(threadId);
     if (record === null) throw threadNotFound(threadId);
-    const target = await this.index.fork(record, cwd ?? record.cwd);
+    const target = await this.index.fork(record, cwd ?? record.cwd, Date.now(), activePathOnly);
     const loaded = await this.openSession({ sessionPath: target, cwd: cwd ?? record.cwd }, cwd ?? record.cwd);
     // The removed app-server titled a fork "<source> (fork)" so the two rows stay apart in the sidebar.
-    const name = record.name === null ? null : `${record.name} (fork)`;
+    const name = record.name === null ? null : `${record.name} (${activePathOnly ? "clone" : "fork"})`;
     if (name !== null) await this.command(loaded.handle, "set_session_name", { name });
     const thread = { ...await this.thread(loaded.threadId), ...(name === null ? {} : { name }), forkedFromId: threadId };
     this.emit({ method: "thread/started", params: { thread } });
@@ -830,7 +834,7 @@ export class NativeAppServerClient {
       await this.command(loaded.handle, "set_model", model);
     }
     if (typeof input["effort"] === "string") {
-      await this.command(loaded.handle, "set_thinking_level", { level: input["effort"] === "none" ? "off" : input["effort"] });
+      await this.command(loaded.handle, "set_thinking_level", { level: input["effort"] === "none" ? "off" : input["effort"], ...(input["effortScope"] === "turn" ? { scope: "turn" } : {}) });
     }
     return {};
   }

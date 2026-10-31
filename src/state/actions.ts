@@ -146,13 +146,13 @@ export interface AppActions {
    * Edits or rerolls in the native session tree, preserving original answers and the message's images.
    */
   branchFrom(threadId: string, turnId: string, itemId: string, text: string, name: string): Promise<boolean>;
-  switchBranch(threadId: string, entryId: string, expectedLeafId: string | null): Promise<boolean>;
+  switchBranch(threadId: string, entryId: string, expectedLeafId: string | null, intent?: "select" | "resume", text?: string): Promise<boolean>;
   renameThread(threadId: string, name: string): Promise<void>;
   deleteThread(threadId: string): Promise<void>;
   archiveThread(threadId: string): Promise<void>;
   unarchiveThread(threadId: string): Promise<void>;
   listArchivedThreads(): Promise<Thread[]>;
-  forkThread(threadId: string): Promise<string>;
+  forkThread(threadId: string, activePathOnly?: boolean): Promise<string>;
   pinThread(threadId: string, pinned: boolean): Promise<void>;
   /** Track A: archives every id (one failure does not stop the rest) and shows an Undo notice for the ones that worked. */
   archiveThreads(threadIds: readonly string[]): Promise<BulkResult>;
@@ -574,7 +574,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
   const applyThreadSettings = async (threadId: string, model: string | null, effort: ReasoningEffort | null): Promise<void> => {
     if (model === null && effort === null) return;
     const update = (withEffort: boolean) => bridge.request("thread/settings/update", {
-      threadId, ...(model === null ? {} : { model }), ...(withEffort && effort !== null ? { effort } : {}),
+      threadId, ...(model === null ? {} : { model }), ...(withEffort && effort !== null ? { effort, effortScope: "turn" } : {}),
     });
     // Keeps the session omo reported in step with what was just applied, so the next turn is compared against it.
     const applied = (appliedEffort: ReasoningEffort | null): void => {
@@ -1071,10 +1071,10 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       await bridge.request("thread/unarchive", { threadId });
       await refreshThreads();
     },
-    async forkThread(threadId) {
+    async forkThread(threadId, activePathOnly = false) {
       const thread = store.getState().threads[threadId];
       if (thread === undefined) throw new Error(`Unknown session: ${threadId}`);
-      const result = await bridge.request("thread/fork", { threadId, cwd: thread.cwd });
+      const result = await bridge.request("thread/fork", { threadId, cwd: thread.cwd, ...(activePathOnly ? { activePathOnly: true } : {}) });
       if (!isThread(result.thread)) throw new Error("omo returned a malformed thread/fork result");
       const preferences = await bridge.getPreferences();
       uiState.setPreferences(await bridge.setPreferences({ managedThreadIds: [...new Set([...preferences.managedThreadIds, result.thread.id])] }));
@@ -1169,13 +1169,14 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       }
     },
 
-    async switchBranch(threadId, entryId, expectedLeafId) {
+    async switchBranch(threadId, entryId, expectedLeafId, intent = "resume", text) {
+      const path = store.getState().threads[threadId]?.path;
+      if (!path) return false;
       try {
-        const result = await bridge.sessionTree(threadId, { type: "navigate", entryId, intent: "resume", expectedLeafId });
-        if (result.outcome === "cancelled") return false;
-        const path = store.getState().threads[threadId]?.path;
-        if (!path) return false;
+        const result = await bridge.sessionTree(threadId, text === undefined ? { type: "navigate", entryId, intent, expectedLeafId } : { type: "edit", entryId, text, expectedLeafId });
+        if (result.outcome === "cancelled" || result.edit?.outcome === "cancelled") return false;
         replaceHistory(threadId, await bridge.loadHistory(path));
+        if (result.editorText !== undefined && store.getState().activeThreadId === threadId) setComposerText(result.editorText);
         return true;
       } catch (error) {
         fail(error, threadId);
