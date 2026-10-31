@@ -6,6 +6,7 @@ import { Badge, Button } from "../kit";
 import { errorMessage } from "./diagnostics";
 import { ImportTable, useImportCandidates } from "./ImportTable";
 import { MissingSessions } from "./MissingSessions";
+import { uiState } from "../ui-state";
 import { SectionHeading } from "./SectionHeading";
 import { ErrorText, SettingsCard, SettingsRow, ui } from "./SettingsCard";
 
@@ -19,6 +20,24 @@ export function ImportSection() {
   const state = useImportCandidates();
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<number | null>(null);
+
+  const importJsonl = async (): Promise<void> => {
+    setBusy(true);
+    setDone(null);
+    state.setError(null);
+    try {
+      const saved = await window.omo.importSessionJsonl();
+      if (saved !== null) {
+        uiState.setPreferences(await window.omo.getPreferences());
+        await actions.refreshThreads();
+        setDone(1);
+      }
+    } catch (cause) {
+      state.setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const importChosen = async (): Promise<void> => {
     setBusy(true);
@@ -38,6 +57,11 @@ export function ImportSection() {
   return (
     <section className={ui.section} data-testid="settings-import" aria-busy={state.loading || busy}>
       <SectionHeading title={t("shell.settings.nav.import")} intro={t("shell.settings.import.intro")} />
+      <SettingsCard>
+        <SettingsRow title={t("shell.settings.import.jsonlTitle")} description={t("shell.settings.import.jsonlHint")}>
+          <Button size="sm" disabled={busy} data-testid="settings-import-jsonl" onClick={() => void importJsonl()}>{t("shell.settings.import.jsonlAction")}</Button>
+        </SettingsRow>
+      </SettingsCard>
       <SettingsCard>
         <SettingsRow title={t("shell.settings.import.syncTitle")} description={t("shell.settings.import.syncHint")}>
           <Badge variant="outline" data-testid="settings-import-sync">{t("shell.settings.import.syncOff")}</Badge>

@@ -1,8 +1,8 @@
 import { memo, useContext, useState, type ReactElement, type ReactNode } from "react";
 import { Download, Ellipsis, PanelLeft } from "lucide-react";
-import { useT } from "../../i18n";
+import { useLocale, useT } from "../../i18n";
 import type { ThreadSummary } from "../../state";
-import { StoreContext } from "../app-context";
+import { StoreContext, useActions, useAppSelector } from "../app-context";
 import { WorkspaceBadge } from "../sidebar/WorkspaceBadge";
 import { TESTID } from "../testids";
 import { shownTab, uiState, useUiState } from "../ui-state";
@@ -28,16 +28,20 @@ function HeaderTooltip({ label, align, children }: { label: string; align: "cent
 /** The header's overflow menu: exporting the active session through omo's own HTML writer. */
 function HeaderMenu({ threadId }: { threadId: string }) {
   const t = useT();
+  const ko = useLocale() === "ko";
+  const actions = useActions();
+  const running = useAppSelector(state => state.conversations[threadId]?.activeTurnId != null);
   const store = useContext(StoreContext);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const say = (level: "info" | "error", message: string): void => {
     store?.dispatch({ type: "notice/pushed", notice: { id: crypto.randomUUID(), level, message, threadId } });
   };
-  const exportSession = (): void => {
+  const exportSession = (format: "html" | "jsonl" = "html"): void => {
     if (busy) return;
     setBusy(true);
-    window.omo.exportSession(threadId).then((saved) => {
+    const save = format === "jsonl" ? window.omo.exportSessionJsonl(threadId) : window.omo.exportSession(threadId);
+    save.then((saved) => {
       if (saved !== null) say("info", t("conversation.export.done", { path: saved.path }));
     }).catch((error: unknown) => {
       say("error", t("conversation.export.failed", { message: error instanceof Error ? error.message : String(error) }));
@@ -49,8 +53,15 @@ function HeaderMenu({ threadId }: { threadId: string }) {
         <Ellipsis className="size-4" aria-hidden />
       </Menu.Trigger>
       <Menu.Content align="end" side="bottom">
-        <Menu.Item icon={<Download aria-hidden />} disabled={busy} data-testid={TESTID.headerExport} onClick={exportSession}>
+        <Menu.Item disabled={busy || running} data-testid="header-clone" onClick={() => {
+          setBusy(true);
+          void actions.forkThread(threadId, true).catch(error => say("error", error instanceof Error ? error.message : String(error))).finally(() => setBusy(false));
+        }}>{ko ? "현재 경로만 복제" : "Clone active path"}</Menu.Item>
+        <Menu.Item icon={<Download aria-hidden />} disabled={busy} data-testid={TESTID.headerExport} onClick={() => exportSession()}>
           {t("conversation.export.label")}
+        </Menu.Item>
+        <Menu.Item icon={<Download aria-hidden />} disabled={busy} data-testid="header-export-jsonl" onClick={() => exportSession("jsonl")}>
+          {t("conversation.export.jsonl")}
         </Menu.Item>
       </Menu.Content>
     </Menu.Root>

@@ -3,11 +3,12 @@ import type { SessionTreeResult } from "../../../shared/ipc";
 import clsx from "clsx";
 import { Pencil, RefreshCw } from "lucide-react";
 import type { UserMessageItem } from "../../../shared/protocol";
-import { useT } from "../../i18n";
+import { useLocale, useT } from "../../i18n";
 import { useActions, useAppSelector } from "../app-context";
 import { Button, focusRing } from "../kit";
 import { TESTID } from "../testids";
 import { resendOf } from "./resend";
+import { SessionTreeDialog } from "./SessionTreeDialog";
 
 /** Where a branch starts: the thread and the turn that holds the user message. */
 export interface BranchAt {
@@ -28,12 +29,14 @@ export function SessionBranches({ threadId }: { threadId: string }) {
   const bridge = window.omo;
   const actions = useActions();
   const t = useT();
+  const ko = useLocale() === "ko";
   const lastTurn = useAppSelector(state => state.conversations[threadId]?.turns.at(-1));
   const loaded = useAppSelector(state => state.conversations[threadId]?.historyState === "loaded");
   const running = useAppSelector(state => state.conversations[threadId]?.activeTurnId !== null);
   const [tree, setTree] = useState<SessionTreeResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!loaded) return;
     let cancelled = false;
@@ -41,9 +44,18 @@ export function SessionBranches({ threadId }: { threadId: string }) {
     return () => { cancelled = true; };
   }, [bridge, threadId, loaded, lastTurn?.id, lastTurn?.status, revision]);
   // A session with no turns has no answers to branch; never show a tree read before this thread had any.
-  if (!tree || tree.branches.length < 2 || lastTurn === undefined) return null;
+  if (!tree || lastTurn === undefined) return null;
+  const change = (entryId: string, intent: "select" | "resume", text?: string): void => {
+    setBusy(true);
+    void actions.switchBranch(threadId, entryId, tree.leafId, intent, text).then(changed => {
+      if (changed) setOpen(false);
+    }).finally(() => { setBusy(false); setRevision(value => value + 1); });
+  };
   return (
+    <>
     <label className="flex min-w-0 items-center gap-2 px-4 py-2 text-xs leading-5 text-muted-foreground">
+      <Button variant="outline" size="sm" data-testid="session-tree-open" disabled={running || busy} onClick={() => setOpen(true)}>{ko ? "대화 트리" : "Session tree"}</Button>
+      {tree.branches.length >= 2 && <>
       <span>{t("conversation.branch.versions")}</span>
       <select className={clsx("m-0 min-w-0 max-w-[min(480px,70%)] truncate rounded-md border border-solid border-input bg-background px-2 py-1 text-xs leading-5 text-foreground [font-family:inherit]", focusRing)} data-testid="session-branches" data-thread-id={threadId} aria-label={t("conversation.branch.versions")} disabled={running || busy}
         value={tree.branches.find(branch => branch.active)?.entryId ?? ""}
@@ -53,7 +65,11 @@ export function SessionBranches({ threadId }: { threadId: string }) {
         }}>
         {tree.branches.map((branch, index) => <option key={branch.entryId} value={branch.entryId}>{index + 1}. {branch.label}</option>)}
       </select>
+      </>}
     </label>
+    <SessionTreeDialog open={open} nodes={tree.nodes} leafId={tree.leafId} busy={busy} onClose={() => setOpen(false)}
+      onSelect={(entryId, intent) => change(entryId, intent)} onEdit={(entryId, text) => change(entryId, "resume", text)} />
+    </>
   );
 }
 
