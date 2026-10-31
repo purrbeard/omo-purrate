@@ -37,7 +37,7 @@ function rows(value: unknown, mapping = false): ModelRoute[] {
 }
 export async function readModelRouting(home: string): Promise<ModelRoutingSettings> {
   const config = await load(home);
-  const native = config.value["[senpi]"];
+  const native = config.value["[native]"] ?? config.value["[senpi]"];
   if (native !== undefined && !record(native)) throw new Error("Invalid native model configuration.");
   const view = { ...config.value, ...(record(native) ? native : {}) };
   for (const key of ["categories", "agents", "models"]) {
@@ -70,7 +70,8 @@ export async function saveModelRouting(home: string, input: unknown): Promise<Mo
   const settings = parseInput(input);
   const config = await load(home);
   // Updates belong in the native block. Removed mappings must also clear root targets to prevent fallback.
-  const previous = config.value["[senpi]"];
+  const block = Object.hasOwn(config.value, "[native]") || !Object.hasOwn(config.value, "[senpi]") ? "[native]" : "[senpi]";
+  const previous = config.value[block];
   if (previous !== undefined && !record(previous)) throw new Error("Invalid native model configuration.");
   const native: Record<string, unknown> = record(previous) ? { ...previous } : {};
   const removedMappings: string[] = [];
@@ -124,7 +125,7 @@ export async function saveModelRouting(home: string, input: unknown): Promise<Mo
     }
   }
   for (const key of ["categories", "agents", "models"] as const) {
-    output = applyEdits(output, modify(output, ["[senpi]", key], native[key], {
+    output = applyEdits(output, modify(output, [block, key], native[key], {
       formattingOptions: { insertSpaces: true, tabSize: 2, eol: "\n" },
     }));
   }

@@ -6,6 +6,18 @@ import JSON5 from "json5";
 import { readModelRouting, saveModelRouting } from "../../electron/omo/model-routing";
 
 describe("native model routing", () => {
+  it("prefers the current native block over the legacy alias and saves only to the effective block", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "omo-routes-native-"));
+    await mkdir(path.join(home, ".omo"));
+    const file = path.join(home, ".omo", "omo.jsonc");
+    const original = { "[senpi]": { agents: { librarian: { models: ["legacy"] } } }, "[native]": { agents: { librarian: { models: ["current"], prompt_append: "keep" } } } };
+    await writeFile(file, JSON.stringify(original));
+    expect((await readModelRouting(home)).agents).toEqual([{ name: "librarian", models: ["current"] }]);
+    await saveModelRouting(home, { categories: [], agents: [{ name: "librarian", models: ["next"] }], mappings: [] });
+    const result = JSON5.parse(await readFile(file, "utf8"));
+    expect(result["[senpi]"]).toEqual(original["[senpi]"]);
+    expect(result["[native]"].agents.librarian).toEqual({ models: ["next"], prompt_append: "keep" });
+  });
   it("preserves JSONC comments outside model chains while retaining the native routing block", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "omo-routes-comments-"));
     await mkdir(path.join(home, ".omo"));
