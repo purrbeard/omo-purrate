@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { processStartTimes, SessionHolders } from "../../electron/omo/session-holders";
+import { observeProcessExit, processStartTimes, SessionHolders } from "../../electron/omo/session-holders";
 import type { ObserveProcessExit } from "../../electron/omo/session-holders";
 
 function signal() {
@@ -73,12 +73,15 @@ describe("SessionHolders event lifecycle", () => {
       const fixture = await seed(pid, startedAtMs!);
       const before = await readFile(fixture.file, "utf8");
       const changed = signal();
-      const holders = new SessionHolders({ ownPids: () => [] });
+      const observedExit = signal();
+      const holders = new SessionHolders({ ownPids: () => [], observeExit: (pid, startedAtMs, notify) =>
+        observeProcessExit(pid, startedAtMs, () => { notify(); observedExit.resolve(); }) });
       stop = holders.watch(fixture.session.sessionPath, changed.resolve);
       expect((await holders.lookup([fixture.session]))["owner"]).toHaveLength(1);
       child.stdin.write("exit\n");
       await bounded(changed.promise);
       await bounded(childExit);
+      await bounded(observedExit.promise);
       expect(await readFile(fixture.file, "utf8")).toBe(before);
       expect(await holders.lookup([fixture.session])).toEqual({});
     } finally {
