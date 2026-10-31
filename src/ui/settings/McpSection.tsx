@@ -86,6 +86,7 @@ export function McpSection() {
               </div>
               {server.serverInfo !== null && <p className={ui.muted}>{t("shell.settings.mcp.version", { version: server.serverInfo.version })}</p>}
               {status === "needs_auth" && <p className={ui.muted}>{t("shell.settings.mcp.loginHint")}</p>}
+              {server.lastError !== undefined && <p className="text-sm leading-5 text-destructive wrap-anywhere" data-testid="mcp-server-error">{server.lastError}</p>}
               {server.tools.length === 0 ? <p className={ui.muted}>{t("shell.settings.mcp.tools", { count: server.toolCount ?? 0 })}</p> : (
                 <details className="text-sm leading-5" data-testid={TESTID.mcpServerTools}>
                   <summary className="cursor-pointer text-muted-foreground">{t("shell.settings.mcp.tools", { count: server.tools.length })}</summary>

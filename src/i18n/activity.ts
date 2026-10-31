@@ -1,6 +1,9 @@
 export const messages = {
   en: {
     "activity.task.queued": "Queued",
+    "activity.guidance": "Add guidance",
+    "activity.cancelNode": "Cancel node",
+    "activity.resumeParent": "Use Resume in the parent conversation to restart the paused run.",
     "activity.returnMain": "Back to main conversation",
     "activity.agentConversationShown": "Agent conversation and execution records are shown in the center.",
     "activity.agentSelectHint": "Select an agent to view its conversation or recorded work.",
@@ -116,6 +119,9 @@ export const messages = {
   },
   ko: {
     "activity.task.queued": "대기 중",
+    "activity.guidance": "지침 추가",
+    "activity.cancelNode": "노드 취소",
+    "activity.resumeParent": "일시정지된 실행은 부모 대화의 계속 실행으로 재개하세요.",
     "activity.returnMain": "메인 대화로 돌아가기",
     "activity.agentConversationShown": "가운데에서 에이전트 대화와 실행 기록을 보고 있습니다.",
     "activity.agentSelectHint": "에이전트를 선택하면 대화 또는 기록된 작업을 볼 수 있습니다.",

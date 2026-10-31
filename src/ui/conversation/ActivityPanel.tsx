@@ -18,7 +18,7 @@ import type { AgentTreeNode } from "./workflow-graph";
 import { useTaskWork } from "./use-task-work";
 import { AgentGraph, WorkflowGraph } from "./WorkflowGraph";
 import { turnSubagents } from "./work-log";
-import { StateDot } from "../kit";
+import { Button, StateDot } from "../kit";
 
 const EMPTY_TURNS: ConversationTurn[] = [];
 
@@ -236,7 +236,8 @@ function agentNode(tree: TaskTree): AgentTreeNode<ActivityTask> {
   return { id: tree.task.task_id, item: tree.task, children: tree.children.map(agentNode) };
 }
 
-function RunCard({ run, live, restored = false, activity, trees, tasks, onOpenTask, now, view }: {
+function RunCard({ threadId, run, live, restored = false, activity, trees, tasks, onOpenTask, now, view }: {
+  threadId: string;
   run: DagRun; live: boolean; restored?: boolean; activity: Record<string, DagActivity> | undefined; trees: TaskTree[];
   tasks: ReadonlyMap<string, ActivityTask>; onOpenTask: (taskId: string) => void; now: number; view: "list" | "graph";
 }) {
@@ -245,6 +246,18 @@ function RunCard({ run, live, restored = false, activity, trees, tasks, onOpenTa
   const summary = workSummary([run], [], live);
   const knownStatus = knownRunStatus(run.status);
   const [selected, setSelected] = useState<string | null>(null);
+  const [guidance, setGuidance] = useState("");
+  const [pending, setPending] = useState(false);
+  const [controlError, setControlError] = useState<string | null>(null);
+  const control = async (data: { action: "guide"; text: string } | { action: "cancel_node"; nodeId: string }): Promise<void> => {
+    setPending(true);
+    setControlError(null);
+    try {
+      await window.omo.request("extension_request", { threadId, name: "omo-ui.workflow.control", data: { runId: run.run_id, ...data } });
+      if (data.action === "guide") setGuidance("");
+    } catch (error) { setControlError(error instanceof Error ? error.message : String(error)); }
+    finally { setPending(false); }
+  };
   const selectedNode = run.nodes.find(node => node.id === selected);
   const waves = [...run.waves].sort((a, b) => a.index - b.index);
   const activeWave = waves.find(wave => wave.node_ids.some(id => run.nodes.some(node => node.id === id && node.state === "running")));
@@ -265,6 +278,13 @@ function RunCard({ run, live, restored = false, activity, trees, tasks, onOpenTa
         <span>{t("activity.waiting", { count: waitingWork([run], []) })}</span>
         {elapsed !== null && <span>{formatDuration(elapsed, t)}</span>}
       </div>
+      {run.status === "paused" && !restored && <div className="flex flex-wrap items-center gap-2 px-2 pb-2" data-testid="workflow-paused-controls">
+        <input className="min-w-0 flex-1 rounded border border-solid border-input bg-background px-2 py-1 text-foreground" aria-label={t("activity.guidance")} value={guidance} disabled={pending}
+          onChange={event => setGuidance(event.target.value)} />
+        <Button size="sm" variant="outline" data-testid="workflow-guide" disabled={pending || !guidance.trim()} onClick={() => void control({ action: "guide", text: guidance })}>{t("activity.guidance")}</Button>
+        <span className={C.meta}>{t("activity.resumeParent")}</span>
+      </div>}
+      {controlError !== null && <p className={C.error} role="alert">{controlError}</p>}
       {view === "graph" ? <>
         <WorkflowGraph run={run} live={live} now={now} tasks={tasks} onSelect={(nodeId) => {
           // A node an agent ran opens that agent's chat; a node no agent has taken yet shows its detail here.
@@ -276,6 +296,8 @@ function RunCard({ run, live, restored = false, activity, trees, tasks, onOpenTa
           <strong>{selectedNode.label?.trim() || selectedNode.id}</strong>
           <p className={C.meta}>{nodeLabel(selectedNode.state, t)}</p>
           {selectedNode.depends_on.length > 0 && <p className={C.meta}>{t("activity.depends", { nodes: selectedNode.depends_on.join(", ") })}</p>}
+          {run.status === "paused" && !restored && ["pending", "running", "paused", "scheduled", "queued"].includes(selectedNode.state) && <Button size="sm" variant="outline" data-testid="workflow-cancel-node" disabled={pending}
+            onClick={() => void control({ action: "cancel_node", nodeId: selectedNode.id })}>{t("activity.cancelNode")}</Button>}
         </div>}
       </> : <div className={C.waves}>
         {groups.map((group) => (
@@ -349,7 +371,7 @@ export function ActivityPanel({ threadId, id, view = "list", docked = false }: {
         {error !== null && <p className={C.error} role="status">{t("activity.children.error")} <span title={error}>{error}</span></p>}
         {summary.total === 0 && <p className={C.empty}>{t(view === "graph" ? "activity.graph.empty" : "activity.empty")}</p>}
         {view === "list" && <div className={C.legend} aria-hidden><span>{t("activity.column.work")}</span><span>{t("activity.column.agent")}</span><span>{t("activity.column.time")}</span><span>{t("activity.column.step")}</span></div>}
-        {runs.map((run) => <RunCard key={run.run_id} run={run} live={isLive && live.runsSource !== "history"} restored={live.runsSource === "history"} activity={live.dagActivity[run.run_id]} trees={trees} tasks={taskById} onOpenTask={openTask} now={now} view={view} />)}
+        {runs.map((run) => <RunCard key={run.run_id} threadId={threadId} run={run} live={isLive && live.runsSource !== "history"} restored={live.runsSource === "history"} activity={live.dagActivity[run.run_id]} trees={trees} tasks={taskById} onOpenTask={openTask} now={now} view={view} />)}
         {view === "graph" && runs.length === 0 && agentTrees.length > 0 && <AgentGraph root={{ id: threadId, title: threadTitle(thread ?? null, t("shell.newSession")), running: turnActive }}
           trees={agentTrees} live={isLive} now={now} onOpen={openTask} />}
         {view === "list" && standalone.length > 0 && <section className={C.section}>

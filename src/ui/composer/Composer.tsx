@@ -9,6 +9,7 @@ import type { SkillCatalog } from "../../state";
 import { useT } from "../../i18n";
 import { useActions, useAppSelector } from "../app-context";
 import { HeldBanner } from "./HeldBanner";
+import { PausedBanner } from "./PausedBanner";
 import { selectHeldHolders } from "../../state";
 import { useAskSide } from "../btw/use-ask-side";
 import { ConversationDock } from "../conversation/ConversationDock";
@@ -644,6 +645,7 @@ export function Composer() {
           />
         )}
         {held !== null && activeThreadId !== null && <HeldBanner threadId={activeThreadId} holders={held} />}
+        {held === null && activeThreadId !== null && <PausedBanner key={activeThreadId} threadId={activeThreadId} />}
         <QueueList items={queued} onWithdraw={withdrawQueued} onEdit={editQueued} />
         {dropping && <div className="px-4 text-[13px] text-muted-foreground" role="status">{t("composer.images.drop")}</div>}
         {images.length > 0 && <div className="flex flex-wrap gap-2.5 px-4 py-1">

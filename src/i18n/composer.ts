@@ -37,6 +37,10 @@ export const messages = {
     "composer.profile.description.geeky-heavy": "Works on one task and thinks it over from every side.",
 
     "composer.inputLabel": "Message",
+    "composer.paused.hint": "Session paused. {notices} notices and {inputs} inputs are held.",
+    "composer.paused.resume": "Resume",
+    "composer.paused.parent": "Resume this task from its parent session.",
+    "composer.paused.stale": "The pause changed. Review the current state and resume again.",
     "composer.images.attach": "Attach files",
     "composer.images.preview": "Image {number}",
     "composer.images.remove": "Remove image {number}",
@@ -167,6 +171,10 @@ export const messages = {
     "composer.profile.description.geeky-heavy": "한 작업에 집중하여 모든 관점에서 생각합니다.",
 
     "composer.inputLabel": "메시지",
+    "composer.paused.hint": "세션이 일시정지되었습니다. 알림 {notices}개와 입력 {inputs}개가 대기 중입니다.",
+    "composer.paused.resume": "계속 실행",
+    "composer.paused.parent": "이 작업자의 부모 세션에서 계속 실행하세요.",
+    "composer.paused.stale": "일시정지 상태가 바뀌었습니다. 현재 상태를 확인하고 다시 실행하세요.",
     "composer.images.attach": "파일 첨부",
     "composer.images.preview": "이미지 {number}",
     "composer.images.remove": "이미지 {number} 제거",

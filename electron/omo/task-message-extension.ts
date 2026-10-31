@@ -47,4 +47,22 @@ export default function taskMessageExtension(pi: Api): void {
     const status = typeof result.details === "object" && result.details !== null && "status" in result.details ? result.details.status : undefined;
     return { cancelled: true, ...(status === undefined ? {} : { status }) };
   });
+  pi.rpc.handle("omo-ui.workflow.control", async (data) => {
+    if (typeof data !== "object" || data === null || !("runId" in data) || typeof data.runId !== "string" || !data.runId.trim()
+      || !("action" in data) || (data.action !== "guide" && data.action !== "cancel_node")
+      || (data.action === "guide" && (!("text" in data) || typeof data.text !== "string" || !data.text.trim()))
+      || (data.action === "cancel_node" && (!("nodeId" in data) || typeof data.nodeId !== "string" || !data.nodeId.trim()))) {
+      throw new Error("Invalid workflow control");
+    }
+    const result = await pi.executeTool("workflow", {
+      action: data.action, run_id: data.runId,
+      ...(data.action === "guide" && "text" in data ? { text: data.text } : {}),
+      ...(data.action === "cancel_node" && "nodeId" in data ? { node_id: data.nodeId } : {}),
+    }, { activateInactiveTool: true });
+    const kind = typeof result.details === "object" && result.details !== null && "kind" in result.details ? result.details.kind : undefined;
+    if (result.isError || kind !== (data.action === "guide" ? "guided" : "node_cancelled")) {
+      throw new Error(result.content.filter(part => part.type === "text").map(part => part.text ?? "").join("\n") || "Workflow control was refused");
+    }
+    return { applied: true };
+  });
 }

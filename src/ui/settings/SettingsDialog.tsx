@@ -49,6 +49,7 @@ import { ModelSection } from "./ModelSection";
 import { OmoSection } from "./OmoSection";
 import { ProjectsSection } from "./ProjectsSection";
 import { SkillsSection } from "./SkillsSection";
+import { ExtensionsSection } from "./ExtensionsSection";
 import { errorMessage } from "./diagnostics";
 import { ErrorText, ui } from "./SettingsCard";
 
@@ -139,8 +140,8 @@ const GROUPS: readonly SectionGroup[] = [
         label: "shell.settings.nav.skills",
         icon: Wand2,
         keys: ["shell.settings.skills.intro"],
-        terms: ["skills"],
-        render: () => <SkillsSection />,
+        terms: ["skills", "extensions", "확장"],
+        render: () => <><SkillsSection /><ExtensionsSection /></>,
       },
       {
         id: "accounts",

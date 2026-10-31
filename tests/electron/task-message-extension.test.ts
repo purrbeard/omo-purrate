@@ -7,8 +7,9 @@ function extension(result: { isError?: boolean; content: { type: string; text: s
   taskMessageExtension({ rpc: { handle(name, callback) { handlers.set(name, callback); } }, executeTool, on: vi.fn(), appendEntry: vi.fn() });
   const handler = handlers.get("omo-ui.task.send");
   const cancel = handlers.get("omo-ui.task.cancel");
-  if (handler === undefined || cancel === undefined) throw new Error("RPC handler missing");
-  return { handler, cancel, executeTool };
+  const workflow = handlers.get("omo-ui.workflow.control");
+  if (handler === undefined || cancel === undefined || workflow === undefined) throw new Error("RPC handler missing");
+  return { handler, cancel, workflow, executeTool };
 }
 
 function originExtension(sessionContext: Record<string, string> | undefined, entries: { type: string; customType?: string }[]) {
@@ -88,5 +89,23 @@ describe("child agent RPC cancellation", () => {
   it("propagates the native tool error text", async () => {
     const { cancel } = extension({ isError: true, content: [{ type: "text", text: "Task not owned" }, { type: "image", text: "ignored" }, { type: "text", text: "Cannot cancel" }] });
     await expect(cancel({ taskId: "st_foreign" })).rejects.toThrow("Task not owned\nCannot cancel");
+  });
+});
+
+describe("paused workflow control", () => {
+  it.each([
+    [{ runId: "dag_1", action: "guide", text: "Use the smaller fixture" }, { action: "guide", run_id: "dag_1", text: "Use the smaller fixture" }, "guided"],
+    [{ runId: "dag_1", action: "cancel_node", nodeId: "verify" }, { action: "cancel_node", run_id: "dag_1", node_id: "verify" }, "node_cancelled"],
+  ])("preserves workflow ownership for %j", async (input, payload, kind) => {
+    const { workflow, executeTool } = extension({ content: [], details: { kind } });
+    await expect(workflow(input)).resolves.toEqual({ applied: true });
+    expect(executeTool).toHaveBeenCalledWith("workflow", payload, { activateInactiveTool: true });
+  });
+  it("surfaces typed native refusal and rejects agent-side resume", async () => {
+    const { workflow, executeTool } = extension({ content: [{ type: "text", text: "Run not owned" }], details: { kind: "not_found" } });
+    await expect(workflow({ runId: "dag_1", action: "guide", text: "Continue" })).rejects.toThrow("Run not owned");
+    executeTool.mockClear();
+    await expect(workflow({ runId: "dag_1", action: "resume" })).rejects.toThrow("Invalid workflow control");
+    expect(executeTool).not.toHaveBeenCalled();
   });
 });

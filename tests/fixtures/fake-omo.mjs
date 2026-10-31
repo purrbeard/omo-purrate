@@ -1104,6 +1104,11 @@ function sessionState(record) {
     isCompacting: false,
     messageCount: 0,
     pendingMessageCount: 0,
+    paused: record.paused === true,
+    pause: { pauseSeq: record.pauseSeq ?? 0 },
+    pausedNoticeCount: 0,
+    pausedHeldInputCount: 0,
+    autoCompactionEnabled: record.autoCompaction !== false,
     ...(record.thread.name ? { sessionName: record.thread.name } : {}),
   };
 }
@@ -1227,6 +1232,28 @@ async function handleCommand(frame, record, reply) {
     case "get_state":
       reply(sessionState(record));
       return;
+    case "set_auto_compaction":
+      record.autoCompaction = frame.enabled;
+      event(record, "session_settings_changed", { autoCompactionEnabled: frame.enabled });
+      reply({});
+      return;
+    case "set_auto_retry":
+      record.autoRetry = frame.enabled;
+      reply({});
+      return;
+    case "resume_session": {
+      record.resumeEffects ??= new Map();
+      if (record.resumeEffects.has(frame.effectId)) { reply({ ...record.resumeEffects.get(frame.effectId), replayed: true }); return; }
+      if (frame.expectedSeq !== undefined && frame.expectedSeq !== record.pauseSeq) { reply({ resumed: false, reason: "stale" }); return; }
+      if (!record.paused) { reply({ resumed: false, reason: "not_paused" }); return; }
+      record.paused = false;
+      event(record, "session_resumed", { pauseSeq: record.pauseSeq, cause: "resume_session" });
+      const outcome = { resumed: true, pauseSeq: record.pauseSeq, turnStarted: frame.mode !== "release" };
+      record.resumeEffects.set(frame.effectId, outcome);
+      if (frame.mode !== "release") await prompt({ message: frame.message ?? "Resume the interrupted work." }, record, () => {});
+      reply(outcome);
+      return;
+    }
     case "prompt":
       await prompt(frame, record, reply);
       return;
@@ -1267,6 +1294,11 @@ async function handleCommand(frame, record, reply) {
       if (turn !== null) {
         turn.interrupt();
         await turn.done;
+      }
+      if (frame.intent === "stop") {
+        record.paused = true;
+        record.pauseSeq = (record.pauseSeq ?? 0) + 1;
+        event(record, "session_paused", { pauseSeq: record.pauseSeq, kind: "session_hold", noticeCount: 0 });
       }
       reply({});
       return;
@@ -1337,9 +1369,9 @@ async function handleCommand(frame, record, reply) {
       return;
     }
     case "get_loaded_surfaces":
-      reply({ extensions: [], mcpServers: process.env.FAKE_OMO_MCP_EMPTY === "1" ? [] : [
+      reply({ extensions: JSON.parse(process.env.FAKE_OMO_EXTENSIONS ?? "[]"), mcpServers: process.env.FAKE_OMO_MCP_EMPTY === "1" ? [] : [
         { name: "demo-tools", toolCount: 3, status: "connected", authStatus: "unsupported" },
-        { name: "pganalyze", toolCount: 0, status: "failed", authStatus: "notLoggedIn" },
+        { name: "pganalyze", toolCount: 0, status: "failed", authStatus: "notLoggedIn", lastError: "OAuth configuration could not be resolved" },
       ] });
       return;
     case "get_provider_accounts": {
@@ -1368,6 +1400,7 @@ async function handleCommand(frame, record, reply) {
       return;
     }
     case "extension_request":
+      if (frame.name === "omo-ui.workflow.control") { reply({ applied: true }); return; }
       if (frame.name === "omo-ui.task.send") {
         reply({ delivered: true });
         return;

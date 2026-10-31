@@ -167,3 +167,34 @@ test("ordinary tasks never become graph nodes and stay in their request groups",
     expect(newSessions(launched.readFakeLog())).toHaveLength(1);
   } finally { await launched.close(); }
 });
+
+test("paused workflow accepts guidance and cancels a pending node without resuming the run", async () => {
+  const launched = await launchApp({ omo: "fake", pickDir: WT });
+  try {
+    const { page, app } = launched;
+    const id = await newSession(page);
+    await send(page, "mass ulw: SCENARIO:workflow-background");
+    await expect(page.getByTestId("background-work-strip")).toBeVisible();
+    await app.evaluate(({ BrowserWindow }, threadId) => {
+      const now = "2026-11-01T00:00:00.000Z";
+      BrowserWindow.getAllWindows()[0]?.webContents.send("omo:notification", { method: "extension_event", params: { threadId, name: "omo.dag.updated", data: {
+        parent_session_id: threadId, runs: [{ run_id: "dag_paused", run_key: "paused", name: "Paused QA run", status: "paused", created_at: now, updated_at: now,
+          counts: { pending: 1 }, nodes: [{ id: "pending", label: "Pending QA node", prompt: "No inference", state: "pending", depends_on: [], attempt: 0, created_at: now }], edges: [], waves: [{ index: 0, node_ids: ["pending"] }] }],
+      } } });
+    }, id);
+    await page.getByTestId("background-work-strip").click();
+    const run = page.getByTestId("dag-run").filter({ has: page.locator('[data-testid="workflow-paused-controls"]') });
+    await run.getByRole("textbox", { name: "Add guidance" }).fill("Keep the QA fixture local");
+    await run.getByTestId("workflow-guide").click();
+    await expect(run.getByRole("textbox")).toHaveValue("");
+    await page.getByTestId("workflow-graph-view").click();
+    await run.getByTestId("workflow-graph-node").click();
+    await run.getByTestId("workflow-cancel-node").click();
+    await expect(run.getByTestId("workflow-cancel-node")).toBeEnabled();
+    const controls = launched.readFakeLog().filter(entry => entry["type"] === "extension_request" && entry["name"] === "omo-ui.workflow.control");
+    expect(controls.map(entry => entry["data"])).toEqual([
+      { runId: "dag_paused", action: "guide", text: "Keep the QA fixture local" }, { runId: "dag_paused", action: "cancel_node", nodeId: "pending" },
+    ]);
+    await expect(run).toHaveAttribute("data-status", "paused");
+  } finally { await launched.close(); }
+});

@@ -10,6 +10,7 @@ const host = vi.hoisted(() => ({
   listeners: new Set<(record: Record<string, unknown> & { type: string }) => void>(),
   promptListeners: new Set<() => void>(),
   streaming: false,
+  resume: null as null | (() => Promise<unknown>),
 }));
 vi.mock("../../electron/omo/native/connection", async (original) => {
   const actual = await original<typeof import("../../electron/omo/native/connection")>();
@@ -26,6 +27,7 @@ vi.mock("../../electron/omo/native/connection", async (original) => {
         for (const listener of host.promptListeners) listener();
       }
       if (command === "abort") host.streaming = false;
+      if (command === "resume_session" && host.resume !== null) return host.resume();
       return {};
     }
     write(): void {}
@@ -35,7 +37,7 @@ vi.mock("../../electron/omo/native/connection", async (original) => {
     async stop(): Promise<void> {}
   } };
 });
-afterEach(() => { host.frames.length = 0; host.listeners.clear(); host.promptListeners.clear(); host.streaming = false; });
+afterEach(() => { host.frames.length = 0; host.listeners.clear(); host.promptListeners.clear(); host.streaming = false; host.resume = null; });
 
 async function open(holdInputWhileRunning = false, socket?: string): Promise<NativeAppServerClient> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "ownership-native-"));
@@ -101,6 +103,26 @@ describe("native .54 user authority", () => {
       await prompt;
       expect(host.frames.filter(frame => frame.command === "prompt").map(frame => frame.fields["message"])).toEqual(["go", "continue normally"]);
     } finally { clearTimeout(timer); }
+  });
+  it("keeps a newer Stop intact and transfers queued input atomically with Resume", async () => {
+    const client = await open(true);
+    try {
+      const { turn } = await client.request("turn/start", { threadId: "thread-1", input: input("go") });
+      await client.request("turn/followUp", { threadId: "thread-1", input: input("keep queued") });
+      await client.request("turn/interrupt", { threadId: "thread-1", turnId: turn.id });
+      host.resume = async () => {
+        for (const listener of host.listeners) listener({ type: "session_resumed", sessionId: "rpc-1", pauseSeq: 1 });
+        for (const listener of host.listeners) listener({ type: "session_paused", sessionId: "rpc-1", pauseSeq: 2 });
+        return { resumed: true, pauseSeq: 1, turnStarted: false };
+      };
+      await client.request("thread/execution/resume", { threadId: "thread-1", effectId: "older-resume", expectedSeq: 1 });
+      expect(host.frames.filter(frame => frame.command === "prompt").map(frame => frame.fields["message"])).toEqual(["go"]);
+      expect(host.frames.find(frame => frame.command === "resume_session")?.fields).toMatchObject({ message: "keep queued", mode: "continue", expectedSeq: 1 });
+      host.resume = null;
+      await client.request("turn/start", { threadId: "thread-1", input: input("explicit later send") });
+      // The native held-input ledger now owns the draft; sending it again would duplicate it.
+      expect(host.frames.filter(frame => frame.command === "prompt").at(-1)?.fields["message"]).toBe("explicit later send");
+    } finally { await client.stop(); }
   });
 });
 

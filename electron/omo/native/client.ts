@@ -8,6 +8,7 @@ import type {
   ClientParams,
   ClientResult,
   FastModeState,
+  LoadedExtension,
   McpServerStatus,
   Model,
   ReasoningEffort,
@@ -15,6 +16,7 @@ import type {
   RpcNotification,
   RpcServerRequest,
   SessionStats,
+  SessionRuntimeState,
   SkillMetadata,
   Thread,
   ThreadAlertCode,
@@ -62,6 +64,9 @@ interface Loaded {
   held: HeldInput[];
   /** A user Stop keeps deferred input queued until the next explicit user send. */
   inputPaused: boolean;
+  /** Invalidates delayed Resume admissions when a newer Stop is observed. */
+  pauseRevision: number;
+  resuming: number;
 }
 
 interface HeldInput {
@@ -376,6 +381,14 @@ export class NativeAppServerClient {
         return this.deleteThread(requiredString(input, "threadId"));
       case "thread/compact/start":
         return this.compact(requiredString(input, "threadId"), typeof input["customInstructions"] === "string" ? input["customInstructions"] : undefined);
+      case "thread/extensions/list":
+        return this.listExtensions(requiredString(input, "threadId"));
+      case "thread/runtime/get":
+        return this.runtimeState(requiredString(input, "threadId"));
+      case "thread/runtime/set":
+        return this.setRuntime(requiredString(input, "threadId"), input);
+      case "thread/execution/resume":
+        return this.resumeExecution(requiredString(input, "threadId"), input);
       case "thread/goal/get":
         return { goal: await this.readGoal(requiredString(input, "threadId")) };
       case "thread/stats":
@@ -461,10 +474,16 @@ export class NativeAppServerClient {
   private apply(loaded: Loaded, record: NativeRecord): void {
     switch (record.type) {
       case "session_paused":
+        loaded.pauseRevision++;
         loaded.inputPaused = true;
+        this.emitRuntimeChanged(loaded);
         return;
       case "session_resumed":
         loaded.inputPaused = false;
+        this.emitRuntimeChanged(loaded);
+        return;
+      case "session_settings_changed":
+        this.emitRuntimeChanged(loaded);
         return;
       case "session_lifecycle": {
         const lifecycle = record["lifecycle"];
@@ -599,6 +618,8 @@ export class NativeAppServerClient {
       nativeQueue: [],
       held: [],
       inputPaused: state["paused"] === true,
+      pauseRevision: 0,
+      resuming: 0,
     };
     this.sessions.set(threadId, loaded);
     this.byHandle.set(handle, loaded);
@@ -728,6 +749,56 @@ export class NativeAppServerClient {
   private async fastMode(threadId: string): Promise<{ fastMode: FastModeState }> {
     const loaded = await this.load(threadId);
     return { fastMode: wireFastMode(params(await this.command(loaded.handle, "get_fast_mode"))) };
+  }
+
+  private emitRuntimeChanged(loaded: Loaded): void {
+    this.emit({ method: "extension_event", params: { threadId: loaded.threadId, name: "omo.runtime.changed", data: {} } });
+  }
+
+  private async runtimeState(threadId: string): Promise<{ runtime: SessionRuntimeState }> {
+    const loaded = await this.load(threadId);
+    const state = params(await this.command(loaded.handle, "get_state"));
+    const pause = params(state["pause"]);
+    return { runtime: {
+      paused: state["paused"] === true || state["runPaused"] === true,
+      pauseSeq: typeof pause["pauseSeq"] === "number" && Number.isSafeInteger(pause["pauseSeq"]) ? pause["pauseSeq"] : null,
+      noticeCount: typeof state["pausedNoticeCount"] === "number" ? state["pausedNoticeCount"] : 0,
+      heldInputCount: typeof state["pausedHeldInputCount"] === "number" ? state["pausedHeldInputCount"] : 0,
+      autoCompaction: typeof state["autoCompactionEnabled"] === "boolean" ? state["autoCompactionEnabled"] : null,
+    } };
+  }
+
+  private async setRuntime(threadId: string, input: JsonObject): Promise<{ runtime: SessionRuntimeState }> {
+    const loaded = await this.load(threadId);
+    if (typeof input["autoCompaction"] === "boolean") await this.command(loaded.handle, "set_auto_compaction", { enabled: input["autoCompaction"] });
+    if (typeof input["autoRetry"] === "boolean") await this.command(loaded.handle, "set_auto_retry", { enabled: input["autoRetry"] });
+    return this.runtimeState(threadId);
+  }
+
+  private async resumeExecution(threadId: string, input: JsonObject): Promise<unknown> {
+    const loaded = await this.load(threadId);
+    const revision = loaded.pauseRevision;
+    const held = loaded.held.slice();
+    loaded.resuming++;
+    try {
+      const data = params(await this.command(loaded.handle, "resume_session", {
+        effectId: requiredString(input, "effectId"),
+        ...(typeof input["expectedSeq"] === "number" ? { expectedSeq: input["expectedSeq"] } : {}),
+        mode: "continue",
+        ...(held.length === 0 ? {} : { message: held.map(item => item.text).join("\n") }),
+      }, PROMPT_TIMEOUT_MS));
+      // Native's Resume admits the message and its pause sequence atomically. Never follow it with human prompt.
+      if (data["resumed"] === true && held.length > 0) {
+        const admitted = new Set(held.map(item => item.queuedId));
+        loaded.held = loaded.held.filter(item => !admitted.has(item.queuedId));
+        this.emitQueue(loaded);
+      }
+      if (revision === loaded.pauseRevision && data["resumed"] === true && data["turnStarted"] === true) loaded.inputPaused = false;
+      return data;
+    } finally {
+      loaded.resuming--;
+      this.emitRuntimeChanged(loaded);
+    }
   }
 
   private async setFastMode(threadId: string, input: JsonObject): Promise<{ fastMode: FastModeState }> {
@@ -1043,7 +1114,7 @@ export class NativeAppServerClient {
   }
 
   private async sendHeld(loaded: Loaded): Promise<void> {
-    if (loaded.inputPaused || loaded.held.length === 0 || loaded.projector.activeTurnId !== null || this.sessions.get(loaded.threadId) !== loaded) return;
+    if (loaded.inputPaused || loaded.resuming > 0 || loaded.held.length === 0 || loaded.projector.activeTurnId !== null || this.sessions.get(loaded.threadId) !== loaded) return;
     try {
       await this.startTurn(loaded.threadId, { input: [] }, true);
     } catch (error) {
@@ -1103,6 +1174,7 @@ export class NativeAppServerClient {
     if (loaded === undefined || active === null) return {};
     if (active !== turnId) throw new RpcRequestError(-32600, `Turn id mismatch: expected ${turnId} but active turn is ${active}`);
     loaded.inputPaused = true;
+    loaded.pauseRevision++;
     this.stoppingInput.add(threadId);
     loaded.projector.markInterrupted();
     try {
@@ -1189,6 +1261,20 @@ export class NativeAppServerClient {
     return { data };
   }
 
+  private async listExtensions(threadId: string): Promise<{ extensions: LoadedExtension[] }> {
+    const loaded = await this.load(threadId);
+    const data = params(await this.command(loaded.handle, "get_loaded_surfaces"));
+    const inventory = Array.isArray(data["extensions"]) ? data["extensions"].filter(isRecord) : [];
+    const extensions = new Map<string, LoadedExtension>();
+    for (const entry of inventory) {
+      if (typeof entry["name"] !== "string" || typeof entry["path"] !== "string" || typeof entry["enabled"] !== "boolean") continue;
+      const info = params(entry["sourceInfo"]);
+      if (typeof info["source"] !== "string" || typeof info["scope"] !== "string") continue;
+      extensions.set(entry["path"], { name: entry["name"], path: entry["path"], enabled: entry["enabled"], source: info["source"], scope: info["scope"] });
+    }
+    return { extensions: [...extensions.values()] };
+  }
+
   private async listMcp(threadId: string | null): Promise<{ data: McpServerStatus[]; nextCursor: null }> {
     const loaded = threadId === null ? undefined : this.sessions.get(threadId);
     const data = params(loaded === undefined ? await this.utilityCommand(this.options.cwd, "get_loaded_surfaces") : await this.command(loaded.handle, "get_loaded_surfaces"));
@@ -1204,6 +1290,7 @@ export class NativeAppServerClient {
         // The settings page names a server waiting for a login needs_auth, whatever omo's connection state says.
         ...(server["authStatus"] === "notLoggedIn" ? { status: "needs_auth" } : typeof server["status"] === "string" ? { status: server["status"] } : {}),
         ...(typeof server["toolCount"] === "number" ? { toolCount: server["toolCount"] } : {}),
+        ...(typeof server["lastError"] === "string" ? { lastError: server["lastError"] } : {}),
       }] : []),
       nextCursor: null,
     };

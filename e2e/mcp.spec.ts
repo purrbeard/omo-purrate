@@ -42,6 +42,7 @@ for (const theme of ["light", "dark"] as const) {
       await expect(needsLogin).toHaveAttribute("data-status", "needs_auth");
       await expect(needsLogin).toContainText("Needs login");
       await expect(needsLogin).toContainText("0 tools");
+      await expect(needsLogin.locator('[data-testid="mcp-server-error"]')).toContainText("OAuth configuration could not be resolved");
       await expect(byTestId(page, TESTID.mcpServerTools)).toHaveCount(0);
       const requests = () => running.readFakeLog().filter((entry) => entry["type"] === "get_loaded_surfaces");
       const before = requests().length;

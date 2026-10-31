@@ -326,6 +326,7 @@ export interface McpServerStatus {
   status?: string;
   /** omo's Native RPC reports how many tools a server lists, not their names. */
   toolCount?: number;
+  lastError?: string;
 }
 
 /** What one session has spent: `tokens` and `cost` are the whole session, `contextUsage` the live window. */
@@ -340,6 +341,14 @@ export interface SessionStats {
 export interface FastModeState {
   enabled: boolean;
   serviceTier: string | null;
+}
+
+export interface SessionRuntimeState {
+  paused: boolean;
+  pauseSeq: number | null;
+  noticeCount: number;
+  heldInputCount: number;
+  autoCompaction: boolean | null;
 }
 
 /** A secret-free descriptor of one stored provider account; `name` is the immutable id, `displayName` a label. */
@@ -369,6 +378,10 @@ export interface ClientRequestMap {
   "thread/export": { params: { threadId: string; outputPath: string }; result: { path: string } };
   "thread/goal/clear": { params: { threadId: string }; result: Record<string, never> };
   "thread/compact/start": { params: { threadId: string; customInstructions?: string }; result: Record<string, never> };
+  "thread/extensions/list": { params: { threadId: string }; result: { extensions: LoadedExtension[] } };
+  "thread/runtime/get": { params: { threadId: string }; result: { runtime: SessionRuntimeState } };
+  "thread/runtime/set": { params: { threadId: string; autoCompaction?: boolean; autoRetry?: boolean }; result: { runtime: SessionRuntimeState } };
+  "thread/execution/resume": { params: { threadId: string; expectedSeq?: number; effectId: string }; result: { resumed: boolean; reason?: string; parentSessionId?: string } };
   "thread/goal/set": { params: { threadId: string; objective?: string | null; status?: "active" | "paused" | "complete"; tokenBudget?: number | null }; result: { goal: WireGoal } };
   extension_request: { params: { threadId: string; name: string; data?: unknown }; result: unknown };
   "thread/loaded/list": { params: Record<string, never>; result: { data: string[]; nextCursor: string | null } };
@@ -442,6 +455,10 @@ export const CLIENT_METHODS = [
   "thread/fastMode/set",
   "thread/export",
   "thread/compact/start",
+  "thread/extensions/list",
+  "thread/runtime/get",
+  "thread/runtime/set",
+  "thread/execution/resume",
   "thread/goal/set",
   "extension_request",
   "thread/loaded/list",
@@ -521,6 +538,15 @@ export interface WireGoal {
   timeUsedSeconds: number;
   createdAt: number;
   updatedAt: number;
+}
+
+/** Non-secret resource inventory from this session's get_loaded_surfaces. */
+export interface LoadedExtension {
+  name: string;
+  path: string;
+  enabled: boolean;
+  source: string;
+  scope: string;
 }
 
 export interface DagNode {

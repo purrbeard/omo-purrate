@@ -14,6 +14,7 @@ import { errorMessage, useDiagnostics } from "./diagnostics";
 import { SectionHeading, SettingRow } from "./SectionHeading";
 import { ErrorText, SettingsCard, ui } from "./SettingsCard";
 import { ProxySection } from "./ProxySection";
+import { SessionRuntimeSection } from "./SessionRuntimeSection";
 
 type RestartState = { kind: "idle" } | { kind: "running" } | { kind: "failed"; message: string };
 
@@ -111,6 +112,7 @@ export function OmoSection() {
     <section className={ui.section}>
       <SectionHeading title={t("shell.settings.nav.omo")} intro={t("shell.settings.omo.intro")} />
       <ProxySection />
+      <SessionRuntimeSection />
       <div className={ui.card}>
         <SettingRow title={t("shell.settings.omo.autoUpdate")} hint={t("shell.settings.omo.autoUpdateHint")}>
           <Button

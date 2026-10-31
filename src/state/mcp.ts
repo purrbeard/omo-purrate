@@ -8,6 +8,7 @@ export interface McpServer {
   authStatus: string;
   status?: string;
   toolCount?: number;
+  lastError?: string;
 }
 
 /** Validate at the RPC boundary; discard malformed entries, not forward-compatible statuses. */
@@ -35,7 +36,8 @@ export function normalizeMcpPage(value: unknown): { servers: McpServer[]; nextCu
       serverInfo: info === null ? null : { name: String(info["name"]), version: String(info["version"]) },
       tools: tools.sort((a, b) => a.name.localeCompare(b.name)),
       ...(typeof entry["status"] === "string" ? { status: entry["status"] } : {}),
-      ...(typeof entry["toolCount"] === "number" ? { toolCount: entry["toolCount"] } : {}) });
+      ...(typeof entry["toolCount"] === "number" ? { toolCount: entry["toolCount"] } : {}),
+      ...(typeof entry["lastError"] === "string" ? { lastError: entry["lastError"] } : {}) });
   }
   return { servers, nextCursor: value["nextCursor"] };
 }
