@@ -1,4 +1,5 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -43,7 +44,7 @@ test("Accounts lists omo's accounts with their quota state, and pins and removes
     await shot(page, "accounts-after");
   } finally {
     await launched.close();
-    rmSync(fakeHome, { recursive: true, force: true });
+    quarantineSync(fakeHome, { recursive: true, force: true });
   }
 });
 

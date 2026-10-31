@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import { expect, test } from "@playwright/test";
 import { ENV } from "../shared/ipc.ts";
 import { TESTID } from "../src/ui/testids.ts";
@@ -30,6 +30,6 @@ test("a native quit request exits the app while omo is not found", async () => {
     expect(outcome).toBe("exited");
   } finally {
     if (main.exitCode === null && main.signalCode === null) await launched.close();
-    rmSync(userData, { recursive: true, force: true });
+    quarantineSync(userData, { recursive: true, force: true });
   }
 });

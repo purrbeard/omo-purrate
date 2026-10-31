@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -105,7 +106,7 @@ test("thread notifications: background stays silent while focused, always logs, 
     expect(readNotifyLog(logFile)).toHaveLength(1);
   } finally {
     await launched.close();
-    for (const dir of [userData, pickDir, gateDir, path.dirname(logFile)]) rmSync(dir, { recursive: true, force: true });
+    for (const dir of [userData, pickDir, gateDir, path.dirname(logFile)]) quarantineSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -133,7 +134,7 @@ test("the in-app toast for another thread opens that thread", async () => {
     await expect(threadRow(page, watcher)).not.toHaveAttribute("aria-current", "page");
   } finally {
     await launched.close();
-    for (const dir of [pickDir, gateDir]) rmSync(dir, { recursive: true, force: true });
+    for (const dir of [pickDir, gateDir]) quarantineSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -164,7 +165,7 @@ test("a session idle for over three days settles, and new activity moves it back
     await expect(settledRows(page)).toHaveCount(0);
   } finally {
     await launched.close();
-    for (const dir of [userData, fakeHome, pickDir]) rmSync(dir, { recursive: true, force: true });
+    for (const dir of [userData, fakeHome, pickDir]) quarantineSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -209,6 +210,6 @@ test("manual Settle and Unsettle survive an app relaunch", async () => {
     }
   } finally {
     await launched?.close();
-    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+    for (const dir of dirs) quarantineSync(dir, { recursive: true, force: true });
   }
 });

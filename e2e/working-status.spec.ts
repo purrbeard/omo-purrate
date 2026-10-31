@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
 import { byTestId, lastTurn, launchApp, newSession, send, shot, tempDir } from "./helpers.ts";
@@ -31,6 +31,6 @@ test("a silent turn shows how long it has run, and a message sent into it says i
     await expect.poll(() => readFakeLog().filter(frame => frame["type"] === "prompt").map(frame => frame["message"]).at(-1)).toBe("are you still there?");
   } finally {
     await launched.close();
-    for (const dir of [fakeHome, pickDir]) rmSync(dir, { recursive: true, force: true });
+    for (const dir of [fakeHome, pickDir]) quarantineSync(dir, { recursive: true, force: true });
   }
 });

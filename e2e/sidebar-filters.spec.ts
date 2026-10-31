@@ -1,4 +1,5 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -39,7 +40,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await launched?.close();
   launched = null;
-  for (const dir of [fakeHome, pickDir, userData]) if (dir !== "") rmSync(dir, { recursive: true, force: true });
+  for (const dir of [fakeHome, pickDir, userData]) if (dir !== "") quarantineSync(dir, { recursive: true, force: true });
 });
 
 test("period pills keep only threads updated within the period, one period at a time", async () => {

@@ -1,4 +1,5 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -63,7 +64,7 @@ test("a memory write shows omo's Remembered card, and special messages show as e
     await shot(page, "session-notices-dark");
   } finally {
     await launched.close();
-    for (const dir of [fakeHome, pickDir]) rmSync(dir, { recursive: true, force: true });
+    for (const dir of [fakeHome, pickDir]) quarantineSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -83,6 +84,6 @@ test("a displayable custom message and a fallback model switch show live, once",
     await expect(byTestId(page, TESTID.noticeToast)).toContainText("fake/beta");
   } finally {
     await launched.close();
-    for (const dir of [fakeHome, pickDir]) rmSync(dir, { recursive: true, force: true });
+    for (const dir of [fakeHome, pickDir]) quarantineSync(dir, { recursive: true, force: true });
   }
 });

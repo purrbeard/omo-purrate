@@ -1,4 +1,5 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -41,7 +42,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await launched?.close();
   launched = null;
-  for (const dir of [fakeHome, userData, pickDir]) if (dir !== "") rmSync(dir, { recursive: true, force: true });
+  for (const dir of [fakeHome, userData, pickDir]) if (dir !== "") quarantineSync(dir, { recursive: true, force: true });
 });
 
 test("search filters thread rows by title and clears", async () => {

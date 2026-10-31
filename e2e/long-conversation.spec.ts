@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import { expect, test, type Page } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
 import { byTestId, launchApp, send, tempDir, threadRow, type LaunchedApp } from "./helpers.ts";
@@ -45,7 +45,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await launched?.close();
   launched = null;
-  if (pickDir !== "") rmSync(pickDir, { recursive: true, force: true });
+  if (pickDir !== "") quarantineSync(pickDir, { recursive: true, force: true });
 });
 
 test("a long conversation opens at its latest turn and stays there while an answer streams", async () => {

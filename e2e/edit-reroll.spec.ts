@@ -1,4 +1,5 @@
-import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { ENV } from "../shared/ipc.ts";
@@ -151,6 +152,6 @@ test("edit and repeated regeneration preserve one native session, images, origin
     expect(prompts(launched.readFakeLog())).toHaveLength(5);
   } finally {
     await launched?.close();
-    for (const dir of [fakeHome, pickDir, userData]) rmSync(dir, { recursive: true, force: true });
+    for (const dir of [fakeHome, pickDir, userData]) quarantineSync(dir, { recursive: true, force: true });
   }
 });

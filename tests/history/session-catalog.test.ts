@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { quarantineSync } from "../../scripts/quarantine-temp.mjs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,7 +8,7 @@ import { SessionIndex } from "../../electron/omo/native/threads";
 import { alphaSessionRoots } from "../../electron/omo/native/alpha-sessions";
 
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) quarantineSync(root, { recursive: true, force: true }); });
 
 const places = { homeDir: path.resolve("/home/owner"), tmpDir: path.resolve("/scratch/tmp") };
 const project = path.resolve("/work/project");

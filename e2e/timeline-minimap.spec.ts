@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
 import { byTestId, launchApp, shot, tempDir, threadRow, type LaunchedApp } from "./helpers.ts";
@@ -54,7 +54,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await launched?.close();
   launched = null;
-  if (pickDir !== "") rmSync(pickDir, { recursive: true, force: true });
+  if (pickDir !== "") quarantineSync(pickDir, { recursive: true, force: true });
 });
 
 test("the timeline rail previews a message and jumps to it, past the lazily rendered window", async () => {

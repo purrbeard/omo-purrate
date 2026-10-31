@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { launchApp, shot, tempDir } from "./helpers.ts";
@@ -37,6 +38,6 @@ test("proxy settings fetch models, save reasoning metadata and reconnect omo", a
     const closed = once(server, "close");
     server.close();
     await closed;
-    rmSync(fakeHome, { recursive: true, force: true });
+    quarantineSync(fakeHome, { recursive: true, force: true });
   }
 });

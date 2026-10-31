@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { quarantineSync } from "../../scripts/quarantine-temp.mjs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -76,7 +77,7 @@ describe("runInstaller with the native shell and downloader", () => {
   });
 
   afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
+    quarantineSync(dir, { recursive: true, force: true });
   });
 
   async function install(script: string | null): Promise<{ result: InstallResult; lines: InstallLogLine[] }> {

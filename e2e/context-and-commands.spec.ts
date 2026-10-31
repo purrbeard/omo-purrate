@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { mkdirSync, rmSync, watch, writeFileSync } from "node:fs";
+import { mkdirSync, watch, writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { TESTID } from "../src/ui/testids.ts";
 import { byTestId, lastTurn, launchApp, newSession, prompts, send, tempDir, WT } from "./helpers.ts";
@@ -155,7 +156,7 @@ test("Alt+Enter queues a follow-up for after the turn; queued messages can be ed
     expect(queueCommands()).toEqual([]);
   } finally {
     await launched.close();
-    rmSync(pickDir, { recursive: true, force: true });
+    quarantineSync(pickDir, { recursive: true, force: true });
   }
 });
 
@@ -184,7 +185,7 @@ test("Settings > Behavior 'Ctrl+Enter sends' makes Enter a new line and Ctrl+Ent
     await expect.poll(() => prompts(launched.readFakeLog()).map(entry => entry.message)).toEqual(["line one\nline two"]);
   } finally {
     await launched.close();
-    rmSync(pickDir, { recursive: true, force: true });
+    quarantineSync(pickDir, { recursive: true, force: true });
   }
 });
 
@@ -223,6 +224,6 @@ test("@ opens a workspace file menu; choosing a file removes the @query and adds
     await expect(menu).toBeHidden();
   } finally {
     await launched.close();
-    rmSync(pickDir, { recursive: true, force: true });
+    quarantineSync(pickDir, { recursive: true, force: true });
   }
 });

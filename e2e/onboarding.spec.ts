@@ -1,4 +1,5 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -62,7 +63,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await launched?.close();
   launched = null;
-  for (const dir of [fakeHome, userData, pickDir, projA, projB]) if (dir !== "") rmSync(dir, { recursive: true, force: true });
+  for (const dir of [fakeHome, userData, pickDir, projA, projB]) if (dir !== "") quarantineSync(dir, { recursive: true, force: true });
 });
 
 test("first run steps through the wizard and remembers the choices", async () => {
@@ -188,7 +189,7 @@ test("closing the wizard early on a fresh profile still completes it", async () 
   await expect(byTestId(current().page, TESTID.wizard)).toBeHidden();
   await current().close();
   launched = null;
-  rmSync(earlyUserData, { recursive: true, force: true });
+  quarantineSync(earlyUserData, { recursive: true, force: true });
 });
 
 test("every step renders in the dark theme", async () => {
@@ -225,5 +226,5 @@ test("every step renders in the dark theme", async () => {
   await expect(wizard).toBeHidden();
   await current().close();
   launched = null;
-  for (const dir of [darkHome, darkUserData]) rmSync(dir, { recursive: true, force: true });
+  for (const dir of [darkHome, darkUserData]) quarantineSync(dir, { recursive: true, force: true });
 });

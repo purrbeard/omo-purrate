@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import { ATTACHMENT_HEADER } from "../src/ui/composer/attachments.ts";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
@@ -25,7 +26,7 @@ test("picker sends local images and echoes user thumbnails", async () => {
     await expect(byTestId(page, TESTID.userMessage)).toContainText("Describe this image");
     await expect(byTestId(page, TESTID.userMessage)).not.toContainText("Attached images");
     expect(prompts(readFakeLog())).toContainEqual(expect.objectContaining({ message: `Describe this image\n\n${ATTACHMENT_HEADER}\n- ${image}` }));
-  } finally { await launched.close(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { await launched.close(); quarantineSync(dir, { recursive: true, force: true }); }
 });
 
 test("paste and drop preview, remove, and send image-only", async () => {
@@ -82,5 +83,5 @@ test("the paperclip attaches any file type as a file reference", async () => {
     const text = String(request?.message);
     expect(text).toContain(JSON.stringify(document));
     expect(text).toContain(JSON.stringify(archive));
-  } finally { await launched.close(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { await launched.close(); quarantineSync(dir, { recursive: true, force: true }); }
 });

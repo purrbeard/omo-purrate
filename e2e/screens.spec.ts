@@ -1,4 +1,5 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -46,7 +47,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await launched?.close();
   launched = null;
-  for (const dir of [fakeHome, userData, alpha, beta]) if (dir !== "") rmSync(dir, { recursive: true, force: true });
+  for (const dir of [fakeHome, userData, alpha, beta]) if (dir !== "") quarantineSync(dir, { recursive: true, force: true });
 });
 
 test("archive screen groups by project, filters, and restoring returns the row to the sidebar", async () => {

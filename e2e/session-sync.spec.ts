@@ -1,4 +1,5 @@
-import { appendFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -89,6 +90,6 @@ test("an open session follows what another omo process appends to its file", asy
     await shot(page, "session-sync-live-agents");
   } finally {
     await launched.close();
-    for (const target of [fakeHome, pickDir]) rmSync(target, { recursive: true, force: true });
+    for (const target of [fakeHome, pickDir]) quarantineSync(target, { recursive: true, force: true });
   }
 });

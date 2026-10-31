@@ -9,11 +9,11 @@ import {
   mkdtempSync,
   readFileSync,
   renameSync,
-  rmSync,
   utimesSync,
   watch,
   writeFileSync,
 } from "node:fs";
+import { quarantineSync } from "../../scripts/quarantine-temp.mjs";
 import { tmpdir } from "node:os";
 import { createServer } from "node:net";
 import { dirname, join, win32 } from "node:path";
@@ -225,7 +225,7 @@ function readGoal(record) {
 function writeGoal(record, goal) {
   const file = goalFile(record);
   if (goal === null) {
-    rmSync(file, { force: true });
+    quarantineSync(file, { force: true });
     return;
   }
   mkdirSync(dirname(file), { recursive: true });

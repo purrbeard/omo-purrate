@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -56,7 +57,7 @@ test.afterAll(async () => {
   } finally {
     for (const dir of [fakeHome, userData, pickDir]) {
       if (dir === "") continue;
-      rmSync(dir, { recursive: true, force: true });
+      quarantineSync(dir, { recursive: true, force: true });
       expect(existsSync(dir)).toBe(false);
     }
     await test.info().attach("directory-cleanup", {

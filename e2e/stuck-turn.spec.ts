@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
 import { byTestId, lastTurn, launchApp, newSession, send, shot, tempDir, type LaunchedApp } from "./helpers.ts";
@@ -21,7 +21,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await launched?.close();
   launched = null;
-  for (const dir of [fakeHome, pickDir]) if (dir !== "") rmSync(dir, { recursive: true, force: true });
+  for (const dir of [fakeHome, pickDir]) if (dir !== "") quarantineSync(dir, { recursive: true, force: true });
 });
 
 test("a turn whose turn/completed never arrives settles on the idle status and the next message starts a new turn", async () => {

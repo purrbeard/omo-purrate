@@ -1,5 +1,6 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
@@ -101,8 +102,8 @@ test("checkout bar shows branch and counts; reasoning writes turn/start effort; 
     expect(remoteHead).toBe(localHead);
   } finally {
     await launched.close();
-    rmSync(repo, { recursive: true, force: true });
-    rmSync(remote, { recursive: true, force: true });
+    quarantineSync(repo, { recursive: true, force: true });
+    quarantineSync(remote, { recursive: true, force: true });
   }
 });
 
@@ -119,7 +120,7 @@ test("a non-git workspace shows only the folder", async () => {
     await expect(byTestId(page, TESTID.commitButton)).toHaveCount(0);
   } finally {
     await launched.close();
-    rmSync(plain, { recursive: true, force: true });
+    quarantineSync(plain, { recursive: true, force: true });
   }
 });
 

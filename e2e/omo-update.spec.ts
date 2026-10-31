@@ -1,4 +1,5 @@
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { ENV } from "../shared/ipc.ts";
@@ -48,7 +49,7 @@ test("update checks are nonblocking and the localized setting persists across ap
     );
   } finally {
     await launched?.close();
-    rmSync(home, { recursive: true, force: true });
-    rmSync(userData, { recursive: true, force: true });
+    quarantineSync(home, { recursive: true, force: true });
+    quarantineSync(userData, { recursive: true, force: true });
   }
 });

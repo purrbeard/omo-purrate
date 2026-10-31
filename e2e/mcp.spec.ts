@@ -1,4 +1,5 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -20,7 +21,7 @@ test("imports MCP JSON through the native file picker without replacing existing
     await expect(running.page.locator("html")).toHaveAttribute("data-bridge-state", "connected");
     await expect(running.page.locator('[data-testid="mcp-configured-server"][data-server-name="imported"]')).toBeVisible();
     expect(JSON.parse(readFileSync(path.join(home, "mcp.json"), "utf8"))).toMatchObject({ mcpServers: { imported: { command: "node", args: ["server.mjs"] } } });
-  } finally { await running.close(); rmSync(home, { recursive: true, force: true }); }
+  } finally { await running.close(); quarantineSync(home, { recursive: true, force: true }); }
 });
 
 for (const theme of ["light", "dark"] as const) {
@@ -61,7 +62,7 @@ for (const theme of ["light", "dark"] as const) {
       await shot(page, `mcp-${theme}`);
     } finally {
       await running.close();
-      rmSync(workspace, { recursive: true, force: true });
+      quarantineSync(workspace, { recursive: true, force: true });
     }
   });
 }

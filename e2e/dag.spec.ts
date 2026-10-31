@@ -1,4 +1,5 @@
-import { copyFileSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
 import { byTestId, launchApp, newSession, send, setTheme, shot, tempDir, threadRow, hostRequests, prompts } from "./helpers.ts";
@@ -119,6 +120,6 @@ test("compact DAG and nested subagent todos update without disturbing the conver
     expect(prompts(launched.readFakeLog())).toHaveLength(1);
   } finally {
     await launched.close();
-    rmSync(pickDir, { recursive: true, force: true });
+    quarantineSync(pickDir, { recursive: true, force: true });
   }
 });

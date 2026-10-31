@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
 import {
@@ -45,7 +45,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await launched?.close();
   launched = null;
-  for (const dir of [fakeHome, userData, pickDir]) if (dir !== "") rmSync(dir, { recursive: true, force: true });
+  for (const dir of [fakeHome, userData, pickDir]) if (dir !== "") quarantineSync(dir, { recursive: true, force: true });
 });
 
 test("full scenario: reasoning, approval, question, markdown answer", async () => {

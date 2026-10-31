@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { quarantineSync } from "../../scripts/quarantine-temp.mjs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Socket } from "node:net";
@@ -187,6 +188,6 @@ describe("installation token", () => {
       expect(loadIphoneToken(dir)).toBe(token);
       expect(JSON.parse(readFileSync(path.join(dir, "iphone-token.json"), "utf8"))).toEqual({ token });
       if (process.platform !== "win32") expect(statSync(path.join(dir, "iphone-token.json")).mode & 0o777).toBe(0o600);
-    } finally { rmSync(dir, { recursive: true, force: true }); }
+    } finally { quarantineSync(dir, { recursive: true, force: true }); }
   });
 });

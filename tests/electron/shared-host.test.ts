@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
+import { quarantineSync } from "../../scripts/quarantine-temp.mjs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -10,7 +11,7 @@ const FAKE_OMO = path.join(__dirname, "..", "fixtures", "fake-omo.mjs");
 const dirs: string[] = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) quarantineSync(dir, { recursive: true, force: true });
 });
 
 function execAnswering(stdout: string, code: number | null, stderr = ""): ExecFileImpl {

@@ -1,4 +1,5 @@
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -111,8 +112,8 @@ test("profile drag resolves the turn; specific model search and persistence stil
     await expect(byTestId(page, TESTID.profilePad)).toBeHidden();
   } finally {
     await launched.close();
-    rmSync(pickDir, { recursive: true, force: true });
-    rmSync(userData, { recursive: true, force: true });
+    quarantineSync(pickDir, { recursive: true, force: true });
+    quarantineSync(userData, { recursive: true, force: true });
   }
 });
 
@@ -214,7 +215,7 @@ test("custom profile models persist, drive previews and turns, and restore Autom
     await expect(page.locator('[data-profile-unavailable="daily-normal"]')).toHaveCount(0);
   } finally {
     await launched.close();
-    rmSync(pickDir, { recursive: true, force: true });
-    rmSync(userData, { recursive: true, force: true });
+    quarantineSync(pickDir, { recursive: true, force: true });
+    quarantineSync(userData, { recursive: true, force: true });
   }
 });

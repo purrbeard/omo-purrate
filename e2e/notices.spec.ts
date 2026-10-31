@@ -1,4 +1,5 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -28,7 +29,7 @@ test("session-only provider errors appear live and after restoring history", asy
     try {
       await launched?.close();
     } finally {
-      for (const dir of [userData, fakeHome, pickDir]) rmSync(dir, { recursive: true, force: true });
+      for (const dir of [userData, fakeHome, pickDir]) quarantineSync(dir, { recursive: true, force: true });
     }
   }
 });
@@ -47,7 +48,7 @@ test("New session stays disabled until omo has connected", async () => {
     await expect(byTestId(page, TESTID.newSession)).toBeEnabled();
   } finally {
     await launched.close();
-    for (const dir of [pickDir, gateDir]) rmSync(dir, { recursive: true, force: true });
+    for (const dir of [pickDir, gateDir]) quarantineSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -67,7 +68,7 @@ test("a failed turn surfaces as an error toast", async () => {
     await shot(page, "C002-notice", { maxSettleMs: 1000 });
   } finally {
     await launched.close();
-    rmSync(pickDir, { recursive: true, force: true });
+    quarantineSync(pickDir, { recursive: true, force: true });
   }
 });
 
@@ -89,6 +90,6 @@ test("an auto-retried turn stays running with a retry notice and finishes in the
     await expect(byTestId(page, TESTID.composerStop)).toHaveCount(0);
   } finally {
     await launched.close();
-    for (const dir of [pickDir, fakeHome]) rmSync(dir, { recursive: true, force: true });
+    for (const dir of [pickDir, fakeHome]) quarantineSync(dir, { recursive: true, force: true });
   }
 });

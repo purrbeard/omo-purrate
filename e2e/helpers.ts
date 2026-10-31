@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,7 +41,7 @@ export interface LaunchedApp {
   page: Page;
   dirs: LaunchDirs;
   readFakeLog(): Record<string, unknown>[];
-  /** Closes the app and removes the temp dirs launchApp created (never the ones passed in). */
+  /** Closes the app and quarantines the temp dirs launchApp created (never the ones passed in). */
   close(): Promise<void>;
 }
 
@@ -139,7 +140,7 @@ export async function launchApp(options: LaunchOptions): Promise<LaunchedApp> {
   Object.assign(env, options.extraEnv ?? {});
 
   const removeCreated = (): void => {
-    for (const dir of created) rmSync(dir, { recursive: true, force: true });
+    for (const dir of created) quarantineSync(dir, { recursive: true, force: true });
   };
   let app: ElectronApplication;
   try {

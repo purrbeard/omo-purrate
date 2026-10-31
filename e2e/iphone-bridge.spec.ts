@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { test, expect } from "@playwright/test";
 import { createFakeUsbmuxd, type PhoneFrame } from "../tests/fixtures/fake-usbmuxd.mjs";
@@ -98,5 +98,5 @@ test("USB phone controls omo and Settings tracks detach", async () => {
       await expect(byTestId(app.page, TESTID.iphoneStatus)).toHaveAttribute("data-state", "searching");
       await expect(byTestId(app.page, TESTID.iphoneStatus)).toHaveText("Not connected");
     } finally { await app.close(); }
-  } finally { await fake.close(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { await fake.close(); quarantineSync(dir, { recursive: true, force: true }); }
 });

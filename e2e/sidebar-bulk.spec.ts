@@ -1,4 +1,5 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
@@ -32,7 +33,7 @@ test.describe("sidebar bulk tidy", () => {
   let seeded: Seeded | null = null;
   test.afterEach(async () => {
     await seeded?.launched.close();
-    for (const dir of seeded?.dirs ?? []) rmSync(dir, { recursive: true, force: true });
+    for (const dir of seeded?.dirs ?? []) quarantineSync(dir, { recursive: true, force: true });
     seeded = null;
   });
 

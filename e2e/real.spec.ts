@@ -1,11 +1,10 @@
-import { mkdirSync, realpathSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { realpathSync } from "node:fs";
+import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
 import { byTestId, launchApp, newSession, send, setTheme, shot, tempDir, threadRow, type LaunchedApp } from "./helpers.ts";
 
-const WORKSPACE = path.join(tmpdir(), "omo-ui-qa", "ws1");
+let workspace = "";
 const MODEL_TIMEOUT_MS = 180_000;
 const RECONNECT_TIMEOUT_MS = 30_000;
 
@@ -18,7 +17,7 @@ let threadId = "";
 const createdThreads = new Set<string>();
 
 const start = async (): Promise<LaunchedApp> => {
-  launched = await launchApp({ omo: "installed", userData, pickDir: WORKSPACE });
+  launched = await launchApp({ omo: "installed", userData, pickDir: workspace });
   return launched;
 };
 
@@ -51,8 +50,7 @@ async function sendAndFinish(page: Page, text: string): Promise<Locator> {
 }
 
 test.beforeAll(async () => {
-  rmSync(WORKSPACE, { recursive: true, force: true });
-  mkdirSync(WORKSPACE, { recursive: true });
+  workspace = tempDir("real-workspace");
   userData = tempDir("real-user-data");
   await start();
 });
@@ -60,7 +58,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (launched !== null) {
     const { page } = launched;
-    const workspaces = [WORKSPACE, realpathSync(WORKSPACE)];
+    const workspaces = [workspace, realpathSync(workspace)];
     for (const id of createdThreads) {
       // Only threads this spec started, and only while omo still reports them in its own workspace.
       const read = await page.evaluate(async (threadId) => {
@@ -79,8 +77,8 @@ test.afterAll(async () => {
     await launched.close();
     launched = null;
   }
-  rmSync(WORKSPACE, { recursive: true, force: true });
-  if (userData !== "") rmSync(userData, { recursive: true, force: true });
+  if (workspace !== "") quarantineSync(workspace, { recursive: true, force: true });
+  if (userData !== "") quarantineSync(userData, { recursive: true, force: true });
 });
 
 test("C001: pong, a tool call, and the sidebar workspace group", async () => {
@@ -95,7 +93,7 @@ test("C001: pong, a tool call, and the sidebar workspace group", async () => {
   await expect(toolTurn.locator(`[data-testid="${TESTID.toolCard}"]`).first()).toBeVisible();
   await expect(toolTurn.locator(`[data-testid="${TESTID.assistantMessage}"]`).last()).toContainText("omo-ui-42");
 
-  const cwds = [WORKSPACE, realpathSync(WORKSPACE)].map((cwd) => `[data-cwd="${cwd}"]`).join(", ");
+  const cwds = [workspace, realpathSync(workspace)].map((cwd) => `[data-cwd="${cwd}"]`).join(", ");
   const group = page.locator(`[data-testid="${TESTID.workspaceGroup}"]`).and(page.locator(cwds));
   await expect(group.locator(`[data-testid="${TESTID.threadRow}"][data-thread-id="${threadId}"]`)).toBeVisible();
   await shot(page, "C001-real-light");
