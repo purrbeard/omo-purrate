@@ -71,7 +71,7 @@ export class OmoSupervisor {
   private updatePromise: Promise<OmoBinary> | null = null;
   private restartTimer: NodeJS.Timeout | null = null;
   private readonly statusListeners = new Set<(status: BridgeStatus) => void>();
-  private transferringSession = false;
+  private sessionTransfer: Promise<void> | null = null;
   private readonly notificationListeners = new Set<(notification: RpcNotification) => void>();
   private readonly serverRequestListeners = new Set<(request: RpcServerRequest) => void>();
 
@@ -96,6 +96,7 @@ export class OmoSupervisor {
 
   /** Stops the current child, re-resolves the login environment, and connects with a fresh attempt counter. */
   async restart(): Promise<void> {
+    if (this.sessionTransfer !== null) throw new Error("session tree navigation is in progress");
     this.stopped = false;
     this.cancelRestart();
     const generation = ++this.generation;
@@ -120,7 +121,8 @@ export class OmoSupervisor {
     await client?.stop();
   }
 
-  request<M extends ClientMethod>(method: M, params: ClientParams<M>): Promise<ClientResult<M>> {
+  async request<M extends ClientMethod>(method: M, params: ClientParams<M>): Promise<ClientResult<M>> {
+    if (this.sessionTransfer !== null) await this.sessionTransfer;
     const client = this.connectedClient();
     if (!client) return Promise.reject(new RpcRequestError(BRIDGE_ERROR_CODES.notConnected, "omo is not connected"));
     return client.request(method, params);
@@ -137,9 +139,10 @@ export class OmoSupervisor {
     const binary = this.status.omo;
     if (!binary || this.status.state !== "connected") throw new Error("omo is not connected");
     const env = scrubChildEnv(await this.getLoginEnv());
-    this.transferringSession = true;
-    await this.stop();
+    let releaseTransfer = (): void => {};
+    this.sessionTransfer = new Promise<void>(resolve => { releaseTransfer = resolve; });
     try {
+      await this.stop();
       return await run(binary, env);
     } finally {
       this.stopped = false;
@@ -147,7 +150,8 @@ export class OmoSupervisor {
       try {
         await this.connect(this.generation);
       } finally {
-        this.transferringSession = false;
+        this.sessionTransfer = null;
+        releaseTransfer();
         if (this.status.state !== "connected") this.setStatus({});
       }
     }
@@ -359,7 +363,7 @@ export class OmoSupervisor {
 
   private setStatus(patch: Partial<BridgeStatus>): void {
     this.status = { ...this.status, ...patch };
-    if (this.transferringSession) return;
+    if (this.sessionTransfer !== null) return;
     for (const listener of [...this.statusListeners]) listener(this.status);
   }
 }

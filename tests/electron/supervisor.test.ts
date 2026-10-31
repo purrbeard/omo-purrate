@@ -75,6 +75,31 @@ afterEach(() => {
 });
 
 describe("OmoSupervisor", () => {
+  it("holds background RPC until native tree ownership returns to the reconnected client", async () => {
+    let markEntered = (): void => {}, release = (): void => {};
+    const entered = new Promise<void>(resolve => { markEntered = resolve; });
+    const released = new Promise<void>(resolve => { release = resolve; });
+    let created = 0;
+    const supervisor = new OmoSupervisor({
+      homeDir: "/tmp", baseEnv: {}, clientVersion: "test", resolveEnv: loginEnv,
+      locate: async () => ({ ok: true, binary }),
+      createClient: () => {
+        const client = new FakeClient(INIT);
+        const id = ++created;
+        client.request = async () => { throw new Error(`client-${id}`); };
+        return client;
+      },
+    });
+    await supervisor.start();
+    const transfer = supervisor.withSessionOwner(async () => { markEntered(); await released; });
+    await entered;
+    try {
+      await expect(supervisor.restart()).rejects.toThrow("session tree navigation is in progress");
+      const read = expect(supervisor.request("thread/list", {})).rejects.toThrow("client-2");
+      release();
+      await Promise.all([transfer, read]);
+    } finally { release(); await transfer; await supervisor.stop(); }
+  });
   it("releases session ownership before native tree access and reconnects on failure", async () => {
     const clients: FakeClient[] = [];
     const supervisor = new OmoSupervisor({
