@@ -1117,8 +1117,8 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         // Its file appears with the first turn this app runs; that file becomes the baseline outside changes are
         // measured against, so a terminal turn appended later is read like one in a session opened from disk.
         adoptBaseline.add(threadId);
-        await readGoal(threadId);
-        await loadSkills(result.thread.cwd, { force: true });
+        void readGoal(threadId);
+        void loadSkills(result.thread.cwd, { force: true });
         await rememberWorkspace(cwd);
         if (parentId !== undefined) await refreshThreads();
         return threadId;

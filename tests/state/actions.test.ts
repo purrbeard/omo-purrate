@@ -556,12 +556,30 @@ describe("createActions", () => {
     threadId: THREAD_ID, objective: "ship", status: "active", tokenBudget: null, tokensUsed: 1, timeUsedSeconds: 2,
     createdAt: 1, updatedAt: 2,
   };
+  it("makes a new session sendable while its skill catalog is still loading", async () => {
+    const context = setup();
+    const catalog = deferred<SkillsListResponse>();
+    context.bridge.skills = () => catalog.promise;
+    try {
+      const started = context.actions.newThread("/tmp/work/project");
+      let timer: ReturnType<typeof setTimeout>;
+      const deadline = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("new session waited for the skill catalog")), 2_000);
+      });
+      const id = await Promise.race([started, deadline]).finally(() => clearTimeout(timer));
+      expect(id).toBe(THREAD_ID);
+      expect(await context.actions.sendMessage("first prompt")).toBe(true);
+      expect(context.bridge.methods().filter(method => method === "turn/start")).toHaveLength(1);
+    } finally { catalog.resolve({ data: [] }); }
+  });
   it("reads the native goal once after start and again after turn settlement", async () => {
     const context = setup();
     context.bridge.goal = async () => ({ goal: activeGoal });
     const disconnect = context.actions.connect();
     try {
+      const loaded = waitForState(context.store, state => state.conversations[THREAD_ID]?.live.goal?.objective === activeGoal.objective);
       await context.actions.newThread("/tmp/work/project");
+      await loaded;
       expect(context.store.getState().conversations[THREAD_ID]?.live.goal).toEqual(activeGoal);
       context.bridge.goal = async () => ({ goal: null });
       const settled = waitForState(context.store, (state) => state.conversations[THREAD_ID]?.live.goal === null);
