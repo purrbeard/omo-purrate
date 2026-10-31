@@ -35,10 +35,11 @@ registerMediaScheme();
 
 const devUrl = process.env[ENV.devUrl] || null;
 /**
- * Test runs open a window the user can neither see, click nor focus (transparent, click-through, never activated), at its
- * normal place so its display scale stays the real one; Chromium must not then treat it as occluded and stop painting.
+ * Test runs never activate the window. A specified display position makes it visible there;
+ * otherwise it remains transparent. Chromium must keep painting either way.
  */
 const background = process.env[ENV.backgroundWindow] === "1";
+const testPosition = background ? /^(-?\d+),(-?\d+)$/.exec(process.env[ENV.qaWindowPosition] ?? "") : null;
 if (background) app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion");
 const indexPath = path.join(__dirname, "../dist/index.html");
 let mainWindow: BrowserWindow | null = null;
@@ -68,7 +69,8 @@ function createWindow(): BrowserWindow {
     minHeight: 600,
     title: "omo Purrate",
     show: false,
-    ...(background ? { opacity: 0, focusable: false, skipTaskbar: true } : {}),
+    ...(background ? { opacity: testPosition === null ? 0 : 1, focusable: false, skipTaskbar: true } : {}),
+    ...(testPosition === null ? {} : { x: Number(testPosition[1]), y: Number(testPosition[2]) }),
     ...(process.platform === "darwin" ? {
       titleBarStyle: "hiddenInset" as const,
       trafficLightPosition: { x: 16, y: 18 },

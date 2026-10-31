@@ -766,8 +766,10 @@ export const ENV = {
   qaPickAttachments: "OMO_UI_QA_PICK_ATTACHMENTS",
   /** Overrides Electron's userData directory (tests and QA). */
   userData: "OMO_UI_USER_DATA",
-  /** "1" opens the window off screen without activating it, so test runs never take the user's focus (tests). */
+  /** "1" opens an inactive, click-through test window, transparent unless qaWindowPosition is set. */
   backgroundWindow: "OMO_UI_BACKGROUND_WINDOW",
+  /** Test window's top-left `x,y` on a secondary display; set before showing it without activation. */
+  qaWindowPosition: "OMO_UI_QA_WINDOW_POSITION",
   /** The path a save dialog returns instead of prompting (tests and QA). */
   qaSavePath: "OMO_UI_QA_SAVE_PATH",
   /** Appends one JSON line per macOS thread notification to this file (tests and QA); the notification still shows. */
