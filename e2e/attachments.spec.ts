@@ -1,6 +1,5 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { quarantineSync } from "../scripts/quarantine-temp.mjs";
-import { ATTACHMENT_HEADER } from "../src/ui/composer/attachments.ts";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { ENV } from "../shared/ipc.ts";
@@ -25,7 +24,10 @@ test("picker sends local images and echoes user thumbnails", async () => {
     await expect(byTestId(page, TESTID.userMessage).locator("img")).toBeVisible();
     await expect(byTestId(page, TESTID.userMessage)).toContainText("Describe this image");
     await expect(byTestId(page, TESTID.userMessage)).not.toContainText("Attached images");
-    expect(prompts(readFakeLog())).toContainEqual(expect.objectContaining({ message: `Describe this image\n\n${ATTACHMENT_HEADER}\n- ${image}` }));
+    expect(readFakeLog().find(entry => entry["type"] === "prompt")).toMatchObject({
+      message: "Describe this image",
+      images: [{ type: "image", mimeType: "image/png", data: PNG }],
+    });
   } finally { await launched.close(); quarantineSync(dir, { recursive: true, force: true }); }
 });
 
@@ -53,10 +55,10 @@ test("paste and drop preview, remove, and send image-only", async () => {
     await expect(byTestId(page, TESTID.composerSend)).toBeEnabled();
     await byTestId(page, TESTID.composerSend).click();
     await expect(byTestId(page, TESTID.userMessage).locator("img")).toBeVisible();
-    const request = prompts(readFakeLog())[0];
-    expect(request?.message).toEqual(expect.stringMatching(new RegExp(`^${ATTACHMENT_HEADER.replace(/[()]/g, "\\$&")}\\n- .+[\\\\/]attachments[\\\\/][0-9a-f-]+\\.png$`)));
-    const saved = String(request?.message).split("\n- ")[1] ?? "";
-    expect(readFileSync(saved).equals(Buffer.from(PNG, "base64"))).toBe(true);
+    expect(readFakeLog().find(entry => entry["type"] === "prompt")).toMatchObject({
+      message: "",
+      images: [{ type: "image", mimeType: "image/png", data: PNG }],
+    });
     await expect(byTestId(page, TESTID.userMessage).locator("img")).toHaveJSProperty("complete", true);
     expect(await byTestId(page, TESTID.userMessage).locator("img").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
     await expect(byTestId(page, TESTID.attachmentThumbnail)).toHaveCount(0);

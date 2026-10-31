@@ -3,7 +3,6 @@ import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { ENV } from "../shared/ipc.ts";
-import { ATTACHMENT_HEADER } from "../src/ui/composer/attachments.ts";
 import { TESTID } from "../src/ui/testids.ts";
 import { byTestId, lastTurn, launchApp, newSession, send, setTheme, shot, tempDir, threadRow, type LaunchedApp, prompts, newSessions } from "./helpers.ts";
 
@@ -93,7 +92,11 @@ test("edit and repeated regeneration preserve one native session, images, origin
       await expect(users.nth(1).locator("img")).toBeVisible();
       await expect(byTestId(page, TESTID.threadRow)).toHaveCount(1);
       await expect(threadRow(page, threadId)).toHaveAttribute("aria-current", "page");
-      expect(prompts(readFakeLog()).at(-1)).toEqual({ threadId, message: `gamma question\n\n${ATTACHMENT_HEADER}\n- ${image}` });
+      expect(readFakeLog().findLast(entry => entry["type"] === "prompt")).toMatchObject({
+        threadId,
+        message: "gamma question",
+        images: [{ type: "image", mimeType: "image/png", data: readFileSync(image).toString("base64") }],
+      });
       expect(readFakeLog().filter((entry) => entry["type"] === "set_model").at(-1)).toMatchObject({ threadId, modelId: "gpt-6-astra" });
       expect(readFakeLog().filter((entry) => entry["type"] === "set_thinking_level").at(-1)).toMatchObject({ threadId, level: "high" });
       await expect(byTestId(page, TESTID.modelPicker)).toContainText("GPT-6 Astra");

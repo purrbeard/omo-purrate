@@ -5,10 +5,7 @@ export type ImageInput = Extract<UserInput, { type: "image" | "localImage" }>;
 export const IMAGE_LIMIT = 10;
 export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp"];
 
-/**
- * omo's app-server rejects image and localImage input items, so attachments travel as file paths in a trailing text
- * block that the model opens with its read tool. The header line is what `splitAttachments` recognises.
- */
+/** Legacy path attachment header retained for conversations sent before native image input support. */
 export const ATTACHMENT_HEADER = "Attached images (open each file with the read tool):";
 
 export function isImageFile(name: string, mime = ""): boolean {
@@ -18,11 +15,12 @@ export function capImages(current: readonly ImageInput[], added: readonly ImageI
   return [...current, ...added].slice(0, IMAGE_LIMIT);
 }
 
-/** The single text input omo accepts: the trimmed-or-empty text followed by the attachment block when there are paths. */
+/** Native image inputs reach the model directly; text bytes remain unchanged. */
 export function messageInput(text: string, imagePaths: readonly string[]): UserInput[] {
-  const body = text.trim() === "" ? "" : text;
-  const block = imagePaths.length === 0 ? "" : [ATTACHMENT_HEADER, ...imagePaths.map((path) => `- ${path}`)].join("\n");
-  return [{ type: "text", text: body === "" ? block : block === "" ? body : `${body}\n\n${block}`, text_elements: [] }];
+  return [
+    ...(text.trim() === "" ? [] : [{ type: "text", text, text_elements: [] } satisfies UserInput]),
+    ...imagePaths.map(path => ({ type: "localImage", path } satisfies UserInput)),
+  ];
 }
 
 /** Splits a sent message into the user's text and the attached image paths of a trailing attachment block. */
