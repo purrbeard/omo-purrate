@@ -5,6 +5,7 @@ type SessionEntry = { readonly type: string; readonly customType?: string };
 type Api = {
   readonly rpc: { handle(name: string, handler: (data: unknown) => Promise<unknown>): void };
   readonly sessionContext?: Readonly<Record<string, string>>;
+  readonly events?: { on(name: string, handler: (data: unknown) => void): void };
   executeTool(name: string, args: object, options: { activateInactiveTool: boolean }): Promise<ToolResult>;
   on(event: "session_start", handler: (event: unknown, ctx: { readonly sessionManager: { getEntries(): readonly SessionEntry[] } }) => void | Promise<void>): void;
   appendEntry(customType: string, data: unknown, options: { startupBookkeeping: boolean }): void;
@@ -15,6 +16,34 @@ type Api = {
 const DELIVERED = new Set(["steered", "revived", "queued", "capacity_deferred"]);
 
 export default function taskMessageExtension(pi: Api): void {
+  const monitors = new Map<string, boolean>();
+  pi.events?.on("terminal_monitor_state", data => {
+    if (typeof data !== "object" || data === null || !("monitors" in data) || !Array.isArray(data.monitors)) return;
+    monitors.clear();
+    for (const value of data.monitors) {
+      if (typeof value === "object" && value !== null && "id" in value && typeof value.id === "string" && "paused" in value && typeof value.paused === "boolean") monitors.set(value.id, value.paused);
+    }
+  });
+  pi.rpc.handle("omo-ui.monitor.control", async data => {
+    if (typeof data !== "object" || data === null || !("id" in data) || typeof data.id !== "string" || !("action" in data) || (data.action !== "stop" && data.action !== "rearm")) throw new Error("Invalid monitor control");
+    if (!monitors.has(data.id) || (data.action === "rearm" && monitors.get(data.id) !== true)) throw new Error("Monitor is not owned by this session or is not paused");
+    const result = data.action === "stop"
+      ? await pi.executeTool("kill_bash", { bash_id: data.id }, { activateInactiveTool: true })
+      : await pi.executeTool("monitor", { action: "rearm", bash_id: data.id }, { activateInactiveTool: true });
+    if (result.isError) throw new Error(result.content.filter(part => part.type === "text").map(part => part.text ?? "").join("\n"));
+    return { applied: true };
+  });
+  pi.rpc.handle("omo-ui.team.send", async data => {
+    if (typeof data !== "object" || data === null || !("teamRunId" in data) || typeof data.teamRunId !== "string" || !("member" in data) || typeof data.member !== "string" || !("message" in data) || typeof data.message !== "string" || !data.message.trim()) throw new Error("Invalid team message");
+    const result = await pi.executeTool("task_send", { to: data.member, team_run_id: data.teamRunId, message: data.message }, { activateInactiveTool: true });
+    const details = result.details;
+    const team = typeof details === "object" && details !== null && "kind" in details && details.kind === "team_message" && "team" in details ? details.team : null;
+    if (result.isError || typeof team !== "object" || team === null || !("kind" in team) || team.kind !== "to_members"
+        || !("recipients" in team) || !Array.isArray(team.recipients) || !team.recipients.includes(data.member)) {
+      throw new Error(result.content.filter(part => part.type === "text").map(part => part.text ?? "").join("\n") || "Team delivery was not confirmed");
+    }
+    return { delivered: true };
+  });
   if (pi.sessionContext?.["created_by"] === ORIGIN_CONTEXT.created_by) {
     pi.on("session_start", (_event, ctx) => {
       const entries = ctx.sessionManager.getEntries();

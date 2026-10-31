@@ -109,3 +109,37 @@ describe("paused workflow control", () => {
     expect(executeTool).not.toHaveBeenCalled();
   });
 });
+
+it("refuses foreign monitors and only rearms paused monitors from its own snapshots", async () => {
+  const handlers = new Map<string, (data: unknown) => Promise<unknown>>();
+  const events = new Map<string, (data: unknown) => void>();
+  const executeTool = vi.fn(async () => ({ content: [] }));
+  taskMessageExtension({ rpc: { handle(name, callback) { handlers.set(name, callback); } }, events: { on(name, callback) { events.set(name, callback); } }, executeTool, on: vi.fn(), appendEntry: vi.fn() });
+  const control = handlers.get("omo-ui.monitor.control"), snapshot = events.get("terminal_monitor_state");
+  if (!control || !snapshot) throw new Error("Monitor bridge missing");
+  await expect(control({ id: "foreign", action: "stop" })).rejects.toThrow("not owned");
+  expect(executeTool).not.toHaveBeenCalled();
+  snapshot({ monitors: [{ id: "own", paused: false }] });
+  await expect(control({ id: "own", action: "rearm" })).rejects.toThrow("not paused");
+  snapshot({ monitors: [{ id: "own", paused: true }] });
+  await expect(control({ id: "own", action: "rearm" })).resolves.toEqual({ applied: true });
+  expect(executeTool).toHaveBeenCalledWith("monitor", { action: "rearm", bash_id: "own" }, { activateInactiveTool: true });
+  snapshot({ monitors: [] });
+  await expect(control({ id: "own", action: "stop" })).rejects.toThrow("not owned");
+});
+
+it.each([
+  [{ kind: "team_message", team: { kind: "to_members", recipients: ["worker"] } }, true],
+  [{ kind: "team_message", team: { kind: "to_members", recipients: ["other"] } }, false],
+  [{ kind: "team_message", team: { kind: "to_lead" } }, false],
+  [{ kind: "not_found" }, false],
+  [{ kind: "unexpected" }, false],
+])("confirms the named team recipient from the native receipt %j", async (details, delivered) => {
+  const handlers = new Map<string, (data: unknown) => Promise<unknown>>();
+  taskMessageExtension({ rpc: { handle(name, callback) { handlers.set(name, callback); } }, executeTool: vi.fn(async () => ({ content: [], details })), on: vi.fn(), appendEntry: vi.fn() });
+  const send = handlers.get("omo-ui.team.send");
+  if (!send) throw new Error("Team handler missing");
+  const sent = send({ teamRunId: "owned", member: "worker", message: "Continue" });
+  if (delivered) await expect(sent).resolves.toEqual({ delivered: true });
+  else await expect(sent).rejects.toThrow("not confirmed");
+});
