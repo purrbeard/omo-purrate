@@ -287,7 +287,7 @@ const api = {
   watchHistory: (sessionPath: string | null): Promise<void> => invoke(CHANNELS.watchHistory, sessionPath),
   onHistoryChanged: (listener: (sessionPath: string) => void) => subscribe(CHANNELS.historyChanged, listener),
   onPreferencesChanged: (listener: (preferences: Preferences) => void) => subscribe(CHANNELS.preferencesChanged, listener),
-  loadTaskWork: (cwd: string, parentSessionId: string): Promise<TaskWork[]> => invoke(CHANNELS.loadTaskWork, cwd, parentSessionId),
+  loadTaskWork: (cwd: string, parentSessionId: string, transcriptTaskId?: string): Promise<TaskWork[]> => invoke(CHANNELS.loadTaskWork, cwd, parentSessionId, transcriptTaskId),
   watchTaskStore: (cwd: string, parentSessionId: string): Promise<void> => invoke(CHANNELS.watchTaskStore, cwd, parentSessionId),
   unwatchTaskStore: (parentSessionId: string): Promise<void> => invoke(CHANNELS.unwatchTaskStore, parentSessionId),
   onTaskWorkChanged: (listener: (update: TaskStoreUpdate) => void) => subscribe(CHANNELS.taskWorkChanged, listener),

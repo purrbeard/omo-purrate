@@ -42,12 +42,31 @@ function parseEntry(line: string): Entry | null {
   if (typeof id !== "string") return null;
   const parentId = value["parentId"];
   const timestamp = typeof value["timestamp"] === "string" ? Date.parse(value["timestamp"]) : Number.NaN;
+  // Runtime bindings and tool metadata can dwarf the conversation. Keep only fields the projection consumes.
+  let raw: JsonObject = {};
+  if (value["type"] === "message" && isRecord(value["message"])) {
+    const source = value["message"];
+    const details = source["details"];
+    raw = { message: { role: source["role"], content: source["content"], stopReason: source["stopReason"],
+      errorMessage: source["errorMessage"], toolCallId: source["toolCallId"], toolName: source["toolName"], isError: source["isError"],
+      details: isRecord(details) ? { durationMs: details["durationMs"], patch: details["patch"], operation: details["operation"],
+        preview: details["preview"], writeNotice: details["writeNotice"], ...historicalTask(details, true) } : undefined } };
+  } else if (value["type"] === "custom_message") {
+    raw = { customType: value["customType"], display: value["display"], content: noticeText(value["content"]),
+      details: value["customType"] === "omo-senpi:wake" && Array.isArray(value["details"]) ? value["details"].filter(isRecord).map(wake => ({
+        customType: wake["customType"], details: Array.isArray(wake["details"]) ? wake["details"].map(record => historicalTask(record, false)).filter(record => record !== null) : [],
+      })) : undefined };
+  } else if (value["type"] === "custom" && value["customType"] === "senpi.todo-state") {
+    raw = { customType: value["customType"], data: value["data"] };
+  } else if (value["type"] === "compaction") raw = { tokensBefore: value["tokensBefore"], summary: value["summary"] };
+  else if (value["type"] === "model_change") raw = { provider: value["provider"], modelId: value["modelId"] };
+  else if (value["type"] === "thinking_level_change") raw = { thinkingLevel: value["thinkingLevel"] };
   return {
     id,
     parentId: typeof parentId === "string" ? parentId : null,
     type: value["type"],
     timestamp: Number.isNaN(timestamp) ? null : timestamp,
-    raw: value,
+    raw,
   };
 }
 
@@ -216,16 +235,38 @@ function finishTurn(turn: TurnBuilder, isFinal: boolean): HistoryTurn {
  * of an omo session JSONL file. Malformed lines and non-rendered entry types are skipped.
  */
 export function parseSessionJsonl(text: string): HistoryResult {
-  const entries = new Map<string, Entry>();
-  let leafId: string | null = null;
-  for (const line of text.split("\n")) {
-    if (line.trim() === "") continue;
+  const parser = new SessionJsonlParser();
+  for (const line of text.split("\n")) parser.add(line);
+  return parser.result();
+}
+
+/** Keeps parsed entries, never the whole JSONL source string, while preserving active-branch projection. */
+export class SessionJsonlParser {
+  private readonly entries = new Map<string, Entry>();
+  private leafId: string | null = null;
+
+  constructor(private readonly workSummary = false) {}
+
+  add(line: string): void {
+    if (line.trim() === "") return;
     const entry = parseEntry(line);
-    if (entry === null) continue;
-    entries.set(entry.id, entry);
-    leafId = entry.id;
+    if (entry === null) return;
+    if (this.workSummary) {
+      const message = entry.raw["message"];
+      if (entry.type === "message" && isRecord(message)) {
+        entry.raw = { message: { role: message["role"], content: message["role"] === "assistant" ? blocks(message["content"]).flatMap<JsonObject>(block =>
+          block["type"] === "text" && typeof block["text"] === "string" ? [{ type: "text", text: block["text"].replace(/\s+/gu, " ").trim().slice(-240) }]
+            : block["type"] === "toolCall" ? [{ type: "toolCall", id: block["id"], name: block["name"] }] : []) : [] } };
+      } else if (!(entry.type === "custom" && entry.raw["customType"] === "senpi.todo-state")) entry.raw = {};
+    }
+    this.entries.set(entry.id, entry);
+    this.leafId = entry.id;
   }
 
+  result(): HistoryResult { return projectHistory(this.entries, this.leafId); }
+}
+
+function projectHistory(entries: Map<string, Entry>, leafId: string | null): HistoryResult {
   const builders: TurnBuilder[] = [];
   let todo: HistoryResult["todo"] = null;
   const tasks = new Map<string, HistoricalTask>();

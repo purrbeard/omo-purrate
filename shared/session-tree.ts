@@ -5,7 +5,7 @@ export interface SessionTreeNode {
   type: string;
   role: string | null;
   label: string;
-  /** Full text, when the entry contains text; assistant entries are editable. */
+  /** Full conversation text for user/assistant entries; assistant entries are editable. Internal entries keep labels. */
   text?: string;
 }
 

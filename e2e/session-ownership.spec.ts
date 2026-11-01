@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { processStartTimes } from "../electron/omo/session-holders.ts";
@@ -50,6 +50,10 @@ test("foreign ownership is read-only and becomes writable when its process exits
     expect(refusal).toContain("session_held:");
     expect(readFileSync(file, "utf8")).toBe(original);
     await shot(page, "ownership-foreign-readonly");
+    appendFileSync(file, JSON.stringify({ type: "message", id: "outside-update", parentId: "answer-first", message: { role: "assistant", content: "Foreign owner continued", stopReason: "stop" } }) + "\n");
+    await expect(page.getByText("Foreign owner continued", { exact: true })).toBeVisible();
+    await expect(banner).toContainText(`pid ${pid}`);
+    await expect(input).toBeDisabled();
     child.stdin.write("release\n");
     await exited;
     await expect(banner).toHaveCount(0);

@@ -193,7 +193,11 @@ export function registerIpc(deps: IpcDeps): () => void {
   const sessionWatcher = createSessionWatcher((sessionPath) => send(IPC.historyChanged, sessionPath));
   /** Task stores a view follows, per parent session, with the number of views following it. */
   const taskStoreWatches = new Map<string, { cwd: string; refs: number; watcher: TaskStoreWatcher }>();
+  const pushingTasks = new Set<string>();
+  const pushTasksAgain = new Set<string>();
   const pushTaskStore = async (cwd: string, parentSessionId: string): Promise<void> => {
+    if (pushingTasks.has(parentSessionId)) { pushTasksAgain.add(parentSessionId); return; }
+    pushingTasks.add(parentSessionId);
     try {
       const [work, runs] = await Promise.all([
         loadTaskWork(taskAgentDir(), cwd, parentSessionId), loadPersistedDagRuns(taskAgentDir(), cwd, parentSessionId),
@@ -201,6 +205,9 @@ export function registerIpc(deps: IpcDeps): () => void {
       if (taskStoreWatches.has(parentSessionId)) send(IPC.taskWorkChanged, { parentSessionId, work, runs });
     } catch (error) {
       console.warn(`[omo-ui] could not reload the task store of ${parentSessionId}`, error);
+    } finally {
+      pushingTasks.delete(parentSessionId);
+      if (pushTasksAgain.delete(parentSessionId) && taskStoreWatches.has(parentSessionId)) void pushTaskStore(cwd, parentSessionId);
     }
   };
 
@@ -521,9 +528,10 @@ export function registerIpc(deps: IpcDeps): () => void {
       }
       return { adopted };
     },
-    [IPC.loadTaskWork]: (_event, cwd, parentSessionId) => loadTaskWork(
+    [IPC.loadTaskWork]: (_event, cwd, parentSessionId, transcriptTaskId) => loadTaskWork(
       taskAgentDir(),
       requireString(cwd, "cwd"), requireString(parentSessionId, "parentSessionId"),
+      transcriptTaskId === undefined ? undefined : validThreadId(transcriptTaskId),
     ),
     [IPC.watchTaskStore]: async (_event, cwd, parentSessionId): Promise<void> => {
       const parent = validThreadId(parentSessionId);

@@ -93,3 +93,65 @@ test("an open session follows what another omo process appends to its file", asy
     for (const target of [fakeHome, pickDir]) quarantineSync(target, { recursive: true, force: true });
   }
 });
+
+test("a completed child's final change is reread after an in-flight transcript read", async () => {
+  const home = tempDir("child-refresh-home"), cwd = tempDir("child-refresh-project");
+  const sessions = path.join(home, "sessions"), store = path.join(cwd, ".omo", "senpi-task");
+  const child = path.join(store, "children", "st_done", "sessions", "now_child.jsonl");
+  mkdirSync(sessions, { recursive: true });
+  mkdirSync(path.dirname(child), { recursive: true });
+  mkdirSync(path.join(store, "tasks"), { recursive: true });
+  writeFileSync(path.join(sessions, `${THREAD}.jsonl`), line({ type: "session", version: 3, id: THREAD, cwd })
+    + message("u", null, "user", "Main question") + message("a", "u", "assistant", "Main answer"));
+  writeFileSync(child, line({ type: "session", version: 3, id: "child" }) + message("old", null, "assistant", "Before final child change"));
+  writeFileSync(path.join(store, "tasks", "st_done.json"), JSON.stringify({ task_id: "st_done", parent_session_id: THREAD,
+    child_session_id: "child", status: "completed", execution_mode: "in-process", model: "fake/model", residency_state: "persisted_only", depth: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }));
+  const launched = await launchApp({ omo: "fake", fakeHome: home, pickDir: cwd, managed: [THREAD] });
+  try {
+    const { page, app } = launched;
+    await threadRow(page, THREAD).getByRole("button").first().click();
+    await page.getByTestId("right-tab-work").click();
+    await page.getByTestId("workflow-agents-view").click();
+    const transcript = page.getByTestId("agent-chat-history");
+    await expect(transcript).toContainText("Before final child change");
+    await page.clock.pauseAt(new Date());
+    await app.evaluate(({ ipcMain, BrowserWindow }, id) => {
+      const web = BrowserWindow.getAllWindows()[0]!.webContents;
+      const send = web.send.bind(web);
+      web.send = (channel, ...args) => { if (channel !== "history:task-work-changed") send(channel, ...args); };
+      const channel = "history:task-work", existing = Reflect.get(ipcMain, "_invokeHandlers").get(channel);
+      let captured = false;
+      ipcMain.removeHandler(channel);
+      ipcMain.handle(channel, async (event, cwd: string, parent: string, task?: string) => {
+        const value = await existing(event, cwd, parent, task);
+        if (!captured && task === "st_done") {
+          captured = true;
+          let release = (): void => {};
+          const pending = new Promise<void>(resolve => { release = resolve; });
+          Object.assign(globalThis, { releaseChildRead: release });
+          await web.executeJavaScript('document.documentElement.dataset.qaChildReadHeld = "true"');
+          await pending;
+        }
+        return value;
+      });
+      web.send("omo:notification", { method: "extension_event", params: { threadId: id, name: "qa-refresh" } });
+    }, THREAD);
+    await expect(page.locator("html")).toHaveAttribute("data-qa-child-read-held", "true");
+    appendFileSync(child, message("final", "old", "assistant", "Final child change during read"));
+    await page.evaluate(() => Object.assign(window, { qaChildChanged: new Promise<void>(resolve => {
+      const off = window.omo.onNotification(notification => {
+        const params = notification.params;
+        if (notification.method === "extension_event" && typeof params === "object" && params !== null && "name" in params && params.name === "qa-last-change") { off(); resolve(); }
+      });
+    }) }));
+    await app.evaluate(({ BrowserWindow }, id) => BrowserWindow.getAllWindows()[0]?.webContents.send("omo:notification", {
+      method: "extension_event", params: { threadId: id, name: "qa-last-change" },
+    }), THREAD);
+    await page.evaluate(() => Reflect.get(window, "qaChildChanged"));
+    await app.evaluate(() => Reflect.get(globalThis, "releaseChildRead")());
+    await expect(transcript).toContainText("Final child change during read");
+  } finally {
+    await launched.close();
+    for (const target of [home, cwd]) quarantineSync(target, { recursive: true, force: true });
+  }
+});

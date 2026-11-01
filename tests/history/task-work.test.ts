@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { constants as bufferConstants } from "node:buffer";
+import { mkdir, mkdtemp, open, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { loadTaskWork, readTaskLinks, taskStore } from "../../electron/history/task-work";
@@ -25,6 +26,32 @@ async function save(store: string, value: ReturnType<typeof record> & { task_sum
   await writeFile(path.join(store, "tasks", `${value.task_id}.json`), JSON.stringify(value));
 }
 describe("read-only native child work", () => {
+  it("reads a child transcript larger than one runtime string without losing its todo or tail", async () => {
+    const { agent, cwd, store } = await fixture();
+    const directory = path.join(store, "children", "st_large", "sessions");
+    await mkdir(directory, { recursive: true });
+    const file = path.join(directory, "now_s1.jsonl");
+    await save(store, record("st_large", "root", "s1"));
+    await writeFile(file, [
+      { type: "session", id: "s1" },
+      { type: "custom", id: "todo", parentId: null, customType: "senpi.todo-state", data: { schema: "v2", phases: [{ name: "Verify", tasks: [] }] } },
+      { type: "message", id: "tail", parentId: "todo", message: { role: "assistant", content: "Large child complete" } },
+    ].map(entry => JSON.stringify(entry)).join("\n") + "\n");
+    const handle = await open(file, "a");
+    try {
+      const blanks = Buffer.alloc(1 << 20, " ");
+      blanks[blanks.length - 1] = 10;
+      for (let remaining = bufferConstants.MAX_STRING_LENGTH + 1; remaining > 0; remaining -= blanks.length) {
+        await handle.write(blanks, 0, Math.min(remaining, blanks.length));
+      }
+    } finally { await handle.close(); }
+
+    const work = await loadTaskWork(agent, cwd, "root", "st_large");
+
+    expect(work[0]?.todo?.phases[0]?.name).toBe("Verify");
+    expect(work[0]?.activity).toBe("Large child complete");
+    expect(work[0]?.history?.turns[0]?.items).toEqual([{ type: "agentMessage", id: "tail:0", text: "Large child complete", phase: null }]);
+  });
   it("reads host-session children from their native task sessions directory", async () => {
     const { agent, cwd, store } = await fixture();
     const directory = path.join(store, "children", "st_host", "sessions", "st_host");
@@ -59,6 +86,7 @@ describe("read-only native child work", () => {
     expect(result.map((work) => work.task.task_id)).toEqual(["st_parent", "st_child"]);
     expect(result[0]?.todo?.phases[0]?.name).toBe("Verify");
     expect(result[0]?.activity).toBe("Testing now");
+    expect(result[0]).not.toHaveProperty("history");
     expect(result[0]?.task).not.toHaveProperty("spawn_spec");
   });
   it("loads parent and child records and child todos when legacy contains only empty scaffolds", async () => {

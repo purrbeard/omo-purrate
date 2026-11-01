@@ -1,8 +1,7 @@
 import type { BrowserWindow } from "electron";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { OmoSupervisor } from "../omo/supervisor";
-import { readContextUsage } from "./context-usage";
+import { readContextUsageFile } from "./context-usage";
 import { loadPersistedDagRuns } from "./dag-runs";
 import type { WorkbenchHandlers } from "./handlers";
 import { createNativeCatalog } from "./native-catalog";
@@ -22,7 +21,7 @@ export function createWorkbenchHandlers(deps: WorkbenchDeps): WorkbenchHandlers 
     send: (channel, payload) => deps.getWindow()?.webContents.send(channel, payload),
   });
   return {
-    loadContextUsage: async (sessionPath) => readContextUsage(await readFile(await deps.sessionFile(sessionPath), "utf8")),
+    loadContextUsage: async (sessionPath) => readContextUsageFile(await deps.sessionFile(sessionPath)),
     loadNativeCatalog: createNativeCatalog({ supervisor: deps.supervisor }),
     loadDagRuns: async (cwd, id) => loadPersistedDagRuns(
       deps.supervisor.initializeResult?.codexHome ?? path.join(deps.homeDir, ".omo", "agent"), await workspace(cwd), threadId(id),

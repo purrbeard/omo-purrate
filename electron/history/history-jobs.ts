@@ -1,8 +1,9 @@
-import { readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import type { HistoryResult, HistoryUpdate } from "../../shared/ipc";
-import { parseSessionTree, type SessionTreeResult } from "../omo/session-tree";
+import { SessionTreeParser, type SessionTreeResult } from "../omo/session-tree";
 import { HistoryUpdates } from "./history-updates";
-import { parseSessionJsonl } from "./session-jsonl";
+import { SessionJsonlParser } from "./session-jsonl";
+import { readSessionLines } from "./session-lines";
 
 export type Job =
   | { kind: "full"; file: string }
@@ -20,7 +21,7 @@ interface Tree {
 }
 
 /**
- * Runs history and branch-tree reads of session files. Every read also derives the branch tree from the same text, so
+ * Runs history and branch-tree reads of session files. Every read also derives the branch tree from the same records, so
  * opening a session (its history, then its tree) reads the file once; the tree is reread only when the file changed.
  */
 export class HistoryJobs {
@@ -31,16 +32,29 @@ export class HistoryJobs {
     const { size, mtimeMs } = await stat(job.file);
     const known = this.trees.get(job.file);
     if (job.kind === "tree" && known !== undefined && known.size === size && known.mtimeMs === mtimeMs) return known.tree;
-    const text = await readFile(job.file, "utf8");
-    if (job.kind === "tree") return this.remember(job.file, size, mtimeMs, parseSessionTree(text));
+    const historyParser = new SessionJsonlParser();
+    let treeParser: SessionTreeParser | null = new SessionTreeParser();
+    let treeError: unknown;
+    for await (const line of readSessionLines(job.file)) {
+      if (job.kind !== "tree") historyParser.add(line);
+      if (treeParser !== null) {
+        try { treeParser.add(line); }
+        catch (error) { treeError = error; treeParser = null; }
+      }
+    }
+    if (job.kind === "tree") {
+      if (treeParser === null) throw treeError;
+      return this.remember(job.file, size, mtimeMs, treeParser.result());
+    }
     try {
-      this.remember(job.file, size, mtimeMs, parseSessionTree(text));
+      if (treeParser === null) throw treeError;
+      this.remember(job.file, size, mtimeMs, treeParser.result());
     } catch (error) {
       // A file the tree parser rejects still has a history; the tree request rereads it and reports that error.
       void error;
       this.trees.delete(job.file);
     }
-    const history = parseSessionJsonl(text);
+    const history = historyParser.result();
     return job.kind === "full" ? history : this.updates.update(job.file, history, job.since, job.fullFrom);
   }
 

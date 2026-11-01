@@ -4,7 +4,8 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type { TaskWork, ThreadLink } from "../../shared/ipc";
 import { object, parseTasksUpdated } from "../../src/state/live-wire";
-import { parseSessionJsonl } from "./session-jsonl";
+import { SessionJsonlParser } from "./session-jsonl";
+import { readSessionLines } from "./session-lines";
 
 const ID = /^[A-Za-z0-9_-]{1,256}$/u;
 const TASK_FIELDS = [
@@ -114,8 +115,20 @@ export async function readTaskLinks(options: { cwd: string; agentDir?: string })
   return links;
 }
 
-/** Native task snapshots omit todos: read the child's active JSONL branch, without resuming or launching it. */
-export async function loadTaskWork(agentDir: string, cwd: string, parentSessionId: string): Promise<TaskWork[]> {
+const pendingReads = new Map<string, Promise<TaskWork[]>>();
+
+/** Coalesce overlapping initial/watch/poll reads without retaining a completed transcript. */
+export function loadTaskWork(agentDir: string, cwd: string, parentSessionId: string, transcriptTaskId?: string): Promise<TaskWork[]> {
+  const key = JSON.stringify([agentDir, cwd, parentSessionId, transcriptTaskId]);
+  const pending = pendingReads.get(key);
+  if (pending !== undefined) return pending;
+  const read = readTaskWork(agentDir, cwd, parentSessionId, transcriptTaskId).finally(() => { pendingReads.delete(key); });
+  pendingReads.set(key, read);
+  return read;
+}
+
+/** Native task snapshots omit todos; only the inspected child's full transcript crosses IPC. */
+async function readTaskWork(agentDir: string, cwd: string, parentSessionId: string, transcriptTaskId?: string): Promise<TaskWork[]> {
   if (!path.isAbsolute(cwd) || !ID.test(parentSessionId)) throw new Error("Invalid child work workspace or session id");
   const store = await taskStore(agentDir, cwd);
   const records = new Map<string, { raw: Record<string, unknown>; work: TaskWork }>();
@@ -138,31 +151,42 @@ export async function loadTaskWork(agentDir: string, cwd: string, parentSessionI
       added = true;
     }
   }
-  await Promise.all([...selected.values()].map(async (work) => {
+  // One child's parse at a time: a long-running parent's descendants can contain many GB of transcripts.
+  for (const work of selected.values()) {
     const { task } = work;
-    if (task.child_session_id === undefined) return;
+    if (task.child_session_id === undefined) continue;
     const raw = records.get(task.task_id)?.raw;
     const host = raw?.["host_session"];
     const children = path.join(store, "children", task.task_id, "sessions");
     const hostPath = object(host) && typeof host["session_path"] === "string" ? host["session_path"] : null;
     const file = hostPath ?? await sessionFile(children, task.child_session_id);
-    if (file === null) return;
+    if (file === null) continue;
     try {
       const target = await contained(children, file, hostPath === null ? undefined : path.join(agentDir, "sessions"));
-      const text = await readFile(target, "utf8");
-      const header: unknown = JSON.parse(text.split("\n")[0] ?? "");
-      if (!object(header) || header["id"] !== task.child_session_id) return;
-      const history = parseSessionJsonl(text);
-      work.history = history;
+      const transcript = task.task_id === transcriptTaskId;
+      const parser = new SessionJsonlParser(!transcript);
+      let first = true;
+      let valid = true;
+      for await (const line of readSessionLines(target)) {
+        if (first) {
+          first = false;
+          const header: unknown = JSON.parse(line);
+          if (!object(header) || header["id"] !== task.child_session_id) { valid = false; break; }
+        }
+        parser.add(line);
+      }
+      if (!valid || first) continue;
+      const history = parser.result();
+      if (transcript) work.history = history;
       work.todo = history.todo;
       const items = history.turns.flatMap((turn) => turn.items);
       const latest = items.findLast((item) => item.type === "agentMessage" || item.type === "dynamicToolCall");
       work.activity = latest?.type === "agentMessage" ? latest.text.replace(/\s+/gu, " ").trim().slice(-240)
         : latest?.type === "dynamicToolCall" ? latest.tool : null;
     } catch (error) {
-      if (missing(error) || error instanceof SyntaxError) return;
+      if (missing(error) || error instanceof SyntaxError) continue;
       throw error;
     }
-  }));
+  }
   return [...selected.values()];
 }

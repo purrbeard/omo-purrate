@@ -113,7 +113,8 @@ function normalizeTree(value: unknown): SessionTreeResult {
       type: node.entry.type,
       role,
       label: node.label ?? (plain(nodeText) || role || node.entry.type),
-      ...(node.entry.type === "message" && role === "assistant" ? { text: nodeText } : nodeText ? { text: nodeText } : {}),
+      // Only assistant text is editable; tool output belongs to the transcript, not the cached navigation tree.
+      ...(node.entry.type === "message" && role === "assistant" ? { text: nodeText } : role === "user" && nodeText ? { text: nodeText } : {}),
     });
     const conversation = node.entry.type === "custom_message" || (node.entry.type === "message" && isRecord(message) && (message["role"] === "user" || message["role"] === "assistant"));
     const bookkeepingNotice = node.entry.type === "custom_message" && typeof node.entry["customType"] === "string" && /^(omo-model-profile:|senpi-)/.test(node.entry["customType"]);
@@ -151,30 +152,48 @@ function navigationLeaf(value: unknown, expected: string | null | undefined): st
 
 /** Uses file order for the durable leaf; metadata descendants fold into their conversation tail. */
 export function parseSessionTree(source: string): SessionTreeResult {
-  const entries = new Map<string, TreeNode>();
-  const labels = new Map<string, string>();
-  let leafId: string | null = null;
-  for (const line of source.split(/\r?\n/)) {
-    if (!line.trim()) continue;
+  const parser = new SessionTreeParser();
+  for (const line of source.split(/\r?\n/)) parser.add(line);
+  return parser.result();
+}
+
+/** Builds the same tree from complete streamed records without allocating a whole-file string. */
+export class SessionTreeParser {
+  private readonly entries = new Map<string, TreeNode>();
+  private readonly labels = new Map<string, string>();
+  private leafId: string | null = null;
+
+  add(line: string): void {
+    if (!line.trim()) return;
     let value: unknown;
     try { value = JSON.parse(line); }
-    catch { continue; } // Live session files can end with a partially written line.
-    if (!isRecord(value) || value["type"] === "session") continue;
+    catch { return; } // Live session files can end with a partially written line.
+    if (!isRecord(value) || value["type"] === "session") return;
     if (typeof value["id"] !== "string" || typeof value["type"] !== "string" || !isLeafId(value["parentId"])) throw malformed("get_tree");
-    const node: TreeNode = { entry: { ...value, id: value["id"], type: value["type"], parentId: value["parentId"] }, children: [] };
-    if (entries.has(node.entry.id)) throw malformed("get_tree");
-    entries.set(node.entry.id, node);
-    leafId = node.entry.id;
-    if (value["type"] === "label" && typeof value["targetId"] === "string" && typeof value["label"] === "string") labels.set(value["targetId"], value["label"]);
+    const message = value["message"];
+    // Tree consumers need text and parent links, not tool details, usage or base64 images.
+    const entry: TreeNode["entry"] = { id: value["id"], type: value["type"], parentId: value["parentId"], customType: value["customType"] };
+    if (isRecord(message)) {
+      const content = text(message["content"]);
+      entry["message"] = { role: message["role"], content: message["role"] === "assistant" || message["role"] === "user" ? content : plain(content) };
+    } else entry["content"] = plain(text(value["content"]));
+    const node: TreeNode = { entry, children: [] };
+    if (this.entries.has(node.entry.id)) throw malformed("get_tree");
+    this.entries.set(node.entry.id, node);
+    this.leafId = node.entry.id;
+    if (value["type"] === "label" && typeof value["targetId"] === "string" && typeof value["label"] === "string") this.labels.set(value["targetId"], value["label"]);
   }
-  const roots: TreeNode[] = [];
-  for (const node of entries.values()) {
-    const parent = node.entry.parentId === null ? undefined : entries.get(node.entry.parentId);
-    if (parent) parent.children.push(node);
-    else roots.push(node);
-    node.label = labels.get(node.entry.id);
+
+  result(): SessionTreeResult {
+    const roots: TreeNode[] = [];
+    for (const node of this.entries.values()) {
+      const parent = node.entry.parentId === null ? undefined : this.entries.get(node.entry.parentId);
+      if (parent) parent.children.push(node);
+      else roots.push(node);
+      node.label = this.labels.get(node.entry.id);
+    }
+    return normalizeTree({ tree: roots, leafId: this.leafId });
   }
-  return normalizeTree({ tree: roots, leafId });
 }
 
 export async function readSessionTree(sessionPath: string): Promise<SessionTreeResult> {

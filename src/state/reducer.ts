@@ -129,7 +129,11 @@ export function reduce(state: AppState, event: AppEvent): AppState {
         const runs = live.runsSource === "live" || (event.runs.length === 0 && live.runsSource !== "store") ? {}
           : { runs: Object.fromEntries(event.runs.map(run => [run.run_id, run])), runOrder: event.runs.map(run => run.run_id), runsSource: "store" as const };
         const watched = live.freshness === "live" && live.storeWatched !== true ? {} : { freshness: "live" as const, storeWatched: true };
-        return { ...conversation, live: { ...live, taskWork: event.work, ...runs, ...watched } };
+        const work = event.work.map(item => {
+          const previous = live.taskWork.find(known => known.task.task_id === item.task.task_id);
+          return item.history === undefined && previous?.history !== undefined ? { ...item, history: previous.history } : item;
+        });
+        return { ...conversation, live: { ...live, taskWork: work, ...runs, ...watched } };
       });
     case "taskStore/unwatched":
       return updateExistingConversation(state, event.threadId, (conversation) => conversation.live.storeWatched !== true ? conversation : {
@@ -212,6 +216,7 @@ export function reduce(state: AppState, event: AppEvent): AppState {
         const patched = event.type === "history/patched";
         return {
           ...loaded,
+          held: conversation.held ?? null,
           // Unchanged turns keep their objects, so their memoized views do not render again.
           ...(patched ? { turns: [...conversation.turns.slice(0, event.from), ...loaded.turns, ...conversation.turns.slice(event.from + event.removed)] } : {}),
           ...(event.fullFrom ? { historyFullFrom: event.fullFrom } : {}),

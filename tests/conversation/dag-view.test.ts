@@ -83,4 +83,13 @@ describe("wire child links and refresh fencing", () => {
     expect(reduce(state, { type: "taskWork/loaded", threadId: "root", work: [], generation: 9 })).toEqual(before);
     expect(reduce(state, { type: "taskWork/loaded", threadId: "other", work: [], generation: 0 })).toEqual(before);
   });
+  it("keeps only the inspected transcript through a summary refresh and drops it on the next selection", () => {
+    let state = reduce(createInitialState(), { type: "thread/activated", threadId: "root" });
+    const inspected = { ...work("owner", "root"), history: { turns: [], todo: null, tasks: [] } };
+    state = reduce(state, { type: "taskWork/loaded", threadId: "root", work: [inspected], generation: 0 });
+    state = reduce(state, { type: "taskStore/updated", threadId: "root", work: [{ ...work("owner", "root"), activity: "Updated" }], runs: [] });
+    expect(state.conversations["root"]?.live.taskWork[0]).toEqual({ ...inspected, activity: "Updated" });
+    state = reduce(state, { type: "taskWork/loaded", threadId: "root", work: [work("owner", "root"), { ...work("next", "root"), history: inspected.history }], generation: 0 });
+    expect(state.conversations["root"]?.live.taskWork.filter(item => item.history !== undefined).map(item => item.task.task_id)).toEqual(["next"]);
+  });
 });

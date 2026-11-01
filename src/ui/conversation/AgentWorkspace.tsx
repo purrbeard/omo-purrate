@@ -67,7 +67,6 @@ function Workspace({ parentId, placement }: { parentId: string; placement: "dock
   const t = useT();
   const live = useAppSelector(state => state.conversations[parentId]?.live);
   const cwd = useAppSelector(state => state.threads[parentId]?.cwd ?? null);
-  const loadError = useTaskWork(parentId);
   const actions = useActions();
   const store = useContext(StoreContext);
   const threadLinks = useAppSelector(state => state.threadLinks);
@@ -116,6 +115,7 @@ function Workspace({ parentId, placement }: { parentId: string; placement: "dock
   }));
   const linkedSessions = agentChildren.filter(child => !taskSessions.has(child.id));
   const selected = open.find(task => task.task_id === state.selected) ?? open[0];
+  const loadError = useTaskWork(parentId, selected?.task_id);
   const work = live?.taskWork.find(item => item.task.task_id === selected?.task_id);
   const turns = useMemo(() => historyTurns(work), [work]);
   const draft = selected === undefined ? "" : state.drafts[selected.task_id] ?? "";

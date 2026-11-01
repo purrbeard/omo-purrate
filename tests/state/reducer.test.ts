@@ -36,6 +36,17 @@ const turnStarted = (threadId: string, turnId: string, receivedAtMs = 1_000) =>
     receivedAtMs,
   );
 
+it.each(["history/replaced", "history/patched"] as const)("preserves external ownership when %s refreshes the transcript", (type) => {
+  const holders = [{ pid: 4242, cwd: "/outside" }];
+  const held = replay([{ type: "thread/activated", threadId: "external" }, { type: "thread/held", threadId: "external", holders }]);
+
+  const state = reduce(held, type === "history/patched"
+    ? { type, threadId: "external", turns: [], todo: null, tasks: [], from: 0, removed: 0, fullFrom: 0 }
+    : { type, threadId: "external", turns: [], todo: null, tasks: [] });
+
+  expect(state.conversations["external"]?.held).toEqual(holders);
+});
+
 describe("probe replay", () => {
   const events = probeNotificationEvents();
 

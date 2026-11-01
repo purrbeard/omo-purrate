@@ -5,7 +5,7 @@ import { useAppSelector, useAppStore } from "../../state";
  * Disk-only child todos and nested records refresh while inspected, and the task store is watched for another omo
  * process's writes meanwhile; never resumes a child or starts a turn.
  */
-export function useTaskWork(threadId: string): string | null {
+export function useTaskWork(threadId: string, transcriptTaskId?: string): string | null {
   const store = useAppStore();
   const cwd = useAppSelector((state) => state.threads[threadId]?.cwd);
   const live = useAppSelector((state) => state.conversations[threadId]?.live);
@@ -19,12 +19,13 @@ export function useTaskWork(threadId: string): string | null {
     if (cwd === undefined || live === undefined) return;
     let disposed = false;
     let reading = false;
+    let readAgain = false;
     const generation = live.generation;
     const refresh = async (): Promise<void> => {
-      if (reading) return;
+      if (reading) { readAgain = true; return; }
       reading = true;
       try {
-        const work = await window.omo.loadTaskWork(cwd, threadId);
+        const work = await window.omo.loadTaskWork(cwd, threadId, transcriptTaskId);
         if (!disposed) {
           store.dispatch({ type: "taskWork/loaded", threadId, work, generation });
           setError(null);
@@ -33,6 +34,7 @@ export function useTaskWork(threadId: string): string | null {
         if (!disposed) setError(cause instanceof Error ? cause.message : String(cause));
       } finally {
         reading = false;
+        if (readAgain && !disposed) { readAgain = false; void refresh(); }
       }
     };
     void refresh();
@@ -44,13 +46,17 @@ export function useTaskWork(threadId: string): string | null {
       const params = notification.params;
       if (typeof params === "object" && params !== null && "threadId" in params && params.threadId === threadId) void refresh();
     });
+    const storeChanged = window.omo.onTaskWorkChanged(update => {
+      if (transcriptTaskId !== undefined && update.parentSessionId === threadId) void refresh();
+    });
     return () => {
       disposed = true;
       window.removeEventListener("omo-ui:task-message", delivered);
       if (timer !== null) clearInterval(timer);
       unsubscribe();
+      storeChanged();
     };
-  }, [cwd, threadId, live?.generation, ticking, store]);
+  }, [cwd, threadId, live?.generation, ticking, store, transcriptTaskId]);
   const known = live !== undefined;
   // Another omo process (a terminal) may run this session: follow its task store while the view is open.
   useEffect(() => {

@@ -618,7 +618,7 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   /** Every saved preferences change, whichever caller made it. */
   onPreferencesChanged(listener: (preferences: Preferences) => void): () => void;
   /** Reads only tasks reachable through explicit child-session links in this workspace's native task store. */
-  loadTaskWork(cwd: string, parentSessionId: string): Promise<TaskWork[]>;
+  loadTaskWork(cwd: string, parentSessionId: string, transcriptTaskId?: string): Promise<TaskWork[]>;
   /**
    * Watches the parent's native task store (task records, workflow runs, child session files) for another omo process's
    * writes, pushing each change through onTaskWorkChanged; one push follows right away. Calls are counted per parent:
