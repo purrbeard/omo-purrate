@@ -178,6 +178,22 @@ describe("native usage transport", () => {
       tokens: { input: 0, output: null, cacheRead: null, cacheWrite: 5, total: 0 }, cost: 0, contextUsage: null,
     } });
   });
+
+  it("keeps imported whole-session usage unknown even after native coerces missing history to zero", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "import-usage-"));
+    host.sessionFile = path.join(dir, "imported.jsonl");
+    await writeFile(host.sessionFile, [
+      { type: "session", version: 3, id: "thread-1" },
+      { type: "custom", customType: "codex-import", data: { usage: "unknown" } },
+    ].map(row => JSON.stringify(row)).join("\n") + "\n");
+    host.stats = { tokens: { input: 5, output: 2, cacheRead: 0, cacheWrite: 0, total: 7 }, cost: 0,
+      contextUsage: { tokens: 200, contextWindow: 1000, percent: 20 } };
+    const { client } = await open();
+    expect(await client.request("thread/stats", { threadId: "thread-1" })).toEqual({ stats: {
+      tokens: { input: null, output: null, cacheRead: null, cacheWrite: null, total: null }, cost: null,
+      contextUsage: { tokens: 200, contextWindow: 1000, percent: 20 },
+    } });
+  });
 });
 
 describe("NativeAppServerClient records", () => {

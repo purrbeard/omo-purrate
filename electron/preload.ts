@@ -37,6 +37,7 @@ import type {
 import type { ClientMethod, ClientParams, ClientResult, RequestId, RpcNotification, RpcServerRequest } from "../shared/protocol";
 import { stripRemoteMethodPrefix } from "./ipc-errors";
 import type { AndroidStatus } from "../shared/android";
+import type { CodexImportResult, CodexRolloutPreview } from "../shared/codex-import";
 import type { OpencodexAccounts } from "../shared/opencodex";
 import type { SessionWorktree, WorkspaceFile, WorkspaceFileMatch, WorkspaceDocument } from "../shared/workspace";
 import type { DeviceOverview } from "../shared/device-overview";
@@ -99,6 +100,8 @@ const CHANNELS = {
   exportSession: "session:export",
   exportSessionJsonl: "session:export-jsonl",
   importSessionJsonl: "session:import-jsonl",
+  pickCodexRollout: "session:pick-codex-rollout",
+  importCodexRollout: "session:import-codex-rollout",
   watchHistory: "history:watch",
   historyChanged: "history:changed",
   preferencesChanged: "prefs:changed",
@@ -288,6 +291,8 @@ const api = {
   exportSession: (threadId: string): Promise<{ path: string } | null> => invoke(CHANNELS.exportSession, threadId),
   exportSessionJsonl: (threadId: string): Promise<{ path: string } | null> => invoke(CHANNELS.exportSessionJsonl, threadId),
   importSessionJsonl: (): Promise<BranchResult | null> => invoke(CHANNELS.importSessionJsonl),
+  pickCodexRollout: (): Promise<CodexRolloutPreview | null> => invoke(CHANNELS.pickCodexRollout),
+  importCodexRollout: (input: { fingerprint: string; cwd: string; model: string }): Promise<CodexImportResult> => invoke(CHANNELS.importCodexRollout, input),
   watchHistory: (sessionPath: string | null): Promise<void> => invoke(CHANNELS.watchHistory, sessionPath),
   onHistoryChanged: (listener: (sessionPath: string) => void) => subscribe(CHANNELS.historyChanged, listener),
   onPreferencesChanged: (listener: (preferences: Preferences) => void) => subscribe(CHANNELS.preferencesChanged, listener),

@@ -5,6 +5,7 @@ import { useActions } from "../app-context";
 import { Badge, Button } from "../kit";
 import { errorMessage } from "./diagnostics";
 import { ImportTable, useImportCandidates } from "./ImportTable";
+import { CodexImport } from "./CodexImport";
 import { MissingSessions } from "./MissingSessions";
 import { uiState } from "../ui-state";
 import { SectionHeading } from "./SectionHeading";
@@ -57,6 +58,7 @@ export function ImportSection() {
   return (
     <section className={ui.section} data-testid="settings-import" aria-busy={state.loading || busy}>
       <SectionHeading title={t("shell.settings.nav.import")} intro={t("shell.settings.import.intro")} />
+      <CodexImport />
       <SettingsCard>
         <SettingsRow title={t("shell.settings.import.jsonlTitle")} description={t("shell.settings.import.jsonlHint")}>
           <Button size="sm" disabled={busy} data-testid="settings-import-jsonl" onClick={() => void importJsonl()}>{t("shell.settings.import.jsonlAction")}</Button>

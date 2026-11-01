@@ -90,3 +90,9 @@ Profile model overrides reuse the composer model picker and native labeled selec
 The omo settings section includes an opencodex card using the existing SettingRow, Button and card styles. Endpoint and password inputs keep the stored key out of IPC responses. Applying explicitly states that omo reconnects. Loading, applying, success model count and failure are visible states.
 
 Drive the real Electron application, not a static replica. Check light/dark desktop and narrow windows, side chat, settings, native window controls, keyboard navigation, and Korean text for overlap or clipping. Existing Playwright screenshots and scenarios are reused.
+
+## Codex conversation import
+
+Primary action: create a native copy only after inspecting a selected rollout. Information order: source identity and preserved counts, omitted counts with reasons, workspace and available continuation model. Required states: idle, choosing/reading, preview, converting, success and recoverable error. Original Codex files stay read-only; selecting a file alone creates nothing. The renderer does not receive source message bodies or credentials.
+
+Layout: Settings / Import - preview and confirmation in one existing settings column -> stack inside the existing SettingsCard; scroll owner: the settings body; avoid a nested preview scrollbar, fixed-width paths and a modal over the settings modal. Existing card, facts, control, Button, ErrorText and semantic tokens own appearance. Paths wrap anywhere; controls fill available width. Native model selection is explicit, and the success message points to the session list.

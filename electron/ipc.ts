@@ -15,6 +15,8 @@ import { openLogin } from "./accounts/login";
 import { readAccountUsage } from "./accounts/usage";
 import { branchSession } from "./history/branch-session";
 import { exportSessionJsonl, importSessionJsonl } from "./history/session-transfer";
+import { importCodexRollout, previewCodexRollout } from "./history/codex-import";
+import type { CodexRolloutPreview } from "../shared/codex-import";
 import { runSessionTree } from "./omo/session-tree";
 import type { ModelRung } from "../shared/ipc";
 import { HistoryReader } from "./history/history-reader";
@@ -229,6 +231,8 @@ export function registerIpc(deps: IpcDeps): () => void {
 
   let treeBusy = false;
   let mcpSaving = false;
+  let codexPreview: CodexRolloutPreview | null = null;
+  let codexImportBusy = false;
   const handlers: Record<string, (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown> = {
     [IPC.sessionTree]: async (_event, threadId, operation) => {
       if (typeof threadId !== "string" || typeof operation !== "object" || operation === null) throw new TypeError("invalid session tree request");
@@ -493,6 +497,48 @@ export function registerIpc(deps: IpcDeps): () => void {
       const current = prefs.get();
       prefs.set({ managedThreadIds: [...new Set([...current.managedThreadIds, imported.threadId])], sessionImportCompleted: true });
       return imported;
+    },
+    [IPC.pickCodexRollout]: async (): Promise<CodexRolloutPreview | null> => {
+      if (codexImportBusy) throw new Error("A Codex import is already running");
+      codexPreview = null;
+      const qa = process.env[ENV.qaPickAttachments];
+      let source: unknown;
+      if (qa) {
+        const files: unknown = JSON.parse(qa);
+        if (!Array.isArray(files) || files.length !== 1) throw new Error("Choose one Codex rollout JSONL file");
+        source = files[0];
+      } else {
+        const options: OpenDialogOptions = { title: "Choose Codex rollout", defaultPath: path.join(homeDir, ".codex", "sessions"), properties: ["openFile"], filters: [{ name: "Codex rollout", extensions: ["jsonl"] }] };
+        const window = getWindow();
+        const chosen = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+        if (chosen.canceled) return null;
+        source = chosen.filePaths[0];
+      }
+      if (typeof source !== "string" || !path.isAbsolute(source)) throw new TypeError("Codex rollout path must be absolute");
+      codexPreview = await previewCodexRollout(await realpath(source));
+      return codexPreview;
+    },
+    [IPC.importCodexRollout]: async (_event, input) => {
+      if (codexImportBusy) throw new Error("A Codex import is already running");
+      if (typeof input !== "object" || input === null || !("fingerprint" in input) || !("cwd" in input) || !("model" in input)
+        || typeof input.fingerprint !== "string" || typeof input.cwd !== "string" || typeof input.model !== "string") throw new TypeError("Invalid Codex import options");
+      const preview = codexPreview;
+      if (preview === null || input.fingerprint !== preview.fingerprint) throw new Error("Choose and preview the Codex rollout again");
+      codexImportBusy = true;
+      try {
+        if (!path.isAbsolute(input.cwd) || !(await stat(input.cwd)).isDirectory()) throw new TypeError("Choose an existing absolute workspace directory");
+        const { data } = await supervisor.request("model/list", {});
+        const selected = data.find(model => model.id === input.model && !model.hidden);
+        const separator = selected?.id.indexOf("/") ?? -1;
+        if (selected === undefined || separator <= 0 || separator === selected.id.length - 1) throw new Error("Choose an available native continuation model");
+        const imported = await importCodexRollout(preview.sourcePath, catalogIndex().sessionsDir, {
+          cwd: input.cwd, provider: selected.id.slice(0, separator), model: selected.id.slice(separator + 1), previewFingerprint: preview.fingerprint,
+        });
+        const current = prefs.get();
+        prefs.set({ managedThreadIds: [...new Set([...current.managedThreadIds, imported.threadId])], sessionImportCompleted: true });
+        codexPreview = null;
+        return imported;
+      } finally { codexImportBusy = false; }
     },
     [IPC.watchHistory]: async (_event, sessionPath): Promise<void> => {
       if (sessionPath === null) return sessionWatcher.set(null, null);

@@ -30,6 +30,7 @@ import { ORIGIN_CONTEXT } from "../../../shared/session-origin";
 import { usageCount } from "../../../shared/usage";
 import { keysetPage } from "../../history/session-catalog";
 import { parseSessionJsonl } from "../../history/session-jsonl";
+import { readSessionLines } from "../../history/session-lines";
 import type { AppServerClientOptions, InitializeResult } from "../app-server-client";
 import type { ExitInfo, StopTimeouts } from "../managed-child";
 import { AppServerStartError, BRIDGE_ERROR_CODES, RpcRequestError } from "../rpc";
@@ -68,6 +69,8 @@ interface Loaded {
   /** Invalidates delayed Resume admissions when a newer Stop is observed. */
   pauseRevision: number;
   resuming: number;
+  /** Import provenance is immutable and precedes every historical message. */
+  unknownImportedUsage: boolean | null;
 }
 
 interface HeldInput {
@@ -625,6 +628,7 @@ export class NativeAppServerClient {
       inputPaused: state["paused"] === true,
       pauseRevision: 0,
       resuming: 0,
+      unknownImportedUsage: null,
     };
     this.sessions.set(threadId, loaded);
     this.byHandle.set(handle, loaded);
@@ -749,7 +753,25 @@ export class NativeAppServerClient {
   /** omo's `get_session_stats` for one loaded thread: the gauge's tokens, cost and context window. */
   private async sessionStats(threadId: string): Promise<{ stats: SessionStats }> {
     const loaded = await this.load(threadId);
-    return { stats: wireSessionStats(params(await this.command(loaded.handle, "get_session_stats"))) };
+    const stats = wireSessionStats(params(await this.command(loaded.handle, "get_session_stats")));
+    if (loaded.unknownImportedUsage === null) {
+      let unknown = false;
+      if (loaded.sessionPath !== null) {
+        let number = 0;
+        for await (const line of readSessionLines(loaded.sessionPath)) {
+          if (++number === 1) continue;
+          const entry: unknown = JSON.parse(line);
+          unknown = isRecord(entry) && entry["type"] === "custom" && entry["customType"] === "codex-import"
+            && isRecord(entry["data"]) && entry["data"]["usage"] === "unknown";
+          break;
+        }
+      }
+      loaded.unknownImportedUsage = unknown;
+    }
+    // Native coerces imported null usage to zero. A partial sum is not a known whole-session total.
+    return { stats: loaded.unknownImportedUsage ? { ...stats,
+      tokens: { input: null, output: null, cacheRead: null, cacheWrite: null, total: null }, cost: null,
+    } : stats };
   }
 
   private async fastMode(threadId: string): Promise<{ fastMode: FastModeState }> {

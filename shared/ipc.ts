@@ -3,6 +3,7 @@
  * The preload script exposes an object satisfying OmoBridgeApi as `window.omo`.
  */
 import type { ProjectSetting } from "./project-settings";
+import type { CodexImportResult, CodexRolloutPreview } from "./codex-import";
 import type {
   ClientMethod,
   ClientParams,
@@ -608,6 +609,8 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   exportSession(threadId: string): Promise<{ path: string } | null>;
   exportSessionJsonl(threadId: string): Promise<{ path: string } | null>;
   importSessionJsonl(): Promise<BranchResult | null>;
+  pickCodexRollout(): Promise<CodexRolloutPreview | null>;
+  importCodexRollout(input: { fingerprint: string; cwd: string; model: string }): Promise<CodexImportResult>;
   /** Parses the session JSONL at sessionPath, which must resolve inside the omo sessions directory. */
   loadHistory(sessionPath: string): Promise<HistoryResult>;
   /**
@@ -743,6 +746,8 @@ export const IPC = {
   exportSession: "session:export",
   exportSessionJsonl: "session:export-jsonl",
   importSessionJsonl: "session:import-jsonl",
+  pickCodexRollout: "session:pick-codex-rollout",
+  importCodexRollout: "session:import-codex-rollout",
   watchHistory: "history:watch",
   historyChanged: "history:changed",
   preferencesChanged: "prefs:changed",
