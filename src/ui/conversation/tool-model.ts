@@ -180,7 +180,7 @@ export function toolRowModel(item: ToolItem, streaming: boolean, elapsed: number
         state,
         status: STATUS_OF[state],
         durationMs: item.durationMs ?? elapsed,
-        expandable: hasContent(item.arguments) || (item.contentItems?.length ?? 0) > 0,
+        expandable: item.historyRef !== undefined || hasContent(item.arguments) || (item.contentItems?.length ?? 0) > 0,
       };
     }
     case "commandExecution": {

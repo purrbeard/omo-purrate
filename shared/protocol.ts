@@ -143,6 +143,8 @@ export interface DynamicToolCallItem {
   durationMs: number | null;
   /** Files the call changed, from its recorded result (edit/write/multiedit `details.patch`, apply_patch preview); absent when none. */
   changes?: FileUpdateChange[];
+  /** Large persisted payloads are fetched only when their disclosure is opened. */
+  historyRef?: { file: string; turnId: string };
 }
 
 export interface WebSearchItem {

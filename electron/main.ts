@@ -17,6 +17,7 @@ import { ServersHost } from "./servers/servers-host";
 import { sshConfigPath } from "./servers/ssh-config";
 import { SERVERS_IPC } from "../shared/servers";
 import { createWorkbenchHandlers } from "./workbench/create-handlers";
+import { HistoryReader } from "./history/history-reader";
 import { initLogging } from "./logging";
 import { installApplicationMenu } from "./menu";
 import { OmoSupervisor } from "./omo/supervisor";
@@ -167,7 +168,8 @@ function run(): void {
 
   const iphone = new IphoneBridge(supervisor, undefined, undefined, loadIphoneToken(app.getPath("userData")));
   const android = new AndroidBridge(supervisor);
-  const workbench = createWorkbenchHandlers({ supervisor, homeDir, getWindow: () => mainWindow, sessionFile: createSessionFileResolver(supervisor, homeDir) });
+  const historyReader = new HistoryReader(path.join(__dirname, "history-worker.cjs").replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`));
+  const workbench = createWorkbenchHandlers({ supervisor, homeDir, getWindow: () => mainWindow, sessionFile: createSessionFileResolver(supervisor, homeDir), historyReader });
   const browser = new BrowserHost({
     getWindow: () => mainWindow,
     screenshotsDir: () => path.join(app.getPath("userData"), "screenshots"),
@@ -189,7 +191,7 @@ function run(): void {
     const refreshMenu = (): void => installApplicationMenu(sendMenuCommand, { openLogs: () => void shell.openPath(logger.dir), keyboardShortcuts: prefs.get().keyboardShortcuts ?? {} });
     refreshMenu();
     registerMediaProtocol();
-    registerIpc({ supervisor, iphone, android, prefs, getWindow: () => mainWindow, homeDir, refreshMenu });
+    registerIpc({ supervisor, iphone, android, prefs, getWindow: () => mainWindow, homeDir, refreshMenu, historyReader });
     registerWorkbenchIpc(workbench);
     registerBrowserIpc(browser);
     registerServersIpc(servers);

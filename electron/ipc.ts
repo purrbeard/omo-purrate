@@ -13,7 +13,7 @@ import { CLIENT_METHODS } from "../shared/protocol";
 import type { ClientMethod, ClientParams, RequestId } from "../shared/protocol";
 import { openLogin } from "./accounts/login";
 import { readAccountUsage } from "./accounts/usage";
-import { branchSession, retryEntryId } from "./history/branch-session";
+import { branchSession } from "./history/branch-session";
 import { exportSessionJsonl, importSessionJsonl } from "./history/session-transfer";
 import { runSessionTree } from "./omo/session-tree";
 import type { ModelRung } from "../shared/ipc";
@@ -74,6 +74,7 @@ export interface IpcDeps {
   git?: Git;
   /** Project-settings reader/writer; tests inject fakes. */
   workspaceSettings?: WorkspaceSettings;
+  historyReader: HistoryReader;
 }
 
 const execFileAsync = promisify(execFile);
@@ -189,7 +190,7 @@ export function registerIpc(deps: IpcDeps): () => void {
   };
   const sessionHolders = new SessionHolders({ ownPids: () => [process.pid, supervisor.diagnostics().childPid] });
   // The worker file is unpacked from the asar archive, where a worker thread cannot load it.
-  const historyReader = new HistoryReader(path.join(__dirname, "history-worker.cjs").replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`));
+  const historyReader = deps.historyReader;
   const sessionWatcher = createSessionWatcher((sessionPath) => send(IPC.historyChanged, sessionPath));
   /** Task stores a view follows, per parent session, with the number of views following it. */
   const taskStoreWatches = new Map<string, { cwd: string; refs: number; watcher: TaskStoreWatcher }>();
@@ -232,10 +233,15 @@ export function registerIpc(deps: IpcDeps): () => void {
     [IPC.sessionTree]: async (_event, threadId, operation) => {
       if (typeof threadId !== "string" || typeof operation !== "object" || operation === null) throw new TypeError("invalid session tree request");
       const request = operation as SessionTreeOperation;
-      if (!["list", "retry", "navigate", "edit"].includes(request.type)) throw new TypeError("invalid session tree operation");
-      if (request.type === "list") {
+      if (!["list", "read", "retry", "navigate", "edit"].includes(request.type)) throw new TypeError("invalid session tree operation");
+      if (request.type === "list" || request.type === "read") {
         const { thread } = await supervisor.request("thread/read", { threadId, includeTurns: false });
-        return historyReader.tree(await sessionFile(thread.path));
+        const file = await sessionFile(thread.path);
+        if (request.type === "read") {
+          if (typeof request.entryId !== "string") throw new TypeError("invalid session entry");
+          return historyReader.entry(file, request.entryId);
+        }
+        return historyReader.tree(file);
       }
       if (treeBusy) throw new Error("session tree navigation is already in progress");
       treeBusy = true;
@@ -248,7 +254,20 @@ export function registerIpc(deps: IpcDeps): () => void {
         let nativeRequest: Extract<SessionTreeOperation, { type: "navigate" | "edit" }>;
         if (request.type === "retry") {
           if (!request.point || typeof request.point.text !== "string" || !Number.isInteger(request.point.occurrence) || request.point.occurrence < 0) throw new TypeError("invalid retry point");
-          nativeRequest = { type: "navigate", entryId: retryEntryId(await readFile(target, "utf8"), request.point), intent: "select" };
+          const tree = await historyReader.tree(target);
+          const nodes = new Map(tree.nodes.map(node => [node.entryId, node]));
+          const branch = [];
+          const seen = new Set<string>();
+          for (let id = tree.leafId; id !== null && !seen.has(id);) {
+            seen.add(id);
+            const node = nodes.get(id);
+            if (node === undefined) break;
+            branch.push(node);
+            id = node.parentId;
+          }
+          const match = branch.reverse().filter(node => node.role === "user" && node.text === request.point.text)[request.point.occurrence];
+          if (match === undefined) throw new Error("the user message is not in this session's active branch");
+          nativeRequest = { type: "navigate", entryId: match.entryId, intent: "select" };
         } else nativeRequest = request;
         if (nativeRequest.type === "navigate" && (typeof nativeRequest.entryId !== "string" || !["select", "resume"].includes(nativeRequest.intent))) throw new TypeError("invalid branch selection");
         if (nativeRequest.type === "edit" && (typeof nativeRequest.entryId !== "string" || typeof nativeRequest.text !== "string" || nativeRequest.text.trim() === "")) throw new TypeError("invalid assistant edit");
@@ -407,6 +426,11 @@ export function registerIpc(deps: IpcDeps): () => void {
       return installing;
     },
     [IPC.loadHistory]: async (_event, sessionPath): Promise<HistoryResult> => historyReader.full(await sessionFile(sessionPath)),
+    [IPC.loadHistoryTool]: async (_event, sessionPath, turnId, toolId): Promise<HistoryResult> => historyReader.tool(await sessionFile(sessionPath), requireString(turnId, "turnId"), requireString(toolId, "toolId")),
+    [IPC.loadHistoryPage]: async (_event, sessionPath, from, count): Promise<HistoryResult> => {
+      if (typeof from !== "number" || !Number.isInteger(from) || from < 0 || typeof count !== "number" || !Number.isInteger(count) || count < 1 || count > 100) throw new TypeError("invalid history page");
+      return historyReader.page(await sessionFile(sessionPath), from, count);
+    },
     [IPC.loadHistoryUpdate]: async (_event, sessionPath, since, fullFrom): Promise<HistoryUpdate> => {
       if (since !== null && typeof since !== "string") throw new TypeError("since must be a string or null");
       if (fullFrom !== undefined && !Number.isInteger(fullFrom)) throw new TypeError("fullFrom must be an integer");

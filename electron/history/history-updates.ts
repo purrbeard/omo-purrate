@@ -7,6 +7,8 @@ const REMEMBERED = 8;
 interface Read {
   token: string;
   turnDigests: string[];
+  history: WeakRef<HistoryResult>;
+  fullFrom: number;
 }
 
 /** Longest string an outlined turn keeps; tool output beyond it is what makes a long session heavy. */
@@ -37,9 +39,11 @@ export class HistoryUpdates {
   update(sessionPath: string, history: HistoryResult, since: string | null, fullFrom = 0): HistoryUpdate {
     const total = history.turns.length;
     const full = Math.min(total, Math.max(0, fullFrom < 0 ? total + fullFrom : fullFrom));
-    const sent = history.turns.map((turn, index) => (index < full ? outline(turn) : turn));
-    const digests = sent.map((turn) => createHash("sha1").update(JSON.stringify(turn)).digest("base64"));
     const previous = this.reads.get(sessionPath);
+    const same = previous?.history.deref() === history && previous.fullFrom === full;
+    const sent = same ? history.turns : history.turns.map((turn, index) => (index < full ? outline(turn) : turn));
+    const digests = same ? previous.turnDigests
+      : sent.map((turn) => createHash("sha1").update(JSON.stringify(turn)).digest("base64"));
     const base = previous !== undefined && since !== null && previous.token === since ? since : null;
     const known = base === null ? [] : previous!.turnDigests;
     let from = 0;
@@ -48,9 +52,10 @@ export class HistoryUpdates {
     while (suffix < known.length - from && suffix < total - from && known[known.length - 1 - suffix] === digests[total - 1 - suffix]) suffix += 1;
     const token = randomUUID();
     this.reads.delete(sessionPath);
-    this.reads.set(sessionPath, { token, turnDigests: digests });
+    this.reads.set(sessionPath, { token, turnDigests: digests, history: new WeakRef(history), fullFrom: full });
     if (this.reads.size > REMEMBERED) this.reads.delete(this.reads.keys().next().value as string);
     const { turns: _turns, ...rest } = history;
-    return { ...rest, token, base, from, removed: known.length - from - suffix, turns: sent.slice(from, total - suffix), total, fullFrom: full };
+    const changed = sent.slice(from, total - suffix);
+    return { ...rest, token, base, from, removed: known.length - from - suffix, turns: same ? changed.map((turn, index) => from + index < full ? outline(turn) : turn) : changed, total, fullFrom: full };
   }
 }

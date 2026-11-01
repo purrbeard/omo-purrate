@@ -246,6 +246,7 @@ export type AppEvent =
   | ({ type: "history/replaced"; threadId: string; fullFrom?: number } & HistoryResult)
   /** Like history/replaced for a splice of the turns shown: turns `from` to `from + removed` become `turns`, the rest keep their objects. */
   | ({ type: "history/patched"; threadId: string; from: number; removed: number; fullFrom: number } & HistoryResult)
+  | { type: "history/page"; threadId: string; from: number; turns: HistoryTurn[]; expected: readonly ConversationTurn[] }
   /** Drops the loaded history of conversations nothing is waiting on; opening one again reloads it from the session file. */
   | { type: "history/evicted"; threadIds: string[] }
   | { type: "history/loaded"; threadId: string; turns: HistoryTurn[]; fullFrom?: number; todo?: HistoryResult["todo"]; tasks?: HistoricalTask[]; notices?: SessionNotice[]; memoryWrites?: Record<string, MemoryWriteNotice> }

@@ -11,25 +11,30 @@ export interface SessionTreeDialogProps {
   onClose(): void;
   onSelect(entryId: string, intent: "select" | "resume"): void;
   onEdit(entryId: string, text: string): void;
+  readText(entryId: string): Promise<string>;
 }
 
-export function SessionTreeDialog({ open, nodes, leafId, busy, onClose, onSelect, onEdit }: SessionTreeDialogProps) {
+export function SessionTreeDialog({ open, nodes, leafId, busy, onClose, onSelect, onEdit, readText }: SessionTreeDialogProps) {
   const locale = useLocale();
   const ko = locale === "ko";
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [metadata, setMetadata] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [original, setOriginal] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const depths = new Map<string, number>();
   for (const node of nodes) depths.set(node.entryId, node.parentId === null ? 0 : (depths.get(node.parentId) ?? -1) + 1);
   const displayed = metadata ? nodes : nodes.filter(node => node.role === "user" || node.role === "assistant");
   const editedNode = nodes.find(node => node.entryId === editing && node.type === "message" && node.role === "assistant");
-  const canSave = !busy && editedNode !== undefined && draft.trim() !== "" && draft !== editedNode.text;
+  const canSave = !busy && !loading && editedNode !== undefined && draft.trim() !== "" && draft !== original;
 
   return (
     <Dialog.Root open={open} onOpenChange={(next) => { if (!next && !busy) { setEditing(null); onClose(); } }}>
       <Dialog.Content className="min-w-0" data-testid="session-tree-dialog">
         <Dialog.Title>{ko ? "대화 트리" : "Session tree"}</Dialog.Title>
         <Dialog.Description>{ko ? "항목을 선택하거나 해당 지점에서 이어갑니다." : "Select an entry or resume from it."}</Dialog.Description>
+        {error !== null && <p role="alert">{error}</p>}
         <label className="text-xs text-muted-foreground"><input type="checkbox" checked={metadata} onChange={event => setMetadata(event.target.checked)} /> {ko ? "내부 기록 포함" : "Include internal entries"}</label>
         <div className="min-h-0 min-w-0 max-h-[50dvh] overflow-auto">
           <ul className="m-0 flex min-w-0 list-none flex-col gap-2 p-0">
@@ -49,7 +54,12 @@ export function SessionTreeDialog({ open, nodes, leafId, busy, onClose, onSelect
                     {ko ? "이어가기" : "Resume"}
                   </Button>
                   {node.type === "message" && node.role === "assistant" && (
-                    <Button size="sm" variant="outline" disabled={busy} onClick={() => { setEditing(node.entryId); setDraft(node.text ?? ""); }}>
+                    <Button size="sm" variant="outline" disabled={busy || loading} onClick={() => {
+                      setLoading(true); setError(null);
+                      void readText(node.entryId).then(text => { setEditing(node.entryId); setOriginal(text); setDraft(text); }, reason => {
+                        setError(reason instanceof Error ? reason.message : String(reason));
+                      }).finally(() => setLoading(false));
+                    }}>
                       {ko ? "편집" : "Edit"}
                     </Button>
                   )}

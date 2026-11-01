@@ -244,13 +244,15 @@ export function parseSessionJsonl(text: string): HistoryResult {
 export class SessionJsonlParser {
   private readonly entries = new Map<string, Entry>();
   private leafId: string | null = null;
+  private readonly hydrated = new Map<string, Entry>();
 
   constructor(private readonly workSummary = false) {}
 
-  add(line: string): void {
-    if (line.trim() === "") return;
+  add(line: string): boolean {
+    if (line.trim() === "") return false;
     const entry = parseEntry(line);
-    if (entry === null) return;
+    if (entry === null) return false;
+    const branchChanged = this.leafId !== null && entry.parentId !== this.leafId;
     if (this.workSummary) {
       const message = entry.raw["message"];
       if (entry.type === "message" && isRecord(message)) {
@@ -260,10 +262,51 @@ export class SessionJsonlParser {
       } else if (!(entry.type === "custom" && entry.raw["customType"] === "senpi.todo-state")) entry.raw = {};
     }
     this.entries.set(entry.id, entry);
+    this.hydrated.delete(entry.id);
     this.leafId = entry.id;
+    return branchChanged;
   }
 
-  result(): HistoryResult { return projectHistory(this.entries, this.leafId); }
+  /** Entries belonging to requested turns, selected before their full payloads are parsed. */
+  pageEntries(from: number, count = Number.POSITIVE_INFINITY): string[] {
+    let turn = -1;
+    return activeBranch(this.entries, this.leafId).flatMap(entry => {
+      const message = entry.raw["message"];
+      if (entry.type === "message" && isRecord(message) && message["role"] === "user") turn += 1;
+      else if (turn < 0 && (entry.type === "compaction" || (entry.type === "message" && isRecord(message) && message["role"] === "assistant"))) turn = 0;
+      return turn >= from && turn < from + count ? [entry.id] : [];
+    });
+  }
+
+  payloadRole(id: string): string | null {
+    const message = this.entries.get(id)?.raw["message"];
+    return isRecord(message) && typeof message["role"] === "string" ? message["role"] : null;
+  }
+
+  toolResultId(id: string): string | null {
+    const message = this.entries.get(id)?.raw["message"];
+    return isRecord(message) && message["role"] === "toolResult" && typeof message["toolCallId"] === "string" ? message["toolCallId"] : null;
+  }
+
+  toolEntries(toolId: string): string[] {
+    return activeBranch(this.entries, this.leafId).flatMap(entry => {
+      const message = entry.raw["message"];
+      return isRecord(message) && (message["toolCallId"] === toolId || blocks(message["content"]).some(block => block["type"] === "toolCall" && block["id"] === toolId)) ? [entry.id] : [];
+    });
+  }
+
+  needsPayload(id: string): boolean { return !this.hydrated.has(id); }
+  releasePayload(): void { this.hydrated.clear(); }
+
+  result(records?: Iterable<string>, requestedIds?: readonly string[]): HistoryResult {
+    if (records === undefined) return projectHistory(this.entries, this.leafId);
+    const requested = new Set(requestedIds);
+    for (const id of this.hydrated.keys()) if (!requested.has(id)) this.hydrated.delete(id);
+    for (const line of records) { const entry = parseEntry(line); if (entry !== null) this.hydrated.set(entry.id, entry); }
+    const entries = new Map(this.entries);
+    for (const [id, entry] of this.hydrated) entries.set(id, entry);
+    return projectHistory(entries, this.leafId);
+  }
 }
 
 function projectHistory(entries: Map<string, Entry>, leafId: string | null): HistoryResult {

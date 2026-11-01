@@ -1,6 +1,7 @@
 import { Worker } from "node:worker_threads";
 import type { HistoryResult, HistoryUpdate } from "../../shared/ipc";
 import type { SessionTreeResult } from "../omo/session-tree";
+import type { ContextUsage } from "../../shared/workbench";
 import { HistoryJobs, type Job, type JobResult } from "./history-jobs";
 
 export type HistoryJob = Job & { id: number };
@@ -36,6 +37,22 @@ export class HistoryReader {
 
   tree(file: string): Promise<SessionTreeResult> {
     return this.run({ kind: "tree", file }) as Promise<SessionTreeResult>;
+  }
+
+  page(file: string, from: number, count: number): Promise<HistoryResult> {
+    return this.run({ kind: "page", file, from, count }) as Promise<HistoryResult>;
+  }
+
+  entry(file: string, entryId: string): Promise<SessionTreeResult> {
+    return this.run({ kind: "entry", file, entryId }) as Promise<SessionTreeResult>;
+  }
+
+  context(file: string): Promise<ContextUsage> {
+    return this.run({ kind: "context", file }) as Promise<ContextUsage>;
+  }
+
+  tool(file: string, turnId: string, toolId: string): Promise<HistoryResult> {
+    return this.run({ kind: "tool", file, turnId, toolId }) as Promise<HistoryResult>;
   }
 
   async close(): Promise<void> {

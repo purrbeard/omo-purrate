@@ -1,4 +1,6 @@
 import { quarantineSync } from "../scripts/quarantine-temp.mjs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { TESTID } from "../src/ui/testids.ts";
 import { byTestId, launchApp, shot, tempDir, threadRow, type LaunchedApp } from "./helpers.ts";
@@ -92,4 +94,48 @@ test("the timeline rail previews a message and jumps to it, past the lazily rend
   await page.keyboard.press("Enter");
   await expect(step(page, 1)).toHaveAttribute("data-jump-target", "true");
   await expectLanded(step(page, 1));
+});
+
+test("loading the preceding history page keeps the current reading anchor", async () => {
+  const { page } = current();
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-bridge-state", "connected");
+  await threadRow(page, LONG_ID).getByRole("button").first().click();
+  await expect(step(page, 51)).toBeAttached();
+  await page.getByTestId("show-earlier-turns").scrollIntoViewIfNeeded();
+  const before = await offsetFromTop(step(page, 51));
+  await page.getByTestId("show-earlier-turns").click();
+  await expect(step(page, 11)).toBeAttached();
+  await expect.poll(async () => Math.abs(await offsetFromTop(step(page, 51)) - before)).toBeLessThanOrEqual(2);
+});
+
+test("opening a large historical tool item fetches its complete result and image-only output", async () => {
+  const root = test.info().outputPath("tool-page");
+  const home = path.join(root, "agent"), sessions = path.join(home, "sessions");
+  mkdirSync(sessions, { recursive: true });
+  const id = "tool-page-session";
+  const output = "large result ".repeat(8_000) + " FULL_RESULT_END";
+  const file = path.join(sessions, `${id}.jsonl`);
+  writeFileSync(file, [
+    { type: "session", version: 3, id, cwd: pickDir, timestamp: "2026-11-01T00:00:00Z" },
+    { type: "message", id: "u", parentId: null, message: { role: "user", content: "Inspect large result" } },
+    { type: "message", id: "a", parentId: "u", message: { role: "assistant", content: [{ type: "toolCall", id: "large", name: "read", arguments: { path: "test.log" } }, { type: "toolCall", id: "image-only", name: "image", arguments: {} }] } },
+    { type: "message", id: "r", parentId: "a", message: { role: "toolResult", toolCallId: "large", toolName: "read", content: [{ type: "text", text: output }] } },
+    { type: "message", id: "image", parentId: "r", message: { role: "toolResult", toolCallId: "image-only", toolName: "image", content: [{ type: "image", mimeType: "image/svg+xml", data: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><!--${"x".repeat(64_000)}--><rect width="10" height="10" fill="blue"/></svg>`).toString("base64") }] } },
+    { type: "message", id: "done", parentId: "image", message: { role: "assistant", content: "Result ready", stopReason: "stop" } },
+  ].map(record => JSON.stringify(record)).join("\n") + "\n");
+  const original = readFileSync(file, "utf8");
+  const isolated = await launchApp({ omo: "fake", fakeHome: home, managed: [id], pickDir });
+  try {
+    await threadRow(isolated.page, id).getByRole("button").first().click();
+    await expect(isolated.page.getByText("Result ready", { exact: true })).toBeVisible();
+    await isolated.page.getByTestId("turn-work-log").locator("summary").click();
+    const card = isolated.page.locator('[data-testid="tool-card"][data-item-id="large"]');
+    await card.getByRole("button").first().click();
+    await expect(card).toContainText("FULL_RESULT_END");
+    const image = isolated.page.locator('[data-testid="tool-card"][data-item-id="image-only"]');
+    await image.getByRole("button").first().click();
+    await expect(image.locator("img")).toBeVisible();
+    expect(readFileSync(file, "utf8")).toBe(original);
+  } finally { await isolated.close(); }
 });

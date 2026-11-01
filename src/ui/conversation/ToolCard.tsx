@@ -253,6 +253,19 @@ export const ToolCard = memo(function ToolCard({
     [item, streaming, startedAtMs, completedAtMs, cwd],
   );
   const [expanded, setExpanded] = useState(false);
+  const [loaded, setLoaded] = useState<DynamicToolCallItem | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const ref = item.type === "dynamicToolCall" ? item.historyRef : undefined;
+  const readPayload = useCallback(() => {
+    if (ref === undefined || loaded !== null || loading) return;
+    setLoading(true); setLoadError(null);
+    void window.omo.loadHistoryTool(ref.file, ref.turnId, item.id).then(history => {
+      const found = history.turns.flatMap(turn => turn.items).find(candidate => candidate.type === "dynamicToolCall" && candidate.id === item.id);
+      if (found?.type !== "dynamicToolCall") throw new Error("Tool result no longer exists");
+      setLoaded(found);
+    }).catch(reason => setLoadError(reason instanceof Error ? reason.message : String(reason))).finally(() => setLoading(false));
+  }, [ref, loaded, loading, item.id]);
   const toggle = useCallback(() => setExpanded((value) => !value), []);
   const open = expanded && model.expandable;
   const icon = useMemo(() => <ToolIcon kind={model.kind} />, [model.kind]);
@@ -310,14 +323,14 @@ export const ToolCard = memo(function ToolCard({
           expandable={model.expandable}
           expandOnRowClick
           keepContentWhenOpen
-          onToggle={toggle}
+          onToggle={() => { if (!expanded) readPayload(); toggle(); }}
           collapsedContent={collapsedContent}
         />
         <StatusMark state={state} durationMs={model.durationMs} />
       </div>
       {open && (
         <div className="flex min-w-0 flex-col gap-2 py-1 pl-1">
-          <ToolBody item={item} state={state} cwd={cwd} />
+          {loading ? <span role="status">Loading…</span> : loadError !== null ? <button type="button" onClick={readPayload}>{loadError}</button> : <ToolBody item={loaded ?? item} state={state} cwd={cwd} />}
         </div>
       )}
     </div>

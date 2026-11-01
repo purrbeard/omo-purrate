@@ -24,7 +24,7 @@ export async function readContextUsageFile(file: string): Promise<ContextUsage> 
 interface UsageEntry { parentId: string | null; compacted: boolean; usage: ContextUsage | null }
 
 /** Only branch links and usage survive each record; large messages and tool results are released immediately. */
-class ContextUsageParser {
+export class ContextUsageParser {
   private readonly entries = new Map<string, UsageEntry>();
   private leaf: string | null = null;
 

@@ -458,6 +458,7 @@ export interface BranchResult {
 
 export type SessionTreeOperation =
   | { type: "list" }
+  | { type: "read"; entryId: string }
   | { type: "navigate"; entryId: string; intent: "select" | "resume"; expectedLeafId?: string | null }
   | { type: "edit"; entryId: string; text: string; expectedLeafId?: string | null }
   | { type: "retry"; point: BranchPoint };
@@ -612,6 +613,9 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
    * before `fullFrom` arrive as outlines (prompt and final answer); a negative `fullFrom` counts from the end.
    */
   loadHistoryUpdate(sessionPath: string, since: string | null, fullFrom?: number): Promise<HistoryUpdate>;
+  /** Hydrates only this bounded turn range; other history stays as searchable outlines. */
+  loadHistoryPage(sessionPath: string, from: number, count: number): Promise<HistoryResult>;
+  loadHistoryTool(sessionPath: string, turnId: string, toolId: string): Promise<HistoryResult>;
   /** Follows one session file for writes by another omo process; null stops. Changes arrive through onHistoryChanged. */
   watchHistory(sessionPath: string | null): Promise<void>;
   onHistoryChanged(listener: (sessionPath: string) => void): () => void;
@@ -732,6 +736,8 @@ export const IPC = {
   installLog: "omo:install-log",
   loadHistory: "history:load",
   loadHistoryUpdate: "history:load-update",
+  loadHistoryPage: "history:load-page",
+  loadHistoryTool: "history:load-tool",
   exportSession: "session:export",
   exportSessionJsonl: "session:export-jsonl",
   importSessionJsonl: "session:import-jsonl",

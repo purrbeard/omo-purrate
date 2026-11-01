@@ -291,6 +291,7 @@ class FakeBridge implements OmoBridgeApi {
     return this.history();
   }
   readonly historyUpdates: Array<{ since: string | null; from: number }> = [];
+  readonly historyPages: Array<{ from: number; count: number }> = [];
   private readonly updates = new HistoryUpdates();
   async loadHistoryUpdate(sessionPath: string, since: string | null, fullFrom?: number): Promise<HistoryUpdate> {
     this.historyLoads.push(sessionPath);
@@ -298,6 +299,13 @@ class FakeBridge implements OmoBridgeApi {
     this.historyUpdates.push({ since, from: update.from });
     return update;
   }
+  async loadHistoryPage(sessionPath: string, from: number, count: number): Promise<HistoryResult> {
+    this.historyLoads.push(sessionPath);
+    this.historyPages.push({ from, count });
+    const history = await this.history();
+    return { ...history, turns: history.turns.slice(from, from + count) };
+  }
+  async loadHistoryTool(): Promise<HistoryResult> { return this.history(); }
   usageRows: () => Promise<AccountUsage[]> = async () => [];
   readonly logins: string[] = [];
   readAccountUsage(): Promise<AccountUsage[]> { return this.usageRows(); }
@@ -1622,7 +1630,24 @@ describe("long sessions", () => {
     expect(context.store.getState().conversations[THREAD_ID]?.historyFullFrom).toBe(2);
     expect([output(context, 1), output(context, 2)]).toEqual([2_001, 5_000]);
     expect(context.store.getState().conversations[THREAD_ID]?.turns[44]).toBe(latest);
-    expect(context.bridge.historyUpdates.at(-1)).toEqual({ since: expect.any(String), from: 2 });
+    expect(context.bridge.historyPages).toEqual([{ from: 2, count: 3 }]);
+  });
+
+  it("discards a history page when the conversation changes while its request is in flight", async () => {
+    const context = setup();
+    await listThread(context);
+    context.bridge.history = async () => historyOf(Array.from({ length: 45 }, (_, index) => longTurn(index)));
+    await context.actions.openThread(THREAD_ID);
+    const gate = deferred<HistoryResult>();
+    context.bridge.loadHistoryPage = () => gate.promise;
+    const loading = context.actions.loadFullHistory(THREAD_ID, 2);
+    context.store.dispatch({ type: "history/replaced", threadId: THREAD_ID, turns: [longTurn(99)], todo: null, tasks: [] });
+    const changed = context.store.getState().conversations[THREAD_ID];
+
+    gate.resolve(historyOf([longTurn(2), longTurn(3), longTurn(4)]));
+    expect(await loading).toBe(false);
+
+    expect(context.store.getState().conversations[THREAD_ID]).toBe(changed);
   });
 });
 

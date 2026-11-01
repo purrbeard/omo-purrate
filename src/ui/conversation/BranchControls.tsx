@@ -68,6 +68,12 @@ export function SessionBranches({ threadId }: { threadId: string }) {
       </>}
     </label>
     <SessionTreeDialog open={open} nodes={tree.nodes} leafId={tree.leafId} busy={busy} onClose={() => setOpen(false)}
+      readText={async entryId => {
+        const result = await bridge.sessionTree(threadId, { type: "read", entryId });
+        const node = result.nodes.find(node => node.entryId === entryId);
+        if (node?.text === undefined) throw new Error("Session entry no longer exists");
+        return node.text;
+      }}
       onSelect={(entryId, intent) => change(entryId, intent)} onEdit={(entryId, text) => change(entryId, "resume", text)} />
     </>
   );

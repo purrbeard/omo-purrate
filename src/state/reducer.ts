@@ -209,6 +209,13 @@ export function reduce(state: AppState, event: AppEvent): AppState {
         ...conversation,
         annotations: { notices: event.notices, memoryWrites: event.memoryWrites },
       }));
+    case "history/page":
+      return updateExistingConversation(state, event.threadId, conversation => {
+        if (conversation.turns !== event.expected) return conversation;
+        const loaded = mergeHistory(emptyConversation(event.threadId), event.turns);
+        return { ...conversation, historyFullFrom: event.from,
+          turns: [...conversation.turns.slice(0, event.from), ...loaded.turns, ...conversation.turns.slice(event.from + loaded.turns.length)] };
+      });
     case "history/replaced":
     case "history/patched":
       return updateExistingConversation(state, event.threadId, (conversation) => {

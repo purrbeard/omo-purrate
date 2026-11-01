@@ -167,8 +167,9 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
     const next = Math.max(0, turns.length - TURN_WINDOW - earlier - TURN_WINDOW);
     if (next < fullFrom) {
       setLoadingEarlier(true);
-      await actions.loadFullHistory(threadId, next);
+      const loaded = await actions.loadFullHistory(threadId, next);
       setLoadingEarlier(false);
+      if (!loaded) return;
     }
     const element = scroll.scrollRef.current;
     anchor.current = element === null ? null : element.scrollHeight - element.scrollTop;
@@ -195,7 +196,7 @@ function Transcript({ threadId, cwd, turnActive }: { threadId: string; cwd: stri
     const target = timeline[index];
     if (target === undefined) return;
     const at = turns.findIndex((turn) => turn.id === target.turnId);
-    if (at < fullFrom) await actions.loadFullHistory(threadId, at);
+    if (at < fullFrom && !await actions.loadFullHistory(threadId, at)) return;
     const needed = turns.length - TURN_WINDOW - at;
     if (needed > earlier) {
       pendingJump.current = target.turnId;

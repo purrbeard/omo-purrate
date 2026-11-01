@@ -186,6 +186,8 @@ export class SessionTreeParser {
 
   result(): SessionTreeResult {
     const roots: TreeNode[] = [];
+    // A retained parser can project repeatedly after appends; links are derived, never accumulated.
+    for (const node of this.entries.values()) node.children = [];
     for (const node of this.entries.values()) {
       const parent = node.entry.parentId === null ? undefined : this.entries.get(node.entry.parentId);
       if (parent) parent.children.push(node);

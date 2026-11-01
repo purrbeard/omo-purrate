@@ -122,7 +122,7 @@ export interface AppActions {
   /** Activates the thread and loads its session history when not yet loaded; never resumes it. */
   openThread(threadId: string): Promise<void>;
   /** Reads the thread's turns from `fullFrom` on whole when they were loaded as outlines; resolves once they are. */
-  loadFullHistory(threadId: string, fullFrom: number): Promise<void>;
+  loadFullHistory(threadId: string, fullFrom: number): Promise<boolean>;
   /** Starts and activates a thread in `cwd`; resolves its id, or null on failure. */
   newThread(cwd: string, parentId?: string): Promise<string | null>;
   manageThread(threadId: string, managed: boolean): Promise<void>;
@@ -271,7 +271,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     const connection = connectionRevision;
     todoReads.set(threadId, request);
     try {
-      const history = await bridge.loadHistory(path);
+      const history = await bridge.loadHistoryUpdate(path, null, Number.MAX_SAFE_INTEGER);
       if (todoReads.get(threadId) !== request || connection !== connectionRevision) return;
       store.dispatch({ type: "todo/loaded", threadId, todo: history.todo, generation: live.generation, revision: live.todoRevision });
     } catch (error) {
@@ -313,7 +313,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     const path = state.threads[threadId]?.path ?? null;
     if (path === null || state.conversations[threadId] === undefined) return;
     try {
-      const history = await bridge.loadHistory(path);
+      const history = await bridge.loadHistoryUpdate(path, null, Number.MAX_SAFE_INTEGER);
       store.dispatch({ type: "history/annotated", threadId, notices: history.notices ?? [], memoryWrites: history.memoryWrites ?? {} });
     } catch (error) {
       // The transcript stays usable without annotations; the next memory turn retries.
@@ -957,14 +957,25 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
     async loadFullHistory(threadId, fullFrom) {
       const state = store.getState();
       const path = state.threads[threadId]?.path;
-      if (path == null || (state.conversations[threadId]?.historyFullFrom ?? 0) <= fullFrom) return;
+      if (path == null) return false;
+      if ((state.conversations[threadId]?.historyFullFrom ?? 0) <= fullFrom) return true;
       try {
-        const { token: _token, base, from, removed, total: _total, fullFrom: loaded, ...history } = await readUpdate(threadId, path, fullFrom);
-        store.dispatch(base !== null
-          ? { type: "history/patched", threadId, from, removed, fullFrom: loaded, ...history }
-          : { type: "history/loaded", threadId, ...history, fullFrom: loaded });
+        let end = state.conversations[threadId]?.historyFullFrom ?? 0;
+        while (end > fullFrom) {
+          const from = Math.max(fullFrom, end - 100);
+          const expected = store.getState().conversations[threadId]?.turns;
+          if (expected === undefined) return false;
+          const history = await bridge.loadHistoryPage(path, from, end - from);
+          if (store.getState().conversations[threadId]?.turns !== expected || history.turns.length !== end - from
+            || history.turns.some((turn, index) => turn.id !== expected[from + index]?.id)) return false;
+          store.dispatch({ type: "history/page", threadId, from, expected, turns: history.turns });
+          end = from;
+        }
+        historyReads.delete(threadId);
+        return true;
       } catch (error) {
         fail(error, threadId);
+        return false;
       }
     },
 
@@ -1081,8 +1092,8 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       store.dispatch({ type: "thread/opened", thread: result.thread, resumed: true, session: sessionOf(result) });
       store.dispatch({ type: "thread/activated", threadId: result.thread.id });
       if (result.thread.path !== null) {
-        const history = await bridge.loadHistory(result.thread.path);
-        store.dispatch({ type: "history/loaded", threadId: result.thread.id, ...history });
+        const history = await bridge.loadHistoryUpdate(result.thread.path, null, -FULL_TURNS);
+        store.dispatch({ type: "history/loaded", threadId: result.thread.id, ...history, fullFrom: history.fullFrom });
         rememberHistory(result.thread.id, history);
       }
       await readGoal(result.thread.id);
@@ -1175,7 +1186,10 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       try {
         const result = await bridge.sessionTree(threadId, text === undefined ? { type: "navigate", entryId, intent, expectedLeafId } : { type: "edit", entryId, text, expectedLeafId });
         if (result.outcome === "cancelled" || result.edit?.outcome === "cancelled") return false;
-        replaceHistory(threadId, await bridge.loadHistory(path));
+        const history = await bridge.loadHistoryUpdate(path, null, -FULL_TURNS);
+        rememberHistory(threadId, history);
+        historyReads.delete(threadId);
+        store.dispatch({ type: "history/replaced", threadId, ...history, fullFrom: history.fullFrom });
         if (result.editorText !== undefined && store.getState().activeThreadId === threadId) setComposerText(result.editorText);
         return true;
       } catch (error) {
@@ -1212,7 +1226,7 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
       const key = resendOf(clicked.content).text;
       const repeat = shown.slice(0, index).filter((entry) => resendOf(entry.item.content).text === key).length;
       try {
-        const history = await bridge.loadHistory(path);
+        const history = await bridge.loadHistoryUpdate(path, null, Number.MAX_SAFE_INTEGER);
         const stored = history.turns.flatMap((turn) => turn.items.flatMap((item) => (item.type === "userMessage" ? [item] : [])));
         const target = stored.filter((item) => resendOf(item.content).text === key)[repeat];
         if (target === undefined) throw new Error("This message is not in the saved session yet; reopen the thread and try again.");
@@ -1220,7 +1234,10 @@ export function createActions(store: AppStore, bridge: OmoBridgeApi, options: Ac
         const occurrence = stored.slice(0, stored.indexOf(target)).filter((item) => storedText(item.content) === raw).length;
         const moved = await bridge.sessionTree(threadId, { type: "retry", point: { text: raw, occurrence } });
         if (moved.outcome === "cancelled") return false;
-        replaceHistory(threadId, await bridge.loadHistory(path));
+        const updated = await bridge.loadHistoryUpdate(path, null, -FULL_TURNS);
+        rememberHistory(threadId, updated);
+        historyReads.delete(threadId);
+        store.dispatch({ type: "history/replaced", threadId, ...updated, fullFrom: updated.fullFrom });
       } catch (error) {
         fail(error, threadId);
         return false;
