@@ -5,6 +5,7 @@ import { app, BrowserWindow, shell } from "electron";
 import { ENV, IPC } from "../shared/ipc";
 import type { MenuCommand } from "../shared/ipc";
 import { createAttentionTracker } from "./attention";
+import { launchesInactive } from "./launch-mode";
 import { IphoneBridge, loadIphoneToken } from "./iphone/bridge";
 import { AndroidBridge } from "./android/bridge";
 import { createSessionFileResolver, registerIpc } from "./ipc";
@@ -43,6 +44,7 @@ const background = process.env[ENV.backgroundWindow] === "1";
 const testPosition = background ? /^(-?\d+),(-?\d+)$/.exec(process.env[ENV.qaWindowPosition] ?? "") : null;
 if (background) app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion");
 const indexPath = path.join(__dirname, "../dist/index.html");
+let firstShowInactive = launchesInactive(process.argv, background);
 let mainWindow: BrowserWindow | null = null;
 const attention = createAttentionTracker({ window: () => mainWindow });
 
@@ -92,7 +94,11 @@ function createWindow(): BrowserWindow {
     },
   });
   if (background) window.setIgnoreMouseEvents(true);
-  window.once("ready-to-show", () => (background ? window.showInactive() : window.show()));
+  window.once("ready-to-show", () => {
+    const inactive = background || firstShowInactive;
+    firstShowInactive = false;
+    if (inactive) window.showInactive(); else window.show();
+  });
   window.on("focus", attention.onFocus);
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
@@ -182,8 +188,10 @@ function run(): void {
     send: (state) => mainWindow?.webContents.send(SERVERS_IPC.state, state),
   });
 
-  app.on("second-instance", () => {
-    if (app.isReady()) focusWindow();
+  app.on("second-instance", (_event, argv) => {
+    if (!app.isReady()) return;
+    if (mainWindow !== null && launchesInactive(argv, background)) return;
+    focusWindow();
   });
 
   void app.whenReady().then(() => {
