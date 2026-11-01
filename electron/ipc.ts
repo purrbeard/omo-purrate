@@ -28,6 +28,7 @@ import { loadThreadOrigins } from "./history/thread-origins";
 import { importPage, sessionsToAdopt, toCandidate } from "./history/session-catalog";
 import { SessionIndex } from "./omo/native/threads";
 import { alphaSessionRoots } from "./omo/native/alpha-sessions";
+import { createNotificationStream } from "./notification-stream";
 import { SessionHolders } from "./omo/session-holders";
 import { RpcRequestError } from "./omo/app-server-client";
 import { runInstaller } from "./omo/installer";
@@ -690,15 +691,17 @@ export function registerIpc(deps: IpcDeps): () => void {
   };
 
   for (const [channel, handler] of Object.entries(handlers)) ipcMain.handle(channel, handler);
+  const notificationStream = createNotificationStream(notification => send(IPC.notification, notification));
   const unsubscribers = [
     ...(deps.android ? [deps.android.onStatus((status) => send(IPC.androidStatus, status))] : []),
     ...(deps.iphone ? [deps.iphone.onStatus((status) => send(IPC.iphoneStatus, status))] : []),
-    supervisor.onStatus((status) => send(IPC.status, status)),
-    supervisor.onNotification((notification) => send(IPC.notification, notification)),
-    supervisor.onServerRequest((request) => send(IPC.serverRequest, request)),
+    supervisor.onStatus((status) => { notificationStream.flush(); send(IPC.status, status); }),
+    supervisor.onNotification(notificationStream.push),
+    supervisor.onServerRequest((request) => { notificationStream.flush(); send(IPC.serverRequest, request); }),
   ];
 
   return () => {
+    notificationStream.flush();
     for (const channel of Object.keys(handlers)) ipcMain.removeHandler(channel);
     for (const unsubscribe of unsubscribers) unsubscribe();
     sessionWatcher.close();
