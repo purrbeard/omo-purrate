@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -42,9 +42,9 @@ it("allows Alpha history reads but refuses changes until it has been copied into
   vi.stubEnv("OMO_UI_ALPHA_HOME", path.join(root, ".omo", "desktop"));
   try {
     const supervisor = { initializeResult: { codexHome: agent } };
-    await expect(createSessionFileResolver(supervisor, root)(external)).resolves.toBe(external);
+    await expect(createSessionFileResolver(supervisor, root)(external)).resolves.toBe(await realpath(external));
     await expect(createSessionFileResolver(supervisor, root, true)(external)).rejects.toThrow("Copy this Alpha session");
-    await expect(createSessionFileResolver(supervisor, root, true)(own)).resolves.toBe(own);
+    await expect(createSessionFileResolver(supervisor, root, true)(own)).resolves.toBe(await realpath(own));
     expect(await readFile(external, "utf8")).toBe(original);
   } finally { vi.unstubAllEnvs(); quarantineSync(root, { recursive: true, force: true }); }
 });
@@ -60,7 +60,7 @@ it("keeps the configured native store boundary while the supervisor reconnects",
   vi.stubEnv("OMO_UI_QA_AGENT_DIR", agent);
   try {
     const resolve = createSessionFileResolver({ initializeResult: null }, root, true);
-    await expect(resolve(own)).resolves.toBe(own);
+    await expect(resolve(own)).resolves.toBe(await realpath(own));
     await expect(resolve(unrelated)).rejects.toThrow("Copy this Alpha session");
   } finally { vi.unstubAllEnvs(); quarantineSync(root, { recursive: true, force: true }); }
 });
