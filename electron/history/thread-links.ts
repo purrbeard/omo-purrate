@@ -2,6 +2,7 @@ import { createReadStream } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import type { ThreadLink } from "../../shared/ipc";
+import { SessionPathBoundaryError } from "../ipc-errors";
 
 const ID = /^[A-Za-z0-9_-]{1,256}$/u;
 type Header = { id: string; parentSession?: string };
@@ -46,7 +47,14 @@ export async function loadHeaderLinks(
   for (const sessionPath of pending) {
     const child = await readHeader(sessionPath);
     if (child?.parentSession === undefined) continue;
-    const parent = await readHeader(child.parentSession);
+    let parent: Header | null;
+    try {
+      parent = await readHeader(child.parentSession);
+    } catch (error) {
+      // Imported files retain provenance outside the managed stores; it is not a readable parent link.
+      if (error instanceof SessionPathBoundaryError) continue;
+      throw error;
+    }
     if (parent === null || parent.id === child.id) continue;
     links.set(child.id, { parentId: parent.id, childId: child.id, title: child.id, origin: "native" });
     pending.add(child.parentSession);

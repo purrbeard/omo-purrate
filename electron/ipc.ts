@@ -57,6 +57,7 @@ import { loadMcpSettings, saveMcpSettings } from "./omo/mcp-settings";
 import { readTeams } from "./history/teams";
 import { AppUpdater } from "./app-update";
 import { readModelRouting, saveModelRouting } from "./omo/model-routing";
+import { SessionPathBoundaryError } from "./ipc-errors";
 
 export interface IpcDeps {
   android?: AndroidBridge;
@@ -124,7 +125,7 @@ export function createSessionFileResolver(supervisor: { readonly initializeResul
       const real = await realpath(root).catch(() => null);
       if (real !== null && isInside(real, target)) return target;
     }
-    throw new Error(writable ? "Copy this Alpha session into omo before changing its tree" : "sessionPath is outside the omo and OmO (Alpha) session directories");
+    throw new SessionPathBoundaryError(writable ? "Copy this Alpha session into omo before changing its tree" : "sessionPath is outside the omo and OmO (Alpha) session directories");
   };
 }
 

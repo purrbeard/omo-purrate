@@ -3,6 +3,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadHeaderLinks } from "../../electron/history/thread-links";
+import { SessionPathBoundaryError } from "../../electron/ipc-errors";
 
 vi.mock("node:fs", () => ({ createReadStream: vi.fn() }));
 afterEach(() => vi.resetAllMocks());
@@ -83,10 +84,12 @@ describe("read-only native parent header links", () => {
 
   it.each([child, root])("uses the same containment boundary for %s", async outside => {
     files({ [child]: header("child-id", root), [root]: header("root-id") });
-    await expect(loadHeaderLinks([child], async file => {
-      if (file === outside) throw new Error("outside sessions directory");
+    const loaded = loadHeaderLinks([child], async file => {
+      if (file === outside) throw new SessionPathBoundaryError("outside sessions directory");
       return file;
-    })).rejects.toThrow("outside sessions directory");
+    });
+    if (outside === child) await expect(loaded).rejects.toThrow("outside sessions directory");
+    else await expect(loaded).resolves.toEqual([]);
     expect(vi.mocked(createReadStream).mock.calls.some(([file]) => file === outside)).toBe(false);
   });
 

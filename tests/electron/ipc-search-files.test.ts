@@ -4,6 +4,8 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createSessionFileResolver, searchThreadWorkspaceFiles } from "../../electron/ipc";
 import { quarantineSync } from "../../scripts/quarantine-temp.mjs";
+import { importSessionJsonl } from "../../electron/history/session-transfer";
+import { loadHeaderLinks } from "../../electron/history/thread-links";
 
 vi.mock("electron", () => ({
   app: { name: "OmO UI", isPackaged: false },
@@ -61,4 +63,18 @@ it("keeps the configured native store boundary while the supervisor reconnects",
     await expect(resolve(own)).resolves.toBe(own);
     await expect(resolve(unrelated)).rejects.toThrow("Copy this Alpha session");
   } finally { vi.unstubAllEnvs(); quarantineSync(root, { recursive: true, force: true }); }
+});
+
+it("lists an imported session without reading its external provenance as a managed parent", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "purrate-import-boundary-"));
+  const agent = path.join(root, "agent");
+  const source = path.join(root, "export.jsonl");
+  await writeFile(source, JSON.stringify({ type: "session", version: 3, id: "external", timestamp: "2026-11-01T00:00:00Z", cwd: root }) + "\n");
+  try {
+    const imported = await importSessionJsonl(source, path.join(agent, "sessions"));
+    const resolve = createSessionFileResolver({ initializeResult: { codexHome: agent } }, root);
+    await expect(resolve(source)).rejects.toThrow("sessionPath is outside");
+    await expect(loadHeaderLinks([imported.path], resolve)).resolves.toEqual([]);
+    expect(JSON.parse((await readFile(imported.path, "utf8")).split("\n")[0] ?? "{}").parentSession).toBe(source);
+  } finally { quarantineSync(root, { recursive: true, force: true }); }
 });
