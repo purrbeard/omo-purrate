@@ -203,12 +203,24 @@ export function isKnownItem(item: { type: string }): item is ThreadItem {
   return KNOWN_ITEM_TYPES.has(item.type);
 }
 
+/** Sum of native assistant-message usage; each counter is null unless every message reported it.
+ * `input` is uncached provider input. `totalTokens` is reported, never derived from the other counters.
+ */
+export interface TurnUsage {
+  input: number | null;
+  output: number | null;
+  cacheRead: number | null;
+  cacheWrite: number | null;
+  totalTokens: number | null;
+}
+
 export interface Turn {
   id: string;
   items: ThreadItem[];
   itemsView?: "full" | "summary" | "notLoaded";
   status: TurnStatus;
   error: TurnError | null;
+  usage?: TurnUsage | null;
   startedAt?: number | null;
   completedAt?: number | null;
   durationMs?: number | null;
@@ -333,8 +345,8 @@ export interface McpServerStatus {
 
 /** What one session has spent: `tokens` and `cost` are the whole session, `contextUsage` the live window. */
 export interface SessionStats {
-  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
-  cost: number;
+  tokens: { input: number | null; output: number | null; cacheRead: number | null; cacheWrite: number | null; total: number | null };
+  cost: number | null;
   /** Absent when omo has no model or context window for the session; `tokens`/`percent` are null right after a compaction. */
   contextUsage: { tokens: number | null; contextWindow: number; percent: number | null } | null;
 }

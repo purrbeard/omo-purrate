@@ -89,6 +89,7 @@ function fromHistoryTurn(turn: HistoryTurn): ConversationTurn {
     id: turn.id,
     status: turn.status,
     error: turn.error,
+    ...(turn.usage === undefined ? {} : { usage: turn.usage }),
     items: wireItems(turn.items, false),
     startedAtMs: turn.startedAt,
     completedAtMs: turn.completedAt,

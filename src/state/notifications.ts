@@ -86,6 +86,7 @@ function completeTurn(conversation: Conversation, notification: Extract<ServerNo
     ...turn,
     status: wireTurn.status,
     error: wireTurn.error ?? null,
+    ...(wireTurn.usage === undefined ? {} : { usage: wireTurn.usage }),
     completedAtMs: toMs(wireTurn.completedAt) ?? receivedAtMs,
     items: turn.items.length === 0 ? wireItems(wireTurn.items, false) : stopStreaming(turn.items),
   }));

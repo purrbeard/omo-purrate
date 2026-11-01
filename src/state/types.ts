@@ -1,5 +1,5 @@
 import type { BridgeStatus, HistoricalTask, HistoryResult, HistoryTurn, MemoryWriteNotice, SessionNotice, TaskWork } from "../../shared/ipc";
-import type { DagActivity, DagHeartbeat, DagRun, LiveTask, TodoPhase, WireGoal } from "../../shared/protocol";
+import type { DagActivity, DagHeartbeat, DagRun, LiveTask, TodoPhase, TurnUsage, WireGoal } from "../../shared/protocol";
 import type { SessionHolder } from "../../shared/session-held";
 import type { WorkflowTransition } from "../ui/conversation/workflow-activity";
 import type {
@@ -52,6 +52,7 @@ export interface ConversationTurn {
   id: string;
   status: TurnStatus;
   error: TurnError | null;
+  usage?: TurnUsage | null;
   items: ConversationItem[];
   startedAtMs: number | null;
   completedAtMs: number | null;

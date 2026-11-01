@@ -1,7 +1,8 @@
 import type { HistoricalTask, HistoryResult, HistoryTurn, MemoryWriteNotice, SessionNotice } from "../../shared/ipc";
+import { addUsage } from "../../shared/usage";
 import { parseTodo } from "../../src/state/live-wire";
 import { toolFileChanges } from "../omo/native/file-changes";
-import type { DynamicToolCallContentItem, DynamicToolCallItem, ThreadItem, TurnError, UserInput } from "../../shared/protocol";
+import type { DynamicToolCallContentItem, DynamicToolCallItem, ThreadItem, TurnError, TurnUsage, UserInput } from "../../shared/protocol";
 
 type JsonObject = Record<string, unknown>;
 
@@ -20,6 +21,7 @@ interface TurnBuilder {
   items: ThreadItem[];
   tools: Map<string, DynamicToolCallItem>;
   hasAssistant: boolean;
+  usage: TurnUsage | null;
   stopReason: string | null;
   error: TurnError | null;
 }
@@ -47,7 +49,7 @@ function parseEntry(line: string): Entry | null {
   if (value["type"] === "message" && isRecord(value["message"])) {
     const source = value["message"];
     const details = source["details"];
-    raw = { message: { role: source["role"], content: source["content"], stopReason: source["stopReason"],
+    raw = { message: { role: source["role"], content: source["content"], stopReason: source["stopReason"], usage: source["usage"],
       errorMessage: source["errorMessage"], toolCallId: source["toolCallId"], toolName: source["toolName"], isError: source["isError"],
       details: isRecord(details) ? { durationMs: details["durationMs"], patch: details["patch"], operation: details["operation"],
         preview: details["preview"], writeNotice: details["writeNotice"], ...historicalTask(details, true) } : undefined } };
@@ -128,6 +130,7 @@ function startTurn(entry: Entry): TurnBuilder {
     items: [],
     tools: new Map(),
     hasAssistant: false,
+    usage: null,
     stopReason: null,
     error: null,
   };
@@ -135,6 +138,7 @@ function startTurn(entry: Entry): TurnBuilder {
 
 function addAssistant(turn: TurnBuilder, entry: Entry, message: JsonObject): void {
   turn.hasAssistant = true;
+  turn.usage = addUsage(turn.usage, message["usage"]);
   turn.stopReason = typeof message["stopReason"] === "string" ? message["stopReason"] : null;
   turn.error =
     turn.stopReason === "error" && typeof message["errorMessage"] === "string" ? { message: message["errorMessage"] } : null;
@@ -224,6 +228,7 @@ function finishTurn(turn: TurnBuilder, isFinal: boolean): HistoryTurn {
     id: turn.id,
     status,
     error: turn.error,
+    ...(turn.usage === null ? {} : { usage: turn.usage }),
     items: turn.items,
     startedAt: turn.startedAt,
     completedAt: status === "inProgress" ? null : turn.lastTimestamp,
@@ -256,7 +261,7 @@ export class SessionJsonlParser {
     if (this.workSummary) {
       const message = entry.raw["message"];
       if (entry.type === "message" && isRecord(message)) {
-        entry.raw = { message: { role: message["role"], content: message["role"] === "assistant" ? blocks(message["content"]).flatMap<JsonObject>(block =>
+        entry.raw = { message: { role: message["role"], usage: message["usage"], content: message["role"] === "assistant" ? blocks(message["content"]).flatMap<JsonObject>(block =>
           block["type"] === "text" && typeof block["text"] === "string" ? [{ type: "text", text: block["text"].replace(/\s+/gu, " ").trim().slice(-240) }]
             : block["type"] === "toolCall" ? [{ type: "toolCall", id: block["id"], name: block["name"] }] : []) : [] } };
       } else if (!(entry.type === "custom" && entry.raw["customType"] === "senpi.todo-state")) entry.raw = {};

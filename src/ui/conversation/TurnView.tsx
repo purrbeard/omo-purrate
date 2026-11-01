@@ -10,6 +10,7 @@ import { Badge, StateDot, focusRing } from "../kit";
 import { TESTID } from "../testids";
 import { AssistantMessage } from "./AssistantMessage";
 import { AnswerFooter } from "./AnswerFooter";
+import { TurnUsage } from "./TurnUsage";
 import { SubagentRow } from "./SubagentRow";
 import { isQuietNotice, MemoryWriteCard, NoticeList } from "./SessionNotices";
 import { EditMessageButton, EditMessageForm, RegenerateButton, userRowClass, type BranchAt } from "./BranchControls";
@@ -381,6 +382,7 @@ export const TurnView = memo(function TurnView({
             {entry === answer && entry.item.type === "agentMessage" && (
               <>
                 {files.length > 0 && <EditedFilesCard files={files} turnId={turn.id} />}
+                <TurnUsage usage={turn.usage} />
                 <AnswerFooter text={entry.item.text} completedAt={answerCompletedAt(turn, entry)}>{regenerate}</AnswerFooter>
               </>
             )}

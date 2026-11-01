@@ -4,13 +4,18 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NativeRecord } from "../../electron/omo/native/connection";
 import { NativeAppServerClient } from "../../electron/omo/native/client";
-import type { RpcNotification } from "../../shared/protocol";
+import { TurnProjector } from "../../electron/omo/native/projector";
+import { fromWireTurn } from "../../src/state/conversation";
+import { createInitialState, reduce } from "../../src/state";
+import type { HistoryTurn } from "../../shared/ipc";
+import type { RpcNotification, Turn } from "../../shared/protocol";
 
 // The client is driven through a scripted connection, so a test can inject any record omo could send.
 const host = vi.hoisted(() => ({
   sent: [] as string[],
   listeners: new Set<(record: Record<string, unknown> & { type: string }) => void>(),
   failures: new Map<string, Error>(),
+  stats: {} as Record<string, unknown>,
   opened: false,
   sessionFile: null as string | null,
   /** When set, the next goal-store read waits until the test releases it with the text it returns. */
@@ -41,6 +46,7 @@ vi.mock("../../electron/omo/native/connection", async (importOriginal) => {
       host.sent.push(command);
       const failure = host.failures.get(command);
       if (failure !== undefined) throw failure;
+      if (command === "get_session_stats") return host.stats;
       if (command === "open_session") {
         host.opened = true;
         return { sessionId: "handle-1", state: { sessionId: "thread-1", cwd: "/work/project", ...(host.sessionFile === null ? {} : { sessionFile: host.sessionFile }) } };
@@ -63,6 +69,7 @@ afterEach(() => {
   host.sent.length = 0;
   host.listeners.clear();
   host.failures.clear();
+  host.stats = {};
   host.opened = false;
   host.sessionFile = null;
   host.holdGoalRead = null;
@@ -84,6 +91,94 @@ function deliver(record: NativeRecord): void {
 
 const alerts = (seen: RpcNotification[]) => seen.filter((n) => n.method === "thread/alert").map((n) => n.params as Record<string, unknown>);
 const methods = (seen: RpcNotification[], method: string) => seen.filter((n) => n.method === method);
+const reportedUsage = { input: 10, output: 2, cacheRead: 30, cacheWrite: 0, totalTokens: 42 };
+
+function usageProjection(messages: Array<Record<string, unknown>>): { seen: RpcNotification[]; completed: Turn } {
+  const seen: RpcNotification[] = [];
+  const projector = new TurnProjector("usage-thread", "/work", n => seen.push(n), () => 1000);
+  projector.beginClientTurn([], null);
+  for (const message of messages) {
+    projector.handle({ type: "message_start", message });
+    projector.handle({ type: "message_end", message });
+  }
+  projector.handle({ type: "agent_end" });
+  projector.handle({ type: "agent_settled" });
+  const completed = methods(seen, "turn/completed");
+  expect(completed).toHaveLength(1);
+  return { seen, completed: (completed[0]?.params as { turn: Turn }).turn };
+}
+
+describe("native usage transport", () => {
+  it("sums tool-use and final assistant usage once and retains it through live reducer completion", () => {
+    const { seen, completed } = usageProjection([
+      { role: "assistant", responseId: "first", usage: reportedUsage, content: [{ type: "text", text: "working" }], stopReason: "toolUse" },
+      { role: "toolResult", usage: { input: 999, output: 999, cacheRead: 999, cacheWrite: 999, totalTokens: 3996 }, content: [] },
+      { role: "assistant", responseId: "second", usage: reportedUsage, content: [{ type: "thinking", thinking: "reason" }, { type: "text", text: "done" }], stopReason: "stop" },
+    ]);
+    const usage = { input: 20, output: 4, cacheRead: 60, cacheWrite: 0, totalTokens: 84 };
+    expect(completed.usage).toEqual(usage);
+    expect(fromWireTurn(completed, 1000).usage).toEqual(usage);
+    let state = createInitialState();
+    for (const notification of seen) state = reduce(state, { type: "rpc/notification", notification, receivedAtMs: 1000 });
+    expect(state.conversations["usage-thread"]?.turns[0]?.usage).toEqual(usage);
+    expect(state.conversations["usage-thread"]?.turns[0]?.items.length).toBeGreaterThan(0);
+  });
+
+  it("does not double-count a duplicate assistant message_end", () => {
+    const seen: RpcNotification[] = [];
+    const projector = new TurnProjector("usage-thread", "/work", n => seen.push(n));
+    const message = { role: "assistant", responseId: "same", usage: reportedUsage, content: [], stopReason: "stop" };
+    projector.handle({ type: "message_start", message });
+    projector.handle({ type: "message_end", message });
+    projector.handle({ type: "message_end", message });
+    projector.handle({ type: "agent_settled" });
+    expect((methods(seen, "turn/completed")[0]?.params as { turn: Turn }).turn.usage).toEqual(reportedUsage);
+  });
+
+  it("preserves unknown counters and rejects negative, non-finite and non-numeric counters", () => {
+    const partial = usageProjection([
+      { role: "assistant", usage: reportedUsage, content: [], stopReason: "toolUse" },
+      { role: "assistant", usage: { input: 0, output: Number.NaN, cacheRead: Number.POSITIVE_INFINITY, cacheWrite: -1, totalTokens: "0" }, content: [], stopReason: "stop" },
+    ]);
+    expect(partial.completed.usage).toEqual({ input: 10, output: null, cacheRead: null, cacheWrite: null, totalTokens: null });
+    const missing = usageProjection([
+      { role: "assistant", usage: reportedUsage, content: [], stopReason: "toolUse" },
+      { role: "assistant", content: [], stopReason: "stop" },
+    ]);
+    expect(missing.completed.usage).toEqual({ input: null, output: null, cacheRead: null, cacheWrite: null, totalTokens: null });
+    expect(usageProjection([]).completed.usage ?? null).toBeNull();
+  });
+
+  it.each(["history/loaded", "history/replaced", "history/patched"] as const)("retains usage during %s and page hydration", type => {
+    const usage = { ...reportedUsage, totalTokens: null };
+    const historyTurn: HistoryTurn = { id: "u", status: "completed", error: null, items: [], startedAt: 1000, completedAt: 2000, usage };
+    let state = reduce(createInitialState(), { type: "thread/activated", threadId: "usage-thread" });
+    const result = { threadId: "usage-thread", turns: [historyTurn], todo: null, tasks: [] };
+    state = reduce(state, type === "history/patched" ? { type, ...result, from: 0, removed: 0, fullFrom: 1 } : { type, ...result });
+    expect(state.conversations["usage-thread"]?.turns[0]?.usage).toEqual(usage);
+    const expected = state.conversations["usage-thread"]?.turns;
+    if (expected === undefined) throw new Error("History did not create a conversation");
+    const pageUsage = { ...reportedUsage, input: 25 };
+    const pageTurn = { ...historyTurn, usage: pageUsage };
+    state = reduce(state, { type: "history/page", threadId: "usage-thread", from: 0, turns: [pageTurn], expected });
+    expect(state.conversations["usage-thread"]?.turns[0]?.usage).toEqual(pageUsage);
+    const hydrated = state.conversations["usage-thread"]?.turns;
+    if (hydrated === undefined) throw new Error("Page removed the conversation");
+    state = reduce(state, { type: "history/page", threadId: "usage-thread", from: 0, turns: [pageTurn], expected: hydrated });
+    expect(state.conversations["usage-thread"]?.turns[0]?.usage).toEqual(pageUsage);
+  });
+
+  it("returns absent session stats as unknown and preserves reported zero", async () => {
+    const { client } = await open();
+    expect(await client.request("thread/stats", { threadId: "thread-1" })).toEqual({ stats: {
+      tokens: { input: null, output: null, cacheRead: null, cacheWrite: null, total: null }, cost: null, contextUsage: null,
+    } });
+    host.stats = { tokens: { input: 0, output: Number.POSITIVE_INFINITY, cacheRead: -1, cacheWrite: 5, total: 0 }, cost: 0 };
+    expect(await client.request("thread/stats", { threadId: "thread-1" })).toEqual({ stats: {
+      tokens: { input: 0, output: null, cacheRead: null, cacheWrite: 5, total: 0 }, cost: 0, contextUsage: null,
+    } });
+  });
+});
 
 describe("NativeAppServerClient records", () => {
   it("pins a transcript write failure as an error alert and warns once per extension path and event", async () => {

@@ -27,6 +27,7 @@ import type {
   WireGoal,
 } from "../../../shared/protocol";
 import { ORIGIN_CONTEXT } from "../../../shared/session-origin";
+import { usageCount } from "../../../shared/usage";
 import { keysetPage } from "../../history/session-catalog";
 import { parseSessionJsonl } from "../../history/session-jsonl";
 import type { AppServerClientOptions, InitializeResult } from "../app-server-client";
@@ -167,13 +168,13 @@ function wireSessionStats(data: JsonObject): SessionStats {
   const context = data["contextUsage"];
   const window = isRecord(context) ? context["contextWindow"] : undefined;
   return {
-    tokens: { input: count(tokens["input"]), output: count(tokens["output"]), cacheRead: count(tokens["cacheRead"]), cacheWrite: count(tokens["cacheWrite"]), total: count(tokens["total"]) },
-    cost: count(data["cost"]),
-    contextUsage: isRecord(context) && typeof window === "number" && window > 0
+    tokens: { input: usageCount(tokens["input"]), output: usageCount(tokens["output"]), cacheRead: usageCount(tokens["cacheRead"]), cacheWrite: usageCount(tokens["cacheWrite"]), total: usageCount(tokens["total"]) },
+    cost: usageCount(data["cost"]),
+    contextUsage: isRecord(context) && typeof window === "number" && Number.isFinite(window) && window > 0
       ? {
-        tokens: typeof context["tokens"] === "number" ? context["tokens"] : null,
+        tokens: usageCount(context["tokens"]),
         contextWindow: window,
-        percent: typeof context["percent"] === "number" ? context["percent"] : null,
+        percent: usageCount(context["percent"]),
       }
       : null,
   };
@@ -726,6 +727,7 @@ export class NativeAppServerClient {
     const history = parseSessionJsonl(await readFile(thread.path, "utf8"));
     const turns: Turn[] = history.turns.map((turn) => ({
       id: turn.id, items: turn.items, itemsView: "full", status: turn.status, error: turn.error,
+      ...(turn.usage === undefined ? {} : { usage: turn.usage }),
       startedAt: turn.startedAt === null ? null : turn.startedAt / 1000, completedAt: turn.completedAt === null ? null : turn.completedAt / 1000,
     }));
     return { thread: { ...thread, turns } };

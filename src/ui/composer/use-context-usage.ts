@@ -10,7 +10,11 @@ export interface ContextGaugeUsage {
   tokens: number | null;
   window: number;
   compacted: boolean;
-  /** The whole session's tokens and cost from omo's `get_session_stats`; null while omo has not answered. */
+  /** Whole-session counters from `thread/stats`, never the current prompt's composition. */
+  input: number | null;
+  output: number | null;
+  cacheRead: number | null;
+  cacheWrite: number | null;
   totalTokens: number | null;
   cost: number | null;
 }
@@ -53,7 +57,6 @@ export function useContextUsage(): ContextGaugeUsage | null {
     }).catch(() => {
       if (current) setEntry(null);
     });
-    // omo's own totals: the gauge prefers its context window and shows the session cost and tokens in the tooltip.
     void window.omo.request("thread/stats", { threadId }).then(({ stats: loaded }) => {
       if (current) setStats({ threadId, stats: loaded });
     }).catch(() => {
@@ -75,6 +78,8 @@ export function useContextUsage(): ContextGaugeUsage | null {
   if (contextWindow === undefined || contextWindow <= 0) return null;
   return {
     tokens, window: contextWindow, compacted: usage.compacted,
-    totalTokens: live === null ? null : live.tokens.total, cost: live === null ? null : live.cost,
+    input: live?.tokens.input ?? null, output: live?.tokens.output ?? null,
+    cacheRead: live?.tokens.cacheRead ?? null, cacheWrite: live?.tokens.cacheWrite ?? null,
+    totalTokens: live?.tokens.total ?? null, cost: live?.cost ?? null,
   };
 }

@@ -1,5 +1,13 @@
 export const messages = {
   en: {
+    "usage.turn": "Turn usage",
+    "usage.session": "Session token composition",
+    "usage.input": "Input",
+    "usage.output": "Output",
+    "usage.cacheRead": "Cache read",
+    "usage.cacheWrite": "Cache write",
+    "usage.total": "Total",
+    "usage.cacheHit": "Cache hit",
     "shell.sidebar.pinned": "Pinned",
     "shell.sidebar.pin": "Pin",
     "shell.sidebar.unpin": "Unpin",
@@ -41,6 +49,14 @@ export const messages = {
     "notify.question": "Waiting for your answer",
   },
   ko: {
+    "usage.turn": "턴 사용량",
+    "usage.session": "세션 토큰 구성",
+    "usage.input": "입력",
+    "usage.output": "출력",
+    "usage.cacheRead": "캐시 읽기",
+    "usage.cacheWrite": "캐시 쓰기",
+    "usage.total": "합계",
+    "usage.cacheHit": "캐시 히트율",
     "shell.sidebar.pinned": "고정 세션",
     "shell.sidebar.pin": "고정",
     "shell.sidebar.unpin": "고정 해제",

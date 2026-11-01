@@ -84,6 +84,7 @@ export function fromWireTurn(turn: Turn, receivedAtMs: number): ConversationTurn
     id: turn.id,
     status: turn.status,
     error: turn.error ?? null,
+    ...(turn.usage === undefined ? {} : { usage: turn.usage }),
     items: wireItems(turn.items, false),
     startedAtMs: toMs(turn.startedAt) ?? receivedAtMs,
     completedAtMs: toMs(turn.completedAt),

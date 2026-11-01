@@ -13,6 +13,7 @@ import type {
   ThreadItem,
   TurnError,
   TurnStatus,
+  TurnUsage,
   TodoPhase,
   LiveTask,
 } from "./protocol";
@@ -278,6 +279,7 @@ export interface HistoryTurn {
   id: string;
   status: TurnStatus;
   error: TurnError | null;
+  usage?: TurnUsage | null;
   items: ThreadItem[];
   /** Unix milliseconds. */
   startedAt: number | null;

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import type { ContextCompactionReason, DynamicToolCallContentItem, RpcNotification, ThreadItem, Turn, TurnStatus, UserInput } from "../../../shared/protocol";
+import type { ContextCompactionReason, DynamicToolCallContentItem, RpcNotification, ThreadItem, Turn, TurnStatus, TurnUsage, UserInput } from "../../../shared/protocol";
+import { addUsage } from "../../../shared/usage";
 import { previewFileChanges, toolFileChanges } from "./file-changes";
 
 type JsonObject = Record<string, unknown>;
@@ -34,6 +35,8 @@ interface ActiveTurn {
   reasoning: Map<number, TextState>;
   messageId: string | null;
   messageCounter: number;
+  usage: TurnUsage | null;
+  usageMessageIds: Set<string>;
   compactionId: string | null;
   compactionReason: ContextCompactionReason | null;
   outcome: { status: TurnStatus; error: string | null } | null;
@@ -306,6 +309,8 @@ export class TurnProjector {
       reasoning: new Map(),
       messageId: null,
       messageCounter: 0,
+      usage: null,
+      usageMessageIds: new Set(),
       compactionId: null,
       compactionReason: null,
       outcome: null,
@@ -394,6 +399,11 @@ export class TurnProjector {
   private messageEnd(message: unknown): void {
     const turn = this.active;
     if (turn === null || !isRecord(message) || message["role"] !== "assistant") return;
+    const messageId = readString(message, "responseId") ?? turn.messageId;
+    if (messageId === null || !turn.usageMessageIds.has(messageId)) {
+      turn.usage = addUsage(turn.usage, message["usage"]);
+      if (messageId !== null) turn.usageMessageIds.add(messageId);
+    }
     const content = Array.isArray(message["content"]) ? message["content"] : [];
     content.forEach((block, index) => {
       if (!isRecord(block)) return;
@@ -601,6 +611,7 @@ export class TurnProjector {
       itemsView: "full",
       status,
       error: status === "failed" ? { message: error ?? "Turn failed", codexErrorInfo: "other", additionalDetails: null } : null,
+      ...(turn.usage === null ? {} : { usage: turn.usage }),
       startedAt: turn.startedAtMs / 1000,
       completedAt: completedAtMs === null ? null : completedAtMs / 1000,
       durationMs: completedAtMs === null ? null : completedAtMs - turn.startedAtMs,
