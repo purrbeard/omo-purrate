@@ -1,12 +1,47 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, watch, writeFileSync } from "node:fs";
 import { quarantineSync } from "../scripts/quarantine-temp.mjs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { ENV } from "../shared/ipc.ts";
 import { TESTID } from "../src/ui/testids.ts";
-import { byTestId, launchApp, newSession, setTheme, shot, WT, prompts } from "./helpers.ts";
+import { byTestId, launchApp, newSession, setTheme, shot, WT } from "./helpers.ts";
+import type { LaunchedApp } from "./helpers.ts";
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1sAAAAASUVORK5CYII=";
+
+async function sendAndReceivePrompt(launched: LaunchedApp, threadId: string): Promise<Record<string, unknown>> {
+  const logPath = launched.dirs.fakeLog;
+  if (logPath === null) throw new Error("fake log path is required");
+  const readPrompts = (): Record<string, unknown>[] => {
+    const text = readFileSync(logPath, "utf8");
+    return text.slice(0, text.lastIndexOf("\n") + 1).split("\n").flatMap(line => {
+      if (!line) return [];
+      const frame: unknown = JSON.parse(line);
+      return typeof frame === "object" && frame !== null && !Array.isArray(frame) && "type" in frame && frame.type === "prompt" && "threadId" in frame && frame.threadId === threadId
+        ? [frame] : [];
+    });
+  };
+  const before = readPrompts().length;
+  const watcher = watch(logPath);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const received = new Promise<Record<string, unknown>>((resolve, reject) => {
+    watcher.on("change", () => {
+      try {
+        const prompt = readPrompts()[before];
+        if (prompt !== undefined) resolve(prompt);
+      } catch (error) { reject(error); }
+    });
+    watcher.once("error", reject);
+    timeout = setTimeout(() => reject(new Error("native did not receive the attachment prompt")), 30_000);
+  });
+  try {
+    const [prompt] = await Promise.all([received, byTestId(launched.page, TESTID.composerSend).click()]);
+    return prompt;
+  } finally {
+    clearTimeout(timeout);
+    watcher.close();
+  }
+}
 
 test("picker sends local images and echoes user thumbnails", async () => {
   const dir = path.join(WT, "test-results", "attachment-picker");
@@ -15,16 +50,16 @@ test("picker sends local images and echoes user thumbnails", async () => {
   writeFileSync(image, Buffer.from(PNG, "base64"));
   const launched = await launchApp({ omo: "fake", pickDir: dir, extraEnv: { [ENV.qaPickAttachments]: JSON.stringify([image]) } });
   try {
-    const { page, readFakeLog } = launched;
-    await newSession(page);
+    const { page } = launched;
+    const threadId = await newSession(page);
     await byTestId(page, TESTID.attachmentPick).click();
     await expect(byTestId(page, TESTID.attachmentThumbnail)).toHaveCount(1);
     await byTestId(page, TESTID.composerInput).fill("Describe this image");
-    await byTestId(page, TESTID.composerSend).click();
+    const request = await sendAndReceivePrompt(launched, threadId);
     await expect(byTestId(page, TESTID.userMessage).locator("img")).toBeVisible();
     await expect(byTestId(page, TESTID.userMessage)).toContainText("Describe this image");
     await expect(byTestId(page, TESTID.userMessage)).not.toContainText("Attached images");
-    expect(readFakeLog().find(entry => entry["type"] === "prompt")).toMatchObject({
+    expect(request).toMatchObject({
       message: "Describe this image",
       images: [{ type: "image", mimeType: "image/png", data: PNG }],
     });
@@ -34,8 +69,8 @@ test("picker sends local images and echoes user thumbnails", async () => {
 test("paste and drop preview, remove, and send image-only", async () => {
   const launched = await launchApp({ omo: "fake", pickDir: WT });
   try {
-    const { page, readFakeLog } = launched;
-    await newSession(page);
+    const { page } = launched;
+    const threadId = await newSession(page);
     await page.evaluate(({ png, inputId, cardId }) => {
       const bytes = Uint8Array.from(atob(png), (c) => c.charCodeAt(0));
       const paste = new DataTransfer();
@@ -53,9 +88,9 @@ test("paste and drop preview, remove, and send image-only", async () => {
     await byTestId(page, TESTID.attachmentRemove).first().click();
     await expect(byTestId(page, TESTID.attachmentThumbnail)).toHaveCount(1);
     await expect(byTestId(page, TESTID.composerSend)).toBeEnabled();
-    await byTestId(page, TESTID.composerSend).click();
+    const request = await sendAndReceivePrompt(launched, threadId);
     await expect(byTestId(page, TESTID.userMessage).locator("img")).toBeVisible();
-    expect(readFakeLog().find(entry => entry["type"] === "prompt")).toMatchObject({
+    expect(request).toMatchObject({
       message: "",
       images: [{ type: "image", mimeType: "image/png", data: PNG }],
     });
@@ -74,14 +109,13 @@ test("the paperclip attaches any file type as a file reference", async () => {
   writeFileSync(archive, "PK");
   const launched = await launchApp({ omo: "fake", pickDir: dir, extraEnv: { [ENV.qaPickAttachments]: JSON.stringify([document, archive]) } });
   try {
-    const { page, readFakeLog } = launched;
-    await newSession(page);
+    const { page } = launched;
+    const threadId = await newSession(page);
     await byTestId(page, TESTID.attachmentPick).click();
     await expect(page.getByTestId("context-chip")).toHaveText(["notes.pdf", "bundle.zip"]);
     await expect(byTestId(page, TESTID.attachmentNotice)).toHaveCount(0);
     await byTestId(page, TESTID.composerInput).fill("Read these");
-    await byTestId(page, TESTID.composerSend).click();
-    const request = prompts(readFakeLog())[0];
+    const request = await sendAndReceivePrompt(launched, threadId);
     const text = String(request?.message);
     expect(text).toContain(JSON.stringify(document));
     expect(text).toContain(JSON.stringify(archive));
