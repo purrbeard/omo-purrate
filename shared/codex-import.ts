@@ -33,6 +33,25 @@ export interface CodexRolloutPreview {
   readonly unsupported: readonly { readonly reason: CodexUnsupportedReason; readonly count: number }[];
 }
 
+export interface CodexSessionSummary {
+  readonly sourcePath: string;
+  readonly sourceId: string | null;
+  readonly cwd: string | null;
+  readonly project: string | null;
+  readonly title: string | null;
+  readonly titleSource: "codex" | "prompt" | "date";
+  readonly startedAt: string | null;
+  readonly updatedAtMs: number;
+  readonly bytes: number;
+  readonly imported: boolean;
+}
+
+export interface CodexSessionList {
+  readonly root: string;
+  readonly items: readonly CodexSessionSummary[];
+  readonly omitted: number;
+}
+
 export interface CodexImportOptions {
   readonly cwd: string;
   readonly provider: string;

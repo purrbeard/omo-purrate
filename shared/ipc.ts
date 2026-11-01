@@ -3,7 +3,7 @@
  * The preload script exposes an object satisfying OmoBridgeApi as `window.omo`.
  */
 import type { ProjectSetting } from "./project-settings";
-import type { CodexImportResult, CodexRolloutPreview } from "./codex-import";
+import type { CodexImportResult, CodexRolloutPreview, CodexSessionList } from "./codex-import";
 import type {
   ClientMethod,
   ClientParams,
@@ -610,6 +610,10 @@ export interface OmoBridgeApi extends WorkbenchBridgeApi, BrowserBridgeApi, Serv
   exportSessionJsonl(threadId: string): Promise<{ path: string } | null>;
   importSessionJsonl(): Promise<BranchResult | null>;
   pickCodexRollout(): Promise<CodexRolloutPreview | null>;
+  /** Rollouts found under CODEX_HOME (default ~/.codex), read-only, newest first. */
+  listCodexSessions(): Promise<CodexSessionList>;
+  /** Previews a listed rollout; the path must lie inside the discovered Codex sessions folders. */
+  previewCodexSession(sourcePath: string): Promise<CodexRolloutPreview>;
   importCodexRollout(input: { fingerprint: string; cwd: string; model: string }): Promise<CodexImportResult>;
   /** Parses the session JSONL at sessionPath, which must resolve inside the omo sessions directory. */
   loadHistory(sessionPath: string): Promise<HistoryResult>;
@@ -747,6 +751,8 @@ export const IPC = {
   exportSessionJsonl: "session:export-jsonl",
   importSessionJsonl: "session:import-jsonl",
   pickCodexRollout: "session:pick-codex-rollout",
+  listCodexSessions: "session:list-codex-sessions",
+  previewCodexSession: "session:preview-codex-session",
   importCodexRollout: "session:import-codex-rollout",
   watchHistory: "history:watch",
   historyChanged: "history:changed",

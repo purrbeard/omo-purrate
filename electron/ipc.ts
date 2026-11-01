@@ -16,6 +16,7 @@ import { readAccountUsage } from "./accounts/usage";
 import { branchSession } from "./history/branch-session";
 import { exportSessionJsonl, importSessionJsonl } from "./history/session-transfer";
 import { importCodexRollout, previewCodexRollout } from "./history/codex-import";
+import { codexHomeDir, discoveredRollout, listCodexSessions } from "./history/codex-sessions";
 import type { CodexRolloutPreview } from "../shared/codex-import";
 import { runSessionTree } from "./omo/session-tree";
 import type { ModelRung } from "../shared/ipc";
@@ -516,6 +517,14 @@ export function registerIpc(deps: IpcDeps): () => void {
       }
       if (typeof source !== "string" || !path.isAbsolute(source)) throw new TypeError("Codex rollout path must be absolute");
       codexPreview = await previewCodexRollout(await realpath(source));
+      return codexPreview;
+    },
+    [IPC.listCodexSessions]: () => listCodexSessions(codexHomeDir(process.env, homeDir), catalogIndex().sessionsDir),
+    [IPC.previewCodexSession]: async (_event, sourcePath): Promise<CodexRolloutPreview> => {
+      if (codexImportBusy) throw new Error("A Codex import is already running");
+      codexPreview = null;
+      if (typeof sourcePath !== "string") throw new TypeError("Codex rollout path must be a string");
+      codexPreview = await previewCodexRollout(await discoveredRollout(codexHomeDir(process.env, homeDir), sourcePath));
       return codexPreview;
     },
     [IPC.importCodexRollout]: async (_event, input) => {

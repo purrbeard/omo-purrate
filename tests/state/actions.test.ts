@@ -115,6 +115,8 @@ class FakeBridge implements OmoBridgeApi {
   exportSessionJsonl(): ReturnType<OmoBridgeApi["exportSessionJsonl"]> { return Promise.resolve(null); }
   importSessionJsonl(): ReturnType<OmoBridgeApi["importSessionJsonl"]> { return Promise.resolve(null); }
   pickCodexRollout(): ReturnType<OmoBridgeApi["pickCodexRollout"]> { return Promise.resolve(null); }
+  listCodexSessions(): ReturnType<OmoBridgeApi["listCodexSessions"]> { return Promise.resolve({ root: "", items: [], omitted: 0 }); }
+  previewCodexSession(): ReturnType<OmoBridgeApi["previewCodexSession"]> { return Promise.reject(new Error("Codex import is not configured in this state fixture")); }
   importCodexRollout(): ReturnType<OmoBridgeApi["importCodexRollout"]> { return Promise.reject(new Error("Codex import is not configured in this state fixture")); }
   loadNativeCatalog(): ReturnType<OmoBridgeApi["loadNativeCatalog"]> { return Promise.resolve({ commands: [], contextWindows: {}, error: null }); }
   readonly dagLoads: Array<{ cwd: string; threadId: string }> = [];

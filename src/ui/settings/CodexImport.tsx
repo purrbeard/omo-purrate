@@ -1,11 +1,13 @@
-import { useState } from "react";
-import type { CodexRolloutPreview, CodexUnsupportedReason } from "../../../shared/codex-import";
+import { useEffect, useState } from "react";
+import clsx from "clsx";
+import type { CodexRolloutPreview, CodexSessionList, CodexSessionSummary, CodexUnsupportedReason } from "../../../shared/codex-import";
 import { useT, type MessageKey } from "../../i18n";
 import { useActions, useAppSelector } from "../app-context";
 import { groupModels } from "../composer/model-groups";
 import { Button, Input } from "../kit";
 import { uiState } from "../ui-state";
 import { errorMessage } from "./diagnostics";
+import { cellClass, pathCellClass, rowClass, SessionTable, useUpdatedFormat } from "./ImportTable";
 import { ErrorText, SettingsCard, SettingsRow, ui } from "./SettingsCard";
 
 const reasons: Record<CodexUnsupportedReason, MessageKey> = {
@@ -33,8 +35,31 @@ export function CodexImport() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [found, setFound] = useState<CodexSessionList | null>(null);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const updated = useUpdatedFormat();
+
+  const loadFound = async (): Promise<void> => {
+    try { setFound(await window.omo.listCodexSessions()); }
+    catch (cause) { setError(errorMessage(cause)); }
+  };
+  useEffect(() => { void loadFound(); }, []);
+
+  const choose = async (item: CodexSessionSummary): Promise<void> => {
+    setBusy(true); setError(null); setDone(null); setPreview(null); setChosen(item.sourcePath);
+    try {
+      const selected = await window.omo.previewCodexSession(item.sourcePath);
+      setPreview(selected); setCwd(item.cwd ?? selected.cwd ?? ""); setModel("");
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  };
+  const label = (item: CodexSessionSummary): string => {
+    const name = item.title ?? updated(item.startedAt !== null && Number.isFinite(Date.parse(item.startedAt)) ? Date.parse(item.startedAt) : item.updatedAtMs);
+    return item.project === null ? name : `${item.project} - ${name}`;
+  };
 
   const pick = async (): Promise<void> => {
+    setChosen(null);
     setBusy(true); setError(null); setDone(null); setPreview(null);
     try {
       const selected = await window.omo.pickCodexRollout();
@@ -50,6 +75,7 @@ export function CodexImport() {
       uiState.setPreferences(await window.omo.getPreferences());
       await actions.refreshThreads();
       setDone(result.path); setPreview(null);
+      await loadFound();
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   };
@@ -57,6 +83,39 @@ export function CodexImport() {
     <SettingsRow title={t("shell.settings.import.codexTitle")} description={t("shell.settings.import.codexHint")}>
       <Button variant="outline" size="sm" disabled={busy} data-testid="codex-import-pick" onClick={() => void pick()}>{t("shell.settings.import.codexPick")}</Button>
     </SettingsRow>
+    <div className="flex min-w-0 flex-col gap-2 pb-4" data-testid="codex-session-list">
+      {found === null ? <p className={ui.muted} role="status">{t("shell.settings.import.codexListLoading")}</p>
+        : found.items.length === 0 ? <p className={ui.muted}>{t("shell.settings.import.codexListEmpty", { root: found.root })}</p>
+        : <>
+          <p className={`${ui.muted} wrap-anywhere`}>{t("shell.settings.import.codexListRoot", { root: found.root })}</p>
+          <SessionTable maxHeight="max-h-80" columns={["", "w-[28%]", "w-36", "w-24"]} head={<tr>
+            <th scope="col" />
+            <th scope="col">{t("shell.import.col.title")}</th>
+            <th scope="col">{t("shell.import.col.path")}</th>
+            <th scope="col">{t("shell.import.col.updated")}</th>
+            <th scope="col">{t("shell.settings.import.codexColStatus")}</th>
+          </tr>}>
+            <tbody>
+              {found.items.map(item => {
+                const id = `codex-session-${item.sourcePath}`;
+                const text = label(item);
+                return <tr key={item.sourcePath} className={clsx(rowClass, "cursor-pointer", item.imported && "text-muted-foreground")}
+                  data-testid="codex-session-row" data-source-id={item.sourceId ?? ""} data-imported={String(item.imported)} onClick={() => { if (!busy) void choose(item); }}>
+                  <td className="text-center">
+                    <input id={id} type="radio" name="codex-session" className="m-0 size-4 cursor-pointer accent-foreground" disabled={busy}
+                      checked={chosen === item.sourcePath} onChange={() => void choose(item)} onClick={event => event.stopPropagation()} />
+                  </td>
+                  <td className={cellClass}><label htmlFor={id} className="cursor-pointer font-medium" title={text} data-testid="codex-session-title" onClick={event => event.stopPropagation()}>{text}</label></td>
+                  <td className={pathCellClass} title={item.cwd ?? undefined}><bdi dir="ltr">{item.cwd ?? "-"}</bdi></td>
+                  <td className="truncate text-xs text-muted-foreground tabular-nums">{updated(item.updatedAtMs)}</td>
+                  <td className={clsx(cellClass, "text-xs")}>{item.imported ? t("shell.settings.import.codexImported") : ""}</td>
+                </tr>;
+              })}
+            </tbody>
+          </SessionTable>
+          {found.omitted > 0 && <p className={ui.muted}>{t("shell.settings.import.codexListOmitted", { count: found.omitted })}</p>}
+        </>}
+    </div>
     {preview !== null && <div className="flex min-w-0 flex-col gap-4 pb-4" data-testid="codex-import-preview">
       <dl className={ui.facts}>
         <dt>{t("shell.settings.import.codexSource")}</dt><dd>{preview.sourcePath}</dd>

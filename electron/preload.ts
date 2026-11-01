@@ -37,7 +37,7 @@ import type {
 import type { ClientMethod, ClientParams, ClientResult, RequestId, RpcNotification, RpcServerRequest } from "../shared/protocol";
 import { stripRemoteMethodPrefix } from "./ipc-errors";
 import type { AndroidStatus } from "../shared/android";
-import type { CodexImportResult, CodexRolloutPreview } from "../shared/codex-import";
+import type { CodexImportResult, CodexRolloutPreview, CodexSessionList } from "../shared/codex-import";
 import type { OpencodexAccounts } from "../shared/opencodex";
 import type { SessionWorktree, WorkspaceFile, WorkspaceFileMatch, WorkspaceDocument } from "../shared/workspace";
 import type { DeviceOverview } from "../shared/device-overview";
@@ -101,6 +101,8 @@ const CHANNELS = {
   exportSessionJsonl: "session:export-jsonl",
   importSessionJsonl: "session:import-jsonl",
   pickCodexRollout: "session:pick-codex-rollout",
+  listCodexSessions: "session:list-codex-sessions",
+  previewCodexSession: "session:preview-codex-session",
   importCodexRollout: "session:import-codex-rollout",
   watchHistory: "history:watch",
   historyChanged: "history:changed",
@@ -292,6 +294,8 @@ const api = {
   exportSessionJsonl: (threadId: string): Promise<{ path: string } | null> => invoke(CHANNELS.exportSessionJsonl, threadId),
   importSessionJsonl: (): Promise<BranchResult | null> => invoke(CHANNELS.importSessionJsonl),
   pickCodexRollout: (): Promise<CodexRolloutPreview | null> => invoke(CHANNELS.pickCodexRollout),
+  listCodexSessions: (): Promise<CodexSessionList> => invoke(CHANNELS.listCodexSessions),
+  previewCodexSession: (sourcePath: string): Promise<CodexRolloutPreview> => invoke(CHANNELS.previewCodexSession, sourcePath),
   importCodexRollout: (input: { fingerprint: string; cwd: string; model: string }): Promise<CodexImportResult> => invoke(CHANNELS.importCodexRollout, input),
   watchHistory: (sessionPath: string | null): Promise<void> => invoke(CHANNELS.watchHistory, sessionPath),
   onHistoryChanged: (listener: (sessionPath: string) => void) => subscribe(CHANNELS.historyChanged, listener),
